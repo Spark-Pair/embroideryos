@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+*:not(.no-default-transition) {
+  @apply transition-all duration-300;
+}
+
+@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+@keyframes slideUp { from { transform: translateY(20px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+
+.animate-fadeIn { animation: fadeIn .3s ease-out }
+.animate-slideUp { animation: slideUp .3s ease-out }
+
+/* Chrome, Edge, Safari */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Firefox */
+input[type=number] {
+  -moz-appearance: textfield;
+}
+
+/* 🔒 REMOVE SCROLLBAR FROM ENTIRE APP */
+
+/* Chrome, Edge, Safari */
+*::-webkit-scrollbar {
+  width: 0px;
+  height: 0px;
+  display: none;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: none;
+}
+
+/* Internet Explorer */
+* {
+  -ms-overflow-style: none;
+}
