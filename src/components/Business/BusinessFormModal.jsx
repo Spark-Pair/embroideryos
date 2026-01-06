@@ -61,21 +61,26 @@ export default function BusinessFormModal({
           <Input
             label="Business Name"
             value={formData.name}
+            placeholder="Enter Business Name"
             onChange={(e) =>
               setFormData((prev) => ({ ...prev, name: e.target.value }))
             }
+            className="capitalize"
           />
           <Input
             label="Contact Person"
             value={formData.person}
+            placeholder="Enter Contact Person Name"
             onChange={(e) =>
               setFormData((prev) => ({ ...prev, person: e.target.value }))
             }
+            className="capitalize"
           />
           <Input
             label="Price"
             type="number"
             value={formData.price}
+            placeholder="Enter Decided Price"
             onChange={(e) =>
               setFormData((prev) => ({ ...prev, price: e.target.value }))
             }
@@ -98,6 +103,7 @@ export default function BusinessFormModal({
               <Input
                 label="Username"
                 value={formData.username}
+                placeholder="Enter Admin Username"
                 onChange={(e) =>
                   setFormData((prev) => ({ ...prev, username: e.target.value }))
                 }
@@ -106,6 +112,7 @@ export default function BusinessFormModal({
                 label="Password"
                 type="password"
                 value={formData.password}
+                placeholder="Enter Admin Password"
                 onChange={(e) =>
                   setFormData((prev) => ({ ...prev, password: e.target.value }))
                 }

@@ -79,9 +79,9 @@ export default function Businesses() {
         ...filterParams,
       });
 
+      loadBusinessesStats();
       setBusinesses(res.data);
       setPagination(res.pagination);
-      loadBusinessesStats();
     } catch (err) {
       console.error(err);
       showToast({

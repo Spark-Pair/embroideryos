@@ -81,9 +81,9 @@ export default function Users() {
         ...filterParams,
       });
 
+      loadUsersStats();
       setUsers(res.data);
       setPagination(res.pagination);
-      loadUsersStats();
     } catch (err) {
       console.error(err);
       showToast({

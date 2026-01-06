@@ -13,8 +13,8 @@ export default function UserRow({ item, index, startIndex, onResetPassword, onVi
     >
       <td className="px-7 py-4 font-medium text-gray-500">{startIndex + index + 1}</td>
       <td className="px-7 py-4 font-semibold text-gray-800">{item.name}</td>
-      <td className="px-7 py-4 text-sm text-gray-500 font-light">{item.username}</td>
-      <td className="px-7 py-3.5 text-sm font-medium tracking-wider">{item.businessId.name}</td>
+      <td className="px-7 py-4 font-semibold text-gray-800">{item.username}</td>
+      <td className="px-7 py-4 font-semibold text-gray-800">{item.businessId.name}</td>
       <td className="px-7 py-3.5">
         <StatusBadge active={item.isActive} />
       </td>
@@ -32,16 +32,16 @@ export default function UserRow({ item, index, startIndex, onResetPassword, onVi
         <ContextMenu isOpen={activeMenu === item.id}>
           <button
             onClick={(e) => { e.stopPropagation(); onView(item); setActiveMenu(null); }}
-            className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl text-gray-600 hover:bg-gray-50 cursor-pointer"
+            className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl text-gray-600 hover:bg-gray-200 cursor-pointer"
           >
             <Eye size={16} strokeWidth={2.5} />
             View Details
           </button>
-          <div className="h-[1px] bg-gray-50 my-1" />
+          <div className="h-[1px] bg-gray-200 my-1.5" />
           <button
             onClick={(e) => { e.stopPropagation(); onResetPassword(item); setActiveMenu(null); }}
             className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl cursor-pointer
-              text-orange-500 hover:bg-orange-50`}
+              text-orange-500 hover:bg-orange-100`}
           >
             <KeyRound size={16} strokeWidth={2.5} />
             Reset Password

@@ -6,7 +6,7 @@ export default function DetailRow({ data = [] }) {
 
         return (
           <div key={index} className="group">
-            <div className="flex items-center justify-between py-3.5 px-4 hover:bg-gray-50/50">
+            <div className={`${item.className} flex items-center justify-between py-3.5 px-4 hover:bg-gray-50/50`}>
               <span className="text-xs font-medium uppercase tracking-widest text-gray-500">
                 {item.label}
               </span>

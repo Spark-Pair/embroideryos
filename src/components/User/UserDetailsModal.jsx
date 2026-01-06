@@ -47,7 +47,7 @@ export default function UserDetailsModal({
             { label: "Name", value: initialData?.name },
             { label: "Username", value: initialData?.username },
             { label: "Business Name", value: initialData?.businessId.name },
-            { label: "Role", value: initialData?.role },
+            { label: "Role", value: initialData?.role, className: 'capitalize' },
           ]}
         />
       }

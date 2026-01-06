@@ -44,7 +44,7 @@ export default function CustomerRow({ item, index, startIndex, onView, onEdit, o
             <Edit3 size={16} strokeWidth={2.5} />
             Edit Customer
           </button>
-          <div className="h-[1px] bg-gray-50 my-1" />
+          <div className="h-[1px] bg-gray-200 my-1.5" />
           <button
             onClick={(e) => { e.stopPropagation(); onToggleStatus(item); setActiveMenu(null); }}
             className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl
