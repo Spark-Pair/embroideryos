@@ -5,8 +5,8 @@ import { useToast } from "../context/ToastContext";
 import { loginUser } from '../api/auth.api';
 import useAuth from '../hooks/useAuth';
 
-import Input from '../components/input';
-import Button from '../components/button';
+import Input from '../components/Input';
+import Button from '../components/Button';
 import Card from '../components/Card';
 
 export default function Login() {

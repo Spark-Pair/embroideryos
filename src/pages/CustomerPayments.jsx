@@ -1,6 +1,6 @@
 // src/pages/Payments/Receive.jsx
 import React, { useState } from 'react';
-import Button from '../components/button';
+import Button from '../components/Button';
 
 export default function ReceivePayment() {
   const [payments, setPayments] = useState([
