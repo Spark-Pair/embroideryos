@@ -1,6 +1,6 @@
 // src/pages/Suppliers.jsx
 import React, { useState } from 'react';
-import Button from '../components/button';
+import Button from '../components/Button';
 
 export default function Suppliers() {
   const [suppliers, setSuppliers] = useState([

@@ -1,6 +1,6 @@
 // src/pages/Payments/Pay.jsx
 import React, { useState } from 'react';
-import Button from '../components/button';
+import Button from '../components/Button';
 
 export default function PaySupplier() {
   const [payments, setPayments] = useState([
