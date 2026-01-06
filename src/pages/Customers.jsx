@@ -3,7 +3,7 @@ import { Plus, Users, CircleCheck, XCircle } from "lucide-react";
 
 import StatCard from "../components/StatCard";
 import TableToolbar from "../components/table/TableToolbar";
-import CustomerModal from "../components/customer/CustomerModal";
+import CustomerModal from "../components/Customer/CustomerModal";
 import CustomerRow from "../components/Customer/CustomerRow";
 import FilterDrawer from "../components/FilterDrawer";
 import TableSkeleton from "../components/table/TableLoader";
