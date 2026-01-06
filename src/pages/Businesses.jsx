@@ -11,8 +11,8 @@ import {
 
 import StatCard from "../components/StatCard";
 import TableToolbar from "../components/table/TableToolbar";
-import BusinessDetailsModal from "../components/business/BusinessDetailsModal";
-import BusinessFormModal from "../components/business/BusinessFormModal";
+import BusinessDetailsModal from "../components/Business/BusinessDetailsModal";
+import BusinessFormModal from "../components/Business/BusinessFormModal";
 import BusinessRow from "../components/Business/BusinessRow";
 import FilterDrawer from "../components/FilterDrawer";
 import TableSkeleton from "../components/table/TableLoader";
