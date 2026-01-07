@@ -18,6 +18,7 @@ import CustomerPayments from './pages/CustomerPayments';
 import SupplierPayments from './pages/SupplierPayments';
 import StaffRecords from './pages/StaffRecords';
 import Users from './pages/Users';
+import Sessions from './pages/Sessions';
 
 export default function App() {
   return (
@@ -48,6 +49,12 @@ export default function App() {
             <Route path="/users" element={
               <ProtectedRoute>
                 <Layout><Users /></Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/sessions" element={
+              <ProtectedRoute>
+                <Layout><Sessions /></Layout>
               </ProtectedRoute>
             } />
 

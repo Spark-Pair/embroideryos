@@ -1,6 +1,8 @@
-import { createContext, useEffect, useState } from 'react';
-import { getMe } from '../api/auth.api';
-import { useToast } from "../context/ToastContext";
+// src/context/AuthContext.jsx
+import { createContext, useEffect, useState, useCallback } from 'react';
+import { getMe, logoutUser } from '../api/auth.api';
+import { storage } from '../api/apiClient';
+import { useToast } from "./ToastContext";
 
 export const AuthContext = createContext();
 
@@ -9,58 +11,98 @@ export default function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const { showToast } = useToast();
 
-  // 🔁 App load auth check
+  // Check auth on app load
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const initAuth = async () => {
+      const { accessToken, sessionId } = storage.getAuth();
 
-    if (!token) {
-      setLoading(false);
-      return;
-    }
+      if (!accessToken || !sessionId) {
+        setLoading(false);
+        return;
+      }
 
-    getMe(token)
-      .then((res) => {
-        if (res?.error) {
-          logout();
-        } else {
-          setUser(res);
-        }
-      })
-      .catch(() => logout())
-      .finally(() => setLoading(false));
+      try {
+        const userData = await getMe();
+        setUser(userData);
+      } catch (error) {
+        console.error('Auth init error:', error);
+        storage.clearAuth();
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initAuth();
   }, []);
 
-  // ✅ LOGIN
-  const login = async (token) => {
-    setLoading(true);
-    localStorage.setItem('token', token);
-
+  // Login function
+  const login = useCallback(async (authData) => {
     try {
-      const res = await getMe(token);
-      if (res?.error) throw new Error();
-
-      setUser(res);
+      setLoading(true);
+      
+      // Auth data already stored by loginUser in auth.api.js
+      const userData = await getMe();
+      setUser(userData);
+      
       showToast({
         type: "success",
-        message: `Welcome ${res.name || ''}`,
+        message: `Welcome back, ${userData.name || userData.username}!`,
       });
-      return true;
-    } catch {
-      logout();
-      return false;
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Login error:', error);
+      storage.clearAuth();
+      
+      showToast({
+        type: "error",
+        message: error.response?.data?.message || "Login failed",
+      });
+      
+      return { success: false, error };
     } finally {
       setLoading(false);
     }
-  };
+  }, [showToast]);
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    setUser(null);
-    setLoading(false);
-  };
+  // Logout function
+  const logout = useCallback(async () => {
+    try {
+      await logoutUser();
+      
+      showToast({
+        type: "success",
+        message: "Logged out successfully",
+      });
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setUser(null);
+      setLoading(false);
+    }
+  }, [showToast]);
+
+  // Refresh user data
+  const refreshUser = useCallback(async () => {
+    try {
+      const userData = await getMe();
+      setUser(userData);
+      return userData;
+    } catch (error) {
+      console.error('Refresh user error:', error);
+      throw error;
+    }
+  }, []);
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      login, 
+      logout, 
+      loading,
+      refreshUser,
+      setUser
+    }}>
       {children}
     </AuthContext.Provider>
   );

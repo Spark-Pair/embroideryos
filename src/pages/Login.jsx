@@ -1,8 +1,8 @@
+// src/pages/Login.jsx
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useToast } from "../context/ToastContext";
-
-import { loginUser } from '../api/auth.api';
+import { loginUser, forceLoginUser } from '../api/auth.api';
 import useAuth from '../hooks/useAuth';
 
 import Input from '../components/Input';
@@ -19,13 +19,14 @@ export default function Login() {
     password: '',
   });
 
+  const [loading, setLoading] = useState(false);
+  const [sessionConflict, setSessionConflict] = useState(null);
+
   useEffect(() => {
     if (user) {
       navigate('/dashboard', { replace: true });
     }
   }, [user, navigate]);
-
-  const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => {
     setForm(prev => ({
@@ -36,71 +37,155 @@ export default function Login() {
 
   const submit = async (e) => {
     e.preventDefault();
+    
+    if (!form.username || !form.password) {
+      showToast({
+        type: "error",
+        message: "Please enter username and password",
+      });
+      return;
+    }
+
     setLoading(true);
+    setSessionConflict(null);
 
     try {
       const res = await loginUser(form);
 
-      if (!res.data.token) {
-        showToast({
-          type: "error",
-          message: res.message || res.data?.message || "Invalid credentials",
-        });
-        return;
+      if (res.data.accessToken) {
+        const loginResult = await login(res.data);
+        
+        if (loginResult.success) {
+          navigate("/dashboard");
+        }
       }
 
-      await login(res.data.token);
+    } catch (err) {
+      const errorData = err.response?.data;
+      
+      // Handle session conflict
+      if (err.response?.status === 409 && errorData?.code === 'ALREADY_LOGGED_IN') {
+        setSessionConflict(errorData);
+        showToast({
+          type: "warning",
+          message: "You are already logged in from another device",
+        });
+      } else {
+        showToast({
+          type: "error",
+          message: errorData?.message || "Login failed. Please try again.",
+        });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      showToast({
-        type: "success",
-        message: "Login successful 🎉",
-      });
+  const handleForceLogin = async () => {
+    setLoading(true);
 
-      // navigate("/dashboard");
+    try {
+      const res = await forceLoginUser(form);
+
+      if (res.data.accessToken) {
+        const loginResult = await login(res.data);
+        
+        if (loginResult.success) {
+          showToast({
+            type: "success",
+            message: "Previous session terminated. You're now logged in.",
+          });
+          navigate("/dashboard");
+        }
+      }
 
     } catch (err) {
       showToast({
         type: "error",
-        message: err.message || "Login failed",
+        message: err.response?.data?.message || "Force login failed",
       });
     } finally {
       setLoading(false);
+      setSessionConflict(null);
     }
+  };
+
+  const handleCancelForceLogin = () => {
+    setSessionConflict(null);
+    setForm({ username: '', password: '' });
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 to-green-100 flex items-center justify-center p-6">
       <Card
         title="Login"
-        subtitle="Login with your username"
+        subtitle={sessionConflict ? "Active Session Detected" : "Login with your username"}
         className="w-full max-w-md"
       >
-        <form onSubmit={submit} className='grid gap-4'>
-          <Input
-            label="Username"
-            name="username"
-            placeholder="Enter your username"
-            value={form.username}
-            onChange={handleChange}
-          />
+        {sessionConflict ? (
+          <div className="space-y-4">
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <p className="text-sm text-yellow-800">
+                You are already logged in from another device or browser.
+              </p>
+              <p className="text-xs text-yellow-600 mt-2">
+                Session created: {new Date(sessionConflict.sessionInfo?.createdAt).toLocaleString()}
+              </p>
+            </div>
 
-          <Input
-            label="Password"
-            name="password"
-            type="password"
-            placeholder="Enter your password"
-            value={form.password}
-            onChange={handleChange}
-          />
+            <div className="flex gap-3">
+              <Button
+                variant="secondary"
+                onClick={handleCancelForceLogin}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              
+              <Button
+                variant="danger"
+                onClick={handleForceLogin}
+                loading={loading}
+                className="flex-1"
+              >
+                Login Anyway
+              </Button>
+            </div>
 
-          <Button
-            type="submit"
-            loading={loading}
-            className="w-full mt-2"
-          >
-            Login
-          </Button>
-        </form>
+            <p className="text-xs text-gray-500 text-center">
+              Logging in anyway will end your previous session
+            </p>
+          </div>
+        ) : (
+          <form onSubmit={submit} className='grid gap-4'>
+            <Input
+              label="Username"
+              name="username"
+              placeholder="Enter your username"
+              value={form.username}
+              onChange={handleChange}
+              required
+            />
+
+            <Input
+              label="Password"
+              name="password"
+              type="password"
+              placeholder="Enter your password"
+              value={form.password}
+              onChange={handleChange}
+              required
+            />
+
+            <Button
+              type="submit"
+              loading={loading}
+              className="w-full mt-2"
+            >
+              Login
+            </Button>
+          </form>
+        )}
       </Card>
     </div>
   );

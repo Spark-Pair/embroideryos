@@ -1,13 +1,15 @@
-import React, { useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LayoutGrid, Users, FileText, DollarSign, CreditCard, Users2, Settings, LogOut,   Building2, Banknote, Repeat } from 'lucide-react';
+import { LayoutGrid, Users, FileText, DollarSign, CreditCard, Users2, Settings, LogOut, Building2, Banknote, Repeat, ChevronDown } from 'lucide-react';
 import SidebarNavItem from './SidebarNavItem';
 import useAuth from '../hooks/useAuth';
+import { motion, AnimatePresence } from "framer-motion";
 
 const developerNav = [
   { id: 'dashboard', icon: <LayoutGrid className="w-4.5 h-4.5" />, label: 'Dashboard', path: '/dashboard' },
   { id: 'businesses', icon: <Building2 className="w-4.5 h-4.5" />, label: 'Businesses', path: '/businesses' },
   { id: 'users', icon: <Users2 className="w-4.5 h-4.5" />, label: 'Users', path: '/users' },
+  { id: 'sessions', icon: <Users2 className="w-4.5 h-4.5" />, label: 'Sessions', path: '/sessions' },
   { id: 'subscriptions', icon: <Repeat className="w-4.5 h-4.5" />, label: 'Subscriptions', path: '/subscriptions' },
   { id: 'payments', icon: <Banknote className="w-4.5 h-4.5" />, label: 'Payments', path: '/payments' },
 ];
@@ -41,26 +43,55 @@ const staffNav = [
 const SidebarNav = ({ currentPath, handleLogout }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const searchRef = useRef(null);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
 
-  console.log(user);
-  
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   let navItems = [];
-
   if (user.role === 'developer') navItems = developerNav;
   if (user.role === 'admin') navItems = adminNav;
   if (user.role === 'staff') navItems = staffNav;
 
-  // 🔥 ACTIVE CHECK (URL based)
   const isActive = (path) => {
     if (!path) return false;
     return currentPath === path || currentPath.startsWith(path + '/');
   };
 
-  return (
-    <aside className="w-78 p-6">
-      <div className="bg-white p-4 flex flex-col gap-4 h-full border border-gray-300 rounded-3xl">
+  // Get user initials for avatar
+  const getInitials = (name) => {
+    if (!name) return '?';
+    return name
+      .split(' ')
+      .map(n => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
 
+  const handleDropdownAction = (action) => {
+    setIsDropdownOpen(false);
+    action();
+  };
+
+  return (
+    <motion.aside
+      className="w-78 p-6 no-default-transition"
+      initial={{ x: -20, opacity: 0 }}
+      animate={{ x: 0, opacity: 1 }}
+      transition={{ duration: 0.25, ease: "easeOut" }}
+    >
+      <div className="bg-white p-4 flex flex-col gap-4 h-full border border-gray-300 rounded-3xl">
         {/* Top */}
         <div className="flex items-center gap-1.5 ps-3 pt-2.5 pb-5 border-b border-gray-300">
           <div className="w-8 h-8">
@@ -91,24 +122,77 @@ const SidebarNav = ({ currentPath, handleLogout }) => {
             ))}
           </nav>
 
-          {/* Bottom */}
-          <div className="space-y-1 pt-3 border-t border-gray-300">
-            <SidebarNavItem
-              icon={<Settings className="w-4.5 h-4.5" />}
-              label="Settings"
-              isActive={isActive('/settings')}
-              onClick={() => navigate('/settings')}
-            />
-            <SidebarNavItem
-              className="bg-red-100 text-red-500 hover:bg-red-200 hover:text-red-600"
-              icon={<LogOut className="w-4.5 h-4.5" />}
-              label="Logout"
-              onClick={handleLogout}
-            />
+          {/* Profile Dropdown Section */}
+          <div className="pt-3 border-t border-gray-300" ref={dropdownRef}>
+            <div className="relative">
+              <button
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-gray-200/70"
+              >
+                <div className="w-8 h-8 rounded-full bg-[#1C7773] flex items-center justify-center text-white font-medium text-sm">
+                  {getInitials(user.name)}
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="text-sm font-medium text-gray-900">
+                    {user.name || 'User'}
+                  </p>
+                  <p className="text-xs text-gray-500 capitalize">
+                    {user.role}
+                  </p>
+                </div>
+                <ChevronDown 
+                  className={`w-4 h-4 text-gray-500 transition-transform ${
+                    isDropdownOpen ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+
+              {/* Dropdown Menu */}
+              <AnimatePresence>
+                {isDropdownOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                    transition={{ duration: 0.18 }}
+                    className="absolute bottom-full left-0 right-0 mb-2 bg-white
+                              border border-gray-300 rounded-2xl shadow-lg overflow-hidden no-default-transition"
+                  >
+                    <div className="p-2">
+                      <button
+                        onClick={() => handleDropdownAction(() => navigate('/settings'))}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-200/60 text-left rounded-xl cursor-pointer"
+                      >
+                        <Settings className="w-4 h-4 text-gray-600" />
+                        <span className="text-sm text-gray-700">Settings</span>
+                      </button>
+                      
+                      <button
+                        onClick={() => handleDropdownAction(() => navigate('/sessions'))}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-200/60 text-left rounded-xl cursor-pointer"
+                      >
+                        <Users2 className="w-4 h-4 text-gray-600" />
+                        <span className="text-sm text-gray-700">Sessions</span>
+                      </button>
+
+                      <div className="h-px bg-gray-300 my-1.5" />
+
+                      <button
+                        onClick={() => handleDropdownAction(handleLogout)}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-red-50 text-left rounded-xl cursor-pointer"
+                      >
+                        <LogOut className="w-4 h-4 text-red-600" />
+                        <span className="text-sm text-red-600 font-medium">Logout</span>
+                      </button>
+                    </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+            </div>
           </div>
         </div>
       </div>
-    </aside>
+    </motion.aside>
   );
 };
 
