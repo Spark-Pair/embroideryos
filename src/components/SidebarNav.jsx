@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LayoutGrid, Users, FileText, DollarSign, CreditCard, Users2, Settings, LogOut, Building2, Banknote, Repeat, ChevronDown } from 'lucide-react';
+import { LayoutGrid, Users, FileText, DollarSign, CreditCard, Users2, Settings, LogOut, Building2, Banknote, Repeat, ChevronDown, History } from 'lucide-react';
 import SidebarNavItem from './SidebarNavItem';
 import useAuth from '../hooks/useAuth';
 import { motion, AnimatePresence } from "framer-motion";
@@ -9,7 +9,6 @@ const developerNav = [
   { id: 'dashboard', icon: <LayoutGrid className="w-4.5 h-4.5" />, label: 'Dashboard', path: '/dashboard' },
   { id: 'businesses', icon: <Building2 className="w-4.5 h-4.5" />, label: 'Businesses', path: '/businesses' },
   { id: 'users', icon: <Users2 className="w-4.5 h-4.5" />, label: 'Users', path: '/users' },
-  { id: 'sessions', icon: <Users2 className="w-4.5 h-4.5" />, label: 'Sessions', path: '/sessions' },
   { id: 'subscriptions', icon: <Repeat className="w-4.5 h-4.5" />, label: 'Subscriptions', path: '/subscriptions' },
   { id: 'payments', icon: <Banknote className="w-4.5 h-4.5" />, label: 'Payments', path: '/payments' },
 ];
@@ -161,7 +160,7 @@ const SidebarNav = ({ currentPath, handleLogout }) => {
                     <div className="p-2">
                       <button
                         onClick={() => handleDropdownAction(() => navigate('/settings'))}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-200/60 text-left rounded-xl cursor-pointer"
+                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-200/60 text-left rounded-xl cursor-pointer"
                       >
                         <Settings className="w-4 h-4 text-gray-600" />
                         <span className="text-sm text-gray-700">Settings</span>
@@ -169,9 +168,9 @@ const SidebarNav = ({ currentPath, handleLogout }) => {
                       
                       <button
                         onClick={() => handleDropdownAction(() => navigate('/sessions'))}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-200/60 text-left rounded-xl cursor-pointer"
+                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-200/60 text-left rounded-xl cursor-pointer"
                       >
-                        <Users2 className="w-4 h-4 text-gray-600" />
+                        <History className="w-4 h-4 text-gray-600" />
                         <span className="text-sm text-gray-700">Sessions</span>
                       </button>
 
@@ -179,7 +178,7 @@ const SidebarNav = ({ currentPath, handleLogout }) => {
 
                       <button
                         onClick={() => handleDropdownAction(handleLogout)}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-red-50 text-left rounded-xl cursor-pointer"
+                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-red-50 text-left rounded-xl cursor-pointer"
                       >
                         <LogOut className="w-4 h-4 text-red-600" />
                         <span className="text-sm text-red-600 font-medium">Logout</span>
