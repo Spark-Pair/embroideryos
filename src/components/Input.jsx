@@ -1,3 +1,4 @@
+import { X } from 'lucide-react';
 import { forwardRef, useEffect } from 'react';
 
 const Input = forwardRef(
@@ -7,6 +8,7 @@ const Input = forwardRef(
       id,
       name,
       required = true,
+      disabled = false,
       className = '',
       capitalize = false,
       amount = false,
@@ -15,6 +17,7 @@ const Input = forwardRef(
       icon,         // icon element
       iconPosition = 'left', // 'left' or 'right'
       shortcutKey,  // e.g., 's' -> Alt+S
+      showClear = false, // show clear button when there's a value
       ...props
     },
     ref
@@ -57,6 +60,15 @@ const Input = forwardRef(
       return () => window.removeEventListener('keydown', handler);
     }, [shortcutKey, ref]);
 
+    // Clear input function
+    const handleClear = () => {
+      if (onChange) {
+        onChange({ target: { name: name || id, value: '' } });
+      }
+      // Focus wapis input par le aane ke liye
+      if (ref?.current) ref.current.focus();
+    };
+
     const handleFocus = (e) => {
       if (e.target.type === 'date') {
         try {
@@ -73,7 +85,7 @@ const Input = forwardRef(
     return (
       <div className="relative">
         {label && (
-          <label htmlFor={id} className="block mb-1.5 text-sm text-gray-700">
+          <label htmlFor={id} className={`block mb-1.5 text-sm text-gray-700 ${disabled ? 'opacity-60 cursor-not-allowed' : ''} `}>
             {label} {!required && <span className="text-gray-400">(Optional)</span>}
           </label>
         )}
@@ -97,12 +109,27 @@ const Input = forwardRef(
             className={`
               w-full border border-gray-400 px-4 py-2 rounded-xl
               focus:ring-2 focus:ring-teal-300 focus:outline-none
-              transition disabled:opacity-50 disabled:cursor-not-allowed
+              transition ${disabled ? 'cursor-not-allowed opacity-55' : ''}
               bg-gray-50
               ${icon ? (iconPosition === 'left' ? 'pl-9' : 'pr-10') : ''}
               ${className}
             `}
           />
+
+          {showClear && value && !disabled && (
+            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none">
+                <button
+                  type="button"
+                  onClick={handleClear}
+                  className="p-1 rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors"
+                  title="Clear input"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+
+              {icon}
+            </div>
+          )}
 
           {icon && iconPosition === 'right' && (
             <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none">

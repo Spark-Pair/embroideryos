@@ -1,41 +1,29 @@
 // api/staffRecords.js
-import { apiClient } from './apiClient';
 
-const STAFF_RECORDS_URL = "/staff-records";
+import axios from "axios";
 
-export const fetchStaffRecords = async (params = {}) => {
-  const queryParams = new URLSearchParams({
-    page: params.page || 1,
-    limit: params.limit || 30,
-    ...(params.name && { name: params.name }),
-    ...(params.status && { status: params.status })
-  });
-  
-  const res = await apiClient.get(`${STAFF_RECORDS_URL}?${queryParams}`);
-  return res.data;
-};
+const BASE = "/api/staff-records";
 
-export const fetchStaffRecordStats = async () => {
-  const res = await apiClient.get(`${STAFF_RECORDS_URL}/stats`);
-  return res.data;
-};
+export const fetchStaffRecords = (params) =>
+  axios.get(BASE, { params }).then((r) => r.data);
 
-export const fetchStaffRecord = async (id) => {
-  const res = await apiClient.get(`${STAFF_RECORDS_URL}/${id}`);
-  return res.data;
-};
+export const fetchStaffRecordStats = () =>
+  axios.get(`${BASE}/stats`).then((r) => r.data);
 
-export const createStaffRecord = async (data) => {
-  const res = await apiClient.post(STAFF_RECORDS_URL, data);
-  return res.data;
-};
+export const fetchStaffLastRecord = (staff_id) =>
+  axios.get(`${BASE}/last/${staff_id}`).then((r) => r.data);
 
-export const updateStaffRecord = async (id, data) => {
-  const res = await apiClient.put(`${STAFF_RECORDS_URL}/${id}`, data);
-  return res.data;
-};
+export const fetchStaffRecord = (id) =>
+  axios.get(`${BASE}/${id}`).then((r) => r.data);
 
-export const toggleStaffRecordStatus = async (id) => {
-  const res = await apiClient.patch(`${STAFF_RECORDS_URL}/${id}/toggle-status`);
-  return res.data;
-};
+export const createStaffRecord = (data) =>
+  axios.post(BASE, data).then((r) => r.data);
+
+export const updateStaffRecord = (id, data) =>
+  axios.put(`${BASE}/${id}`, data).then((r) => r.data);
+
+export const deleteStaffRecord = (id) =>
+  axios.delete(`${BASE}/${id}`).then((r) => r.data);
+
+export const toggleStaffRecordStatus = (id) =>
+  axios.patch(`/api/staff/${id}/toggle-status`).then((r) => r.data);
