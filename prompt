@@ -1,0 +1,78 @@
+import { Edit3, Power } from "lucide-react";
+import Button from "../Button";
+import Modal from "../Modal";
+import ModalDetails from "../ModalDetails";
+import StatusBadge from "../StatusBadge";
+import { formatDate, formatNumbers } from "../../utils";
+
+export default function StaffRecordDetailsModal({
+  isOpen,
+  onClose,
+  initialData,
+  onAction,
+}) {
+  const isActive = initialData?.isActive;
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Staff Info"
+      subtitle="Overview of registered details"
+      badge={<StatusBadge active={initialData?.isActive} />}
+      footer={
+        <div className="flex gap-3">
+          <Button
+            icon={Edit3}
+            variant="secondary"
+            className="grow"
+            onClick={() => onAction("openEdit", initialData)}
+          >
+            Edit Staff Record
+          </Button>
+          <Button
+            icon={Power}
+            outline
+            variant={isActive ? "danger" : "success"}
+            className="w-40"
+            onClick={() => onAction("toggleStatus", initialData)}
+          >
+            {isActive ? "Deactivate" : "Activate"}
+          </Button>
+        </div>
+      }
+    >
+      {
+        <ModalDetails
+          data={[
+            { label: "Staff Name", value: initialData?.name },
+            { label: "Joining Date", value: formatDate(initialData?.joining_date, "dd-MMM-YYYY, DDD") },
+            { label: "Salary", value: formatNumbers(initialData?.salary, 1) },
+          ]}
+        />
+      }
+    </Modal>
+  );
+}
+
+
+
+is form ko is flow ke hisab se banao 
+
+
+
+user staff select karega to date autometic aa jae gi date kon si ae gi agar is staff ka last record hai to os ki date mai +1 ae gi agar koi record nahi hai to joining date aajae gi os ke baad user attend select karega jo ke ye hon ge (Day, Night, Absent, half, Off, Close, Sunday) os ke baad ek dosra section ho ga jis mai user is staff ki is din ki production enter kare ga kuch is tarhan ek row mai D. stich (Design Stitch), applique, PCs, rounds, total Stitch, on target % (30), after target % (39). ye rows yani production wali rows bohot sari bhi ho sakti hen wo user ke opper hai wo add per click karne new row add kar sakta hai or os ke baad in sab ka total ae ga total PCs, total Rounds, total of total stitch, total of on target % (30), total of after target % (39).
+
+
+
+acha ab ham aajate hen ke ye calculation kese ho gi 
+
+sab se pehle ye dekhlo ke kiya cheez DB se ae gi jo DB se ae gi os ko abhi ek JSON file mai store kar den ge
+
+on target %, after target %, stitch rate, applique rate, target amount (1000), effective date.
+
+
+
+ab ham samjhte hen ke ye sab kese calculate ho ga 
+
+formula ye hai ke stitch * stitch rate = answer * PCs = answer / 100 = answer * on target % = answer < target amount = answer in this condition answer is total amount without applique amount if stitch * stitch rate = answer * PCs = answer / 100 = answer * on target % = answer >= target amount to do this  stitch * stitch rate = answer * PCs = answer / 100 = answer * after target % = answer >= target amount = answer is total amount without applique amount the applique amount is calculation formula is 
