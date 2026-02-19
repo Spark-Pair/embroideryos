@@ -1,7 +1,7 @@
 // api/business.js
 import { apiClient } from './apiClient';
 
-const BUSINESS_URL = "/business";
+const BUSINESS_URL = "/businesses";
 
 export const fetchBusinesses = async (params = {}) => {
   const queryParams = new URLSearchParams({

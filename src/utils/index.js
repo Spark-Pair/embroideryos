@@ -39,3 +39,8 @@ export const formatDate = (dateInput, format = 'DD/MM/YYYY') => {
 
   return formatted;
 };
+
+export const formatNumbers = (num, decimals = 0) => {
+  if (num === null || num === undefined) return null;
+  return Number(num).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}

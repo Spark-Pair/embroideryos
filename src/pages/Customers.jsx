@@ -1,123 +1,240 @@
+// pages/Customers.jsx
 import React, { useState, useRef, useEffect } from "react";
-import { Plus, Users, CircleCheck, XCircle } from "lucide-react";
+import { Plus, CircleCheck, XCircle, Building2 } from "lucide-react";
+import {
+  fetchCustomers,
+  fetchCustomerStats,
+  createCustomer,
+  updateCustomer,
+  toggleCustomerStatus,
+} from "../api/customer";
 
 import StatCard from "../components/StatCard";
 import TableToolbar from "../components/table/TableToolbar";
-import CustomerModal from "../components/Customer/CustomerModal";
+import CustomerDetailsModal from "../components/Customer/CustomerDetailsModal";
+import CustomerFormModal from "../components/Customer/CustomerFormModal";
 import CustomerRow from "../components/Customer/CustomerRow";
 import FilterDrawer from "../components/FilterDrawer";
 import TableSkeleton from "../components/table/TableLoader";
 import PageHeader from "../components/PageHeader";
-
-import usePagination from "../hooks/usePagination";
-
-// Dummy Data
-const data = [
-  { id: 1, name: 'ABC Traders', person: 'Junaid Ahmed', rate: '1.75', isActive: true },
-  { id: 2, name: 'Junaid Ki Dukaan', person: 'Sana Khan', rate: '1.60', isActive: false },
-  { id: 3, name: 'Imran Bukhari', person: 'imran Khan', rate: '1.80', isActive: true },
-];
+import ConfirmModal from "../components/ConfirmModal";
+import { useToast } from '../context/ToastContext';
 
 export default function Customers() {
-  const [customers, setCustomers] = useState(data);
+  const { showToast } = useToast();
+  const [stats, setStats] = useState({
+    total: 0,
+    active: 0,
+    inactive: 0,
+  });
+  const [customers, setCustomers] = useState([]);
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    totalItems: 0,
+    itemsPerPage: 30,
+  });
   const [loading, setLoading] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+    variant: "danger",
+  });
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [detailsModal, setDetailsModal] = useState({
+    isOpen: false,
+    data: null,
+  });
+  const [formModal, setFormModal] = useState({ isOpen: false, data: null });
+  const [filters, setFilters] = useState({
+    name: "",
+    status: "",
+  });
 
-  // Pagination
-  const {
-    pageData,
-    currentPage,
-    totalPages,
-    goToPage,
-    nextPage,
-    prevPage,
-    setCurrentPage,
-  } = usePagination(customers, 30);
+  const loadCustomersStats = async () => {
+    try {
+      const res = await fetchCustomerStats();
+
+      setStats(res.data);
+    } catch (err) {
+      console.error(err);
+      showToast({
+        type: 'error',
+        message: 'Failed to load customers stats'
+      });
+    }
+  };
 
   const tableScrollRef = useRef(null);
 
+  // Load customers from server
+  const loadCustomers = async (page = 1, filterParams = filters) => {
+    try {
+      setLoading(true);
+      const res = await fetchCustomers({
+        page,
+        limit: 30,
+        ...filterParams,
+      });
+
+      loadCustomersStats();
+      setCustomers(res.data);
+      setPagination(res.pagination);
+    } catch (err) {
+      console.error(err);
+      showToast({
+        type: 'error',
+        message: 'Failed to load customers'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Initial load
+  useEffect(() => {
+    loadCustomers();
+  }, []);
+
+  // Scroll to top on page change
   useEffect(() => {
     if (tableScrollRef.current) {
       tableScrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
     }
-  }, [currentPage, pageData]);
+  }, [pagination.currentPage]);
 
-  // Filter Sidebar
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-
-  // Modal
-  const [modal, setModal] = useState({
-    isOpen: false,
-    data: null,
-    mode: "add",
-  });
-
-  const [filters, setFilters] = useState([
-    { label: "Customer Name", type: "text", value: "", onChange: (val) => setFilters(f => {
-      const newFilters = [...f];
-      newFilters[0].value = val;
-      return newFilters;
-    }) },
-    { label: "Status", type: "select", value: "active", options: [
-      { label: "Active Only", value: "active" },
-      { label: "Inactive Only", value: "inactive" },
-    ], onChange: (val) => setFilters(f => {
-      const newFilters = [...f];
-      newFilters[1].value = val;
-      return newFilters;
-    }) },
-  ]);
-
-  // Simulate API load (Skeleton Loader)
-  const loadPage = (page) => {
-    setLoading(true);
-    setTimeout(() => {
-      goToPage(page);
-      setLoading(false);
-    }, 500); // simulate backend delay
+  const handlePageChange = (page) => {
+    loadCustomers(page);
   };
 
-  const handleCustomerAction = (action, data) => {
-    if (action === "edit") {
-      setModal({ isOpen: true, mode: "edit", data });
-    }
-    if (action === "toggleStatus") {
-      // Toggle active/inactive
-      setCustomers((prev) =>
-        prev.map((c) =>
-          c.id === data.id ? { ...c, isActive: !c.isActive } : c
-        )
-      );
+  const handleApplyFilters = () => {
+    loadCustomers(1, filters); // Reset to page 1 when filtering
+    setIsFilterOpen(false);
+  };
+
+  const handleResetFilters = () => {
+    const resetFilters = { name: "", status: "" };
+    setFilters(resetFilters);
+    loadCustomers(1, resetFilters);
+    setIsFilterOpen(false);
+  };
+
+  const handleCustomerDetailsActions = async (action, data) => {
+    try {
+      if (action === "openEdit") {
+        setDetailsModal({ isOpen: false });
+        setFormModal({ isOpen: true, data });
+        return;
+      } else if (action === "toggleStatus") {
+        const isActive = data.isActive;
+
+        setConfirmModal({
+          isOpen: true,
+          title: isActive ? "Deactivate Customer" : "Activate Customer",
+          message: `Are you sure you want to ${
+            isActive ? "deactivate" : "activate"
+          } "${data.name}"?`,
+          variant: isActive ? "danger" : "success",
+          confirmText: isActive ? "Deactivate" : "Activate",
+          onConfirm: async () => {
+            await toggleCustomerStatus(data._id);
+            loadCustomers(pagination.currentPage);
+            showToast({
+              type: 'success',
+              message: 'Status chagned successfully'
+            });
+          },
+        });
+        setDetailsModal({ isOpen: false });
+        return;
+      }
+    } catch (err) {
+      console.error(err);
+      showToast({
+        type: 'error',
+        message: err.response?.data?.message || "Something went wrong"
+      });
     }
   };
+
+  const handleCustomerFormActions = async (action, data) => {
+    try {
+      if (action === "add") {
+        await createCustomer(data);
+
+        showToast({
+          type: 'success',
+          message: "Customer added successfully"
+        });
+      } else if (action === "edit") {
+        await updateCustomer(data.id, data);
+        
+        showToast({
+          type: 'success',
+          message: "Customer edited successfully"
+        });
+      }
+
+      loadCustomers(pagination.currentPage);
+    } catch (err) {
+      console.error(err);
+      showToast({
+        type: 'error',
+        message: err.response?.data?.message || "Something went wrong"
+      });
+    }
+  };
+
+  const filterConfig = [
+    {
+      label: "Customer Name",
+      placeholder: "Customer Name",
+      type: "text",
+      value: filters.name,
+      onChange: (e) => setFilters(prev => ({ ...prev, name: e.target.value })) // ✅ Fixed
+    },
+    {
+      label: "Status",
+      type: "select",
+      value: filters.status,
+      options: [
+        { label: "All", value: "" },
+        { label: "Active Only", value: "active" },
+        { label: "Inactive Only", value: "inactive" },
+      ],
+      onChange: (val) => setFilters(prev => ({ ...prev, status: val })) // ✅ This is correct
+    },
+  ];
 
   return (
     <>
       <div className="relative z-10 max-w-7xl mx-auto h-full flex flex-col">
-        {/* Header */}
         <PageHeader
           title="Customer"
           subtitle="Manage all your customers effortlessly."
           actionLabel="Add Customer"
           actionIcon={Plus}
-          onAction={() => setModal({ isOpen: true, data: null, mode: "add" })}
+          onAction={() => setFormModal({ isOpen: true })}
         />
 
         {/* Stats Row */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
           <StatCard
-            label="Total Customer"
-            value={customers.length}
-            icon={Users}
+            label="Total Customers"
+            value={stats.total}
+            icon={Building2}
           />
           <StatCard
             label="Active Customers"
-            value={customers.filter((c) => c.isActive).length}
+            value={stats.active}
             icon={CircleCheck}
             variant="success"
           />
           <StatCard
-            label="In Active Customer"
-            value={customers.filter((c) => !c.isActive).length}
+            label="Inactive Customers"
+            value={stats.inactive}
             icon={XCircle}
             variant="danger"
           />
@@ -125,16 +242,14 @@ export default function Customers() {
 
         {/* Table Container */}
         <div className="rounded-3xl bg-white border border-gray-300 overflow-hidden flex-1 flex flex-col">
-          {/* Table Toolbar */}
           <TableToolbar
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={(page) => loadPage(page)}
+            currentPage={pagination.currentPage}
+            totalPages={pagination.totalPages}
+            onPageChange={handlePageChange}
             onFilter={() => setIsFilterOpen(true)}
             onExport={() => console.log("Export clicked")}
           />
 
-          {/* Table Data */}
           <div ref={tableScrollRef} className="flex-1 overflow-auto">
             <table className="w-full text-left border-collapse">
               <thead
@@ -154,23 +269,21 @@ export default function Customers() {
               </thead>
 
               {loading ? (
-                <TableSkeleton rows={pageData.length} />
+                <TableSkeleton rows={30} />
               ) : (
                 <tbody className="divide-y divide-gray-200">
-                  {pageData.map((item, index) => (
+                  {customers.map((item, index) => (
                     <CustomerRow
-                      key={item.id}
+                      key={item._id}
                       item={item}
                       index={index}
-                      startIndex={(currentPage - 1) * 30}
-                      onView={(data) =>
-                        setModal({ isOpen: true, data, mode: "details" })
+                      startIndex={
+                        (pagination.currentPage - 1) * pagination.itemsPerPage
                       }
-                      onEdit={(data) =>
-                        setModal({ isOpen: true, data, mode: "edit" })
-                      }
+                      onView={(data) => setDetailsModal({ isOpen: true, data })}
+                      onEdit={(data) => setFormModal({ isOpen: true, data })}
                       onToggleStatus={(data) =>
-                        handleCustomerAction("toggleStatus", data)
+                        handleCustomerDetailsActions("toggleStatus", data)
                       }
                     />
                   ))}
@@ -181,22 +294,36 @@ export default function Customers() {
         </div>
       </div>
 
-      {/* Customer Modal */}
-      <CustomerModal
-        isOpen={modal.isOpen}
-        mode={modal.mode}
-        initialData={modal.data}
-        onClose={() => setModal({ ...modal, isOpen: false })}
-        onAction={handleCustomerAction}
+      <CustomerDetailsModal
+        isOpen={detailsModal.isOpen}
+        initialData={detailsModal.data}
+        onClose={() => setDetailsModal({ ...detailsModal, isOpen: false })}
+        onAction={handleCustomerDetailsActions}
       />
 
-      {/* Filter Drawer */}
+      <CustomerFormModal
+        isOpen={formModal.isOpen}
+        initialData={formModal.data}
+        onClose={() => setFormModal({ ...formModal, isOpen: false })}
+        onAction={handleCustomerFormActions}
+      />
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        variant={confirmModal.variant}
+        confirmText={confirmModal.confirmText}
+      />
+
       <FilterDrawer
         isOpen={isFilterOpen}
         onClose={() => setIsFilterOpen(false)}
-        filters={filters}
-        onApply={() => console.log("Apply filters", filters)}
-        onReset={() => console.log("Reset filters")}
+        filters={filterConfig}
+        onApply={handleApplyFilters}
+        onReset={handleResetFilters}
       />
     </>
   );

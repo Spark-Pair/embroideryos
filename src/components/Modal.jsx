@@ -83,7 +83,7 @@ export default function Modal({
             {children}
 
             {/* Footer */}
-            {footer && <div className="mt-10">{footer}</div>}
+            {footer && <div className="mt-6">{footer}</div>}
           </div>
         </motion.div>
         </div>

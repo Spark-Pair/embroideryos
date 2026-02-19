@@ -2,9 +2,9 @@ import { Edit3, Eye, Power, MoreVertical } from "lucide-react";
 import ContextMenu from "../ContextMenu";
 import StatusBadge from "../StatusBadge";
 import { useState } from "react";
-import { formatDate } from "../../utils";
+import { formatDate, formatNumbers } from "../../utils";
 
-export default function CustomerRow({ item, index, startIndex, onView, onEdit, onToggleStatus }) {
+export default function StaffRow({ item, index, startIndex, onView, onEdit, onToggleStatus }) {
   const [activeMenu, setActiveMenu] = useState(null);
 
   return (
@@ -14,8 +14,8 @@ export default function CustomerRow({ item, index, startIndex, onView, onEdit, o
     >
       <td className="px-7 py-4 font-medium text-gray-500">{startIndex + index + 1}</td>
       <td className="px-7 py-4 font-semibold text-gray-800">{item.name}</td>
-      <td className="px-7 py-4 text-sm text-gray-500 font-light">{item.person}</td>
-      <td className="px-7 py-3.5 text-sm font-medium tracking-wider">{item.rate}</td>
+      <td className="px-7 py-4 text-sm text-gray-500 font-light">{formatDate(item.joining_date, "dd-MMM-YYYY, DDD")}</td>
+      <td className="px-7 py-4 text-sm text-gray-500 font-light">{formatNumbers(item.salary, 1) ?? '---'}</td>
       <td className="px-7 py-3.5">
         <StatusBadge active={item.isActive} />
       </td>
@@ -43,7 +43,7 @@ export default function CustomerRow({ item, index, startIndex, onView, onEdit, o
             className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl text-gray-600 hover:bg-gray-200 cursor-pointer"
           >
             <Edit3 size={16} strokeWidth={2.5} />
-            Edit Customer
+            Edit Staff
           </button>
           <div className="h-[1px] bg-gray-200 my-1.5" />
           <button

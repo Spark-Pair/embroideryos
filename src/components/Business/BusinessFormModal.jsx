@@ -65,7 +65,7 @@ export default function BusinessFormModal({
             onChange={(e) =>
               setFormData((prev) => ({ ...prev, name: e.target.value }))
             }
-            className="capitalize"
+            capitalize={true}
           />
           <Input
             label="Contact Person"
@@ -74,7 +74,7 @@ export default function BusinessFormModal({
             onChange={(e) =>
               setFormData((prev) => ({ ...prev, person: e.target.value }))
             }
-            className="capitalize"
+            capitalize={true}
           />
           <Input
             label="Price"

@@ -1,7 +1,7 @@
 // api/user.js
 import { apiClient } from './apiClient';
 
-const USER_URL = "/user";
+const USER_URL = "/users";
 
 export const fetchUsers = async (params = {}) => {
   const queryParams = new URLSearchParams({

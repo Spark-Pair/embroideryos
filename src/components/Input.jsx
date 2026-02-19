@@ -26,8 +26,12 @@ const Input = forwardRef(
 
       // Capitalize Words
       if (capitalize) {
-        val = val.replace(/\b\w/g, (char) => char.toUpperCase());
+        val = val
+          .toLowerCase()
+          .replace(/\s+/g, ' ')
+          .replace(/\b\w/g, (char) => char.toUpperCase());
       }
+
 
       // Amount formatting
       if (amount) {
@@ -53,6 +57,19 @@ const Input = forwardRef(
       return () => window.removeEventListener('keydown', handler);
     }, [shortcutKey, ref]);
 
+    const handleFocus = (e) => {
+      if (e.target.type === 'date') {
+        try {
+          e.target.showPicker();
+        } catch {
+          e.target.click();
+        }
+      }
+
+      // agar user ne apna onFocus diya ho to wo bhi chale
+      if (props.onFocus) props.onFocus(e);
+    };
+
     return (
       <div className="relative">
         {label && (
@@ -75,6 +92,7 @@ const Input = forwardRef(
             required={required}
             value={value}
             {...props}
+            onFocus={handleFocus}
             onChange={handleLocalChange}
             className={`
               w-full border border-gray-400 px-4 py-2 rounded-xl
