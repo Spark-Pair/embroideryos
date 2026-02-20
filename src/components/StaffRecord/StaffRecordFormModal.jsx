@@ -526,21 +526,15 @@ export default function StaffRecordFormModal({
             )}
 
             {/* Date */}
-            <div className="relative">
-              <Input
-                label="Date"
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                disabled={true}
-              />
-              {/* Config loading indicator on date field */}
-              {cfgLoading && (
-                <div className="absolute right-2.5 top-8 flex items-center gap-1 text-xs text-gray-400">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                </div>
-              )}
-            </div>
+            <Input
+              label="Date"
+              icon={cfgLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              placeholder={cfgLoading ? "Loading..." : null}
+              type={cfgLoading ? "text" : "date"}
+              value={cfgLoading ? "" : date}
+              onChange={(e) => setDate(e.target.value)}
+              disabled={true}
+            />
 
             {/* Attendance */}
             <Select
