@@ -88,7 +88,7 @@ export default function Select({ label, options = [], value, onChange, placehold
               width: dropdownStyle.width,
               zIndex: 50,
             }}
-            className="bg-white border border-gray-400 rounded-2xl shadow max-h-60 overflow-hidden p-1"
+            className="bg-white border border-gray-400 rounded-2xl shadow max-h-65 overflow-hidden p-1"
           >
             <div className="relative">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -102,7 +102,7 @@ export default function Select({ label, options = [], value, onChange, placehold
               />
             </div>
             <hr className="my-1.5 border-gray-300" />
-            <div className="max-h-48 grid overflow-auto px-0.5 gap-0.5">
+            <div className="max-h-48 grid overflow-auto px-0.5 gap-0.5 rounded-b-xl">
               {filteredOptions.length > 0 ? (
                 filteredOptions.map((opt) => (
                   <div

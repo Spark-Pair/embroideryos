@@ -9,3 +9,6 @@ export const fetchProductionConfig = () =>
 
 export const updateProductionConfig = (data) =>
   axios.put(BASE, data).then((r) => r.data);
+
+export const createProductionConfig = (payload) =>
+  api.post("/production-config", payload).then((res) => res.data);

@@ -1,22 +1,20 @@
 // pages/StaffRecords.jsx
 
 import React, { useState, useRef, useEffect } from "react";
-import { Plus, CircleCheck, XCircle, Building2, Settings } from "lucide-react";
+import { Plus, CircleCheck, XCircle, Building2 } from "lucide-react";
 import {
   fetchStaffRecords,
   fetchStaffRecordStats,
   createStaffRecord,
   updateStaffRecord,
   toggleStaffRecordStatus,
-} from "../api/staffRecords";
-import { fetchProductionConfig, updateProductionConfig } from "../api/productionConfig";
+} from "../api/staffRecord";
 
 import StatCard from "../components/StatCard";
 import TableToolbar from "../components/table/TableToolbar";
 import StaffRecordDetailsModal from "../components/StaffRecord/StaffRecordDetailsModal";
 import StaffRecordFormModal from "../components/StaffRecord/StaffRecordFormModal";
 import StaffRecordRow from "../components/StaffRecord/StaffRecordRow";
-import ProductionConfigModal from "../components/StaffRecord/ProductionConfigModal";
 import FilterDrawer from "../components/FilterDrawer";
 import TableSkeleton from "../components/table/TableLoader";
 import PageHeader from "../components/PageHeader";
@@ -36,10 +34,6 @@ export default function StaffRecords() {
   });
   const [loading, setLoading] = useState(false);
 
-  // Config
-  const [config, setConfig] = useState(null);
-  const [configModal, setConfigModal] = useState(false);
-
   // Modals
   const [detailsModal, setDetailsModal] = useState({ isOpen: false, data: null });
   const [formModal,    setFormModal]    = useState({ isOpen: false, data: null });
@@ -52,12 +46,11 @@ export default function StaffRecords() {
 
   const tableScrollRef = useRef(null);
 
-  // ── Loaders ──────────────────────────────────────────────────────────────────
+  // ── Loaders ───────────────────────────────────────────────────────────────────
 
   const loadStats = async () => {
     try {
       const res = await fetchStaffRecordStats();
-      // backend returns: { success, data: { total, active, inactive } }
       setStats(res.data ?? { total: 0, active: 0, inactive: 0 });
     } catch {
       showToast({ type: "error", message: "Failed to load stats" });
@@ -68,7 +61,6 @@ export default function StaffRecords() {
     try {
       setLoading(true);
       const res = await fetchStaffRecords({ page, limit: 30, ...filterParams });
-      // res is already the response body: { success, data, pagination }
       setStaffRecords(res.data ?? []);
       if (res.pagination) setPagination(res.pagination);
       loadStats();
@@ -79,20 +71,10 @@ export default function StaffRecords() {
     }
   };
 
-  const loadConfig = async () => {
-    try {
-      const res = await fetchProductionConfig();
-      setConfig(res.data);
-    } catch {
-      showToast({ type: "error", message: "Failed to load production config" });
-    }
-  };
-
-  // ── Initial load ──────────────────────────────────────────────────────────────
+  // ── Initial load ───────────────────────────────────────────────────────────────
 
   useEffect(() => {
     loadRecords();
-    loadConfig();
   }, []);
 
   useEffect(() => {
@@ -101,7 +83,7 @@ export default function StaffRecords() {
     }
   }, [pagination.currentPage]);
 
-  // ── Handlers ─────────────────────────────────────────────────────────────────
+  // ── Handlers ──────────────────────────────────────────────────────────────────
 
   const handlePageChange    = (page) => loadRecords(page);
   const handleApplyFilters  = () => { loadRecords(1, filters); setIsFilterOpen(false); };
@@ -112,7 +94,6 @@ export default function StaffRecords() {
     setIsFilterOpen(false);
   };
 
-  // Details modal actions
   const handleDetailsAction = (action, data) => {
     if (action === "openEdit") {
       setDetailsModal({ isOpen: false, data: null });
@@ -141,7 +122,6 @@ export default function StaffRecords() {
     }
   };
 
-  // Form modal actions
   const handleFormAction = async (action, payload) => {
     try {
       if (action === "add") {
@@ -154,18 +134,6 @@ export default function StaffRecords() {
       loadRecords(pagination.currentPage);
     } catch (err) {
       showToast({ type: "error", message: err.response?.data?.message || "Something went wrong" });
-      throw err; // re-throw so modal stays open on error
-    }
-  };
-
-  // Config save
-  const handleConfigSave = async (updatedConfig) => {
-    try {
-      const res = await updateProductionConfig(updatedConfig);
-      setConfig(res.data);
-      showToast({ type: "success", message: "Config updated successfully" });
-    } catch (err) {
-      showToast({ type: "error", message: err.response?.data?.message || "Failed to update config" });
       throw err;
     }
   };
@@ -204,16 +172,6 @@ export default function StaffRecords() {
           actionLabel="Add Record"
           actionIcon={Plus}
           onAction={() => setFormModal({ isOpen: true, data: null })}
-          // Secondary action — config button
-          secondaryAction={
-            <button
-              onClick={() => setConfigModal(true)}
-              className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-            >
-              <Settings size={16} />
-              Config
-            </button>
-          }
         />
 
         {/* Stats */}
@@ -285,14 +243,6 @@ export default function StaffRecords() {
         initialData={formModal.data}
         onClose={() => setFormModal({ isOpen: false, data: null })}
         onAction={handleFormAction}
-        config={config}
-      />
-
-      <ProductionConfigModal
-        isOpen={configModal}
-        onClose={() => setConfigModal(false)}
-        config={config}
-        onSave={handleConfigSave}
       />
 
       <ConfirmModal

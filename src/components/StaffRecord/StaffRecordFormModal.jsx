@@ -5,7 +5,7 @@ import Button from "../Button";
 import Input from "../Input";
 import Select from "../Select";
 import { fetchStaffs } from "../../api/staff";
-import { fetchStaffLastRecord } from "../../api/staffRecords";
+import { fetchStaffLastRecord } from "../../api/staffRecord";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -42,6 +42,7 @@ const DEFAULT_CONFIG = {
   pcs_per_round:    12,
   bonus_rate:       200,
   off_amount:       300,
+  stitch_cap:       5000,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -65,21 +66,19 @@ function resolveDate(joiningDate, lastRecordDate) {
 
 // ─── Calculation Engine ───────────────────────────────────────────────────────
 
-const STITCH_CAP = 5000;
-
 function calcRow(row, cfg) {
   const stitchRaw = parseFloat(row.d_stitch) || 0;
   const pcs       = parseFloat(row.pcs)      || 0;
   const rounds    = parseFloat(row.rounds)   || 0;
   const applique  = parseFloat(row.applique) || 0;
-  const stitch    = stitchRaw > 0 && stitchRaw <= STITCH_CAP ? STITCH_CAP : stitchRaw;
+  const stitch    = stitchRaw > 0 && stitchRaw <= DEFAULT_CONFIG.stitch_cap ? DEFAULT_CONFIG.stitch_cap : stitchRaw;
 
   const stitch_rate      = cfg.stitch_rate      ?? DEFAULT_CONFIG.stitch_rate;
   const applique_rate    = cfg.applique_rate    ?? DEFAULT_CONFIG.applique_rate;
   const on_target_pct    = cfg.on_target_pct    ?? DEFAULT_CONFIG.on_target_pct;
   const after_target_pct = cfg.after_target_pct ?? DEFAULT_CONFIG.after_target_pct;
 
-  const total_stitch     = stitch * rounds;
+  const total_stitch     = stitchRaw * rounds;
   const stitch_base      = stitch * stitch_rate * pcs / 100;
   const applique_base    = applique_rate * applique * pcs / 100;
   const combined         = stitch_base + applique_base;
@@ -113,7 +112,7 @@ function calcTotals(rows, cfg) {
   );
 }
 
-const fmt = (n, d = 2) =>
+const fmt = (n, d = 0) =>
   n == null || isNaN(n) ? "—"
   : Number(n).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
 
@@ -166,7 +165,7 @@ function ProductionRow({ row, index, cfg, onChange, onRemove, canRemove }) {
       <td className="px-1.5 py-2">
         <input type="number" value={row.rounds} onChange={handle("rounds")} placeholder="0" className={ci} />
       </td>
-      <td className="px-3 py-2 text-right text-sm text-gray-600 tabular-nums">{fmt(total_stitch, 2)}</td>
+      <td className="px-3 py-2 text-right text-sm text-gray-600 tabular-nums">{fmt(total_stitch)}</td>
       <td className="px-3 py-2 text-right text-sm font-medium text-rose-700 tabular-nums">{fmt(on_target_amt, 2)}</td>
       <td className="px-3 py-2 text-right text-sm font-medium text-emerald-700 tabular-nums">{fmt(after_target_amt, 2)}</td>
       <td className="px-3 py-2 text-center w-8">
@@ -183,9 +182,9 @@ function TotalsRow({ totals }) {
   return (
     <tr className="border-t border-gray-300 bg-gray-50/80 font-semibold text-sm">
       <td className="px-3.5 py-2.5 text-xs text-gray-500 uppercase tracking-wider" colSpan={3}>Totals</td>
-      <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{fmt(totals.pcs, 0)}</td>
-      <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{fmt(totals.rounds, 0)}</td>
-      <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{fmt(totals.total_stitch, 2)}</td>
+      <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{fmt(totals.pcs)}</td>
+      <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{fmt(totals.rounds)}</td>
+      <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{fmt(totals.total_stitch)}</td>
       <td className="px-3 py-2.5 text-right tabular-nums text-rose-700">{fmt(totals.on_target_amt, 2)}</td>
       <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700">{fmt(totals.after_target_amt, 2)}</td>
       <td />
@@ -210,14 +209,14 @@ function FinalAmountCard({ amount, isFixed, breakdown }) {
           </span>
         </div>
         <span className={`text-2xl font-bold tabular-nums ${isFixed ? "text-amber-700" : "text-emerald-700"}`}>
-          {fmt(amount)}
+          {fmt(amount, 2)}
         </span>
       </div>
       {breakdown && (
         <div className={`mt-2 p-2 pb-1 border-t ${isFixed ? "border-amber-200" : "border-emerald-200"} flex flex-wrap gap-x-4 gap-y-1`}>
           {breakdown.map((item, i) => (
             <span key={i} className={`text-xs ${isFixed ? "text-amber-600" : "text-emerald-600"}`}>
-              {item.label}: <span className="font-semibold">{fmt(item.value)}</span>
+              {item.label}: <span className="font-semibold">{fmt(item.value, 2)}</span>
             </span>
           ))}
         </div>
@@ -286,6 +285,17 @@ export default function StaffRecordFormModal({
     );
   }, [isOpen, isEdit, initialData]);
 
+  // ── Auto-set Sunday attendance ──
+  useEffect(() => {
+    if (!date) return;
+    const day = new Date(date).getDay(); // 0 = Sunday
+    if (day === 0) {
+      setAttendance("Sunday")
+    } else {
+      setAttendance("")
+    };
+  }, [date]);
+  
   // ── Staff select ──
   const handleStaffSelect = async (staffId) => {
     if (!staffId) { setSelectedStaff(null); setDate(""); return; }
@@ -392,12 +402,12 @@ export default function StaffRecordFormModal({
             {selectedStaff && !attendance && "← Select attendance type"}
             {selectedStaff && attendance && !isFixed && bonusAmount > 0 &&
               <span className="text-emerald-600 font-medium">
-                Base {fmt(previewBase)} + Bonus {fmt(bonusAmount)} = {fmt(previewFinal)}
+                Base {fmt(previewBase, 2)} + Bonus {fmt(bonusAmount, 2)} = {fmt(previewFinal, 2)}
               </span>
             }
             {selectedStaff && attendance && isFixed &&
               <span className="text-amber-600 font-medium flex items-center gap-1">
-                <Lock className="h-3 w-3" /> Fixed at {fmt(previewFinal)}
+                <Lock className="h-3 w-3" /> Fixed at {fmt(previewFinal, 2)}
               </span>
             }
           </div>
@@ -513,14 +523,14 @@ export default function StaffRecordFormModal({
                   <span className="text-emerald-700">
                     <span className="font-semibold">Target Met</span>
                     {" "}— Effective amount (After Target):{" "}
-                    <span className="font-bold">{fmt(totals.after_target_amt)}</span>
+                    <span className="font-bold">{fmt(totals.after_target_amt, 2)}</span>
                   </span>
                 ) : (
                   <span className="text-amber-700">
-                    <span className="font-semibold">{fmt(cfg.target_amount - totals.on_target_amt)} short</span>
+                    <span className="font-semibold">{fmt(cfg.target_amount - totals.on_target_amt, 2)} short</span>
                     {" "}of target · Current:{" "}
-                    <span className="font-semibold">{fmt(totals.on_target_amt)}</span>
-                    {" "}· Target: {fmt(cfg.target_amount, 0)}
+                    <span className="font-semibold">{fmt(totals.on_target_amt, 2)}</span>
+                    {" "}· Target: {fmt(cfg.target_amount, 2)}
                   </span>
                 )}
               </div>
@@ -549,19 +559,20 @@ export default function StaffRecordFormModal({
               />
               <div className="grow">
                 <Input
-                  label={`Per Bonus Rate ${cfg.bonus_rate ? `(default: ${cfg.bonus_rate})` : ""}`}
+                  label={`Per Bonus Rate ${fmt(cfg.bonus_rate, 2) ? `(default: ${fmt(cfg.bonus_rate, 2)})` : ""}`}
                   type="number"
                   value={bonusRate}
                   onChange={(e) => setBonusRate(e.target.value)}
-                  placeholder={String(cfg.bonus_rate ?? 200)}
+                  placeholder={String(fmt(cfg.bonus_rate, 2) ?? 200.00)}
                   required={false}
                 />
               </div>
               <Input
                 label="Total Bonus Amount"
                 icon={<Gift className="h-4 w-4 text-gray-400" />}
+                iconPosition="right"
                 type="text"
-                value={fmt(bonusAmount)}
+                value={fmt(bonusAmount, 2)}
                 placeholder={String(cfg.bonus_rate ?? 200)}
                 disabled={true}
               />

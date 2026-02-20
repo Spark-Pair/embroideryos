@@ -1,4 +1,4 @@
-// api/staffRecords.js
+// api/staffRecord.js
 
 import axios from "axios";
 

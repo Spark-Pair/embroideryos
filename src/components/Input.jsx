@@ -106,6 +106,7 @@ const Input = forwardRef(
             {...props}
             onFocus={handleFocus}
             onChange={handleLocalChange}
+            disabled={disabled}
             className={`
               w-full border border-gray-400 px-4 py-2 rounded-xl
               focus:ring-2 focus:ring-teal-300 focus:outline-none

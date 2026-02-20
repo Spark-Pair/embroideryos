@@ -19,6 +19,7 @@ import SupplierPayments from './pages/SupplierPayments';
 import StaffRecords from './pages/StaffRecords';
 import Users from './pages/Users';
 import Sessions from './pages/Sessions';
+import Settings from './pages/Settings';
 
 export default function App() {
   return (
@@ -55,6 +56,12 @@ export default function App() {
             <Route path="/sessions" element={
               <ProtectedRoute>
                 <Layout><Sessions /></Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/settings" element={
+              <ProtectedRoute>
+                <Layout><Settings /></Layout>
               </ProtectedRoute>
             } />
 

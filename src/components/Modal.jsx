@@ -51,9 +51,9 @@ export default function Modal({
                   ease: "easeIn"
                 }
               }}
-              className={`relative h-full w-full flex items-center justify-center overflow-hidden no-default-transition`}
+              className={`relative h-full w-full flex items-center justify-center overflow-hidden no-default-transition p-3`}
             >
-              <div className={`p-7 max-h-full flex flex-col overflow-hidden bg-white w-full ${maxWidth} rounded-4xl shadow-xl`}>
+              <div className={`p-7 max-h-full flex flex-col overflow-hidden bg-white w-full ${maxWidth} rounded-4xl shadow-md`}>
                 {/* Header */}
                 {(title || badge) && (
                   <div className="flex justify-between items-start mb-6">
