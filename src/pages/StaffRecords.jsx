@@ -26,6 +26,7 @@ export default function StaffRecords() {
 
   const [stats, setStats] = useState({ total: 0, active: 0, inactive: 0 });
   const [staffRecords, setStaffRecords] = useState([]);
+  const [lastUsed, setLastUsed] = useState({ staffId: null, attendanceHistory: { last: null, secondLast: null, } });
   const [pagination, setPagination] = useState({
     currentPage: 1,
     totalPages: 1,
@@ -243,6 +244,8 @@ export default function StaffRecords() {
         initialData={formModal.data}
         onClose={() => setFormModal({ isOpen: false, data: null })}
         onAction={handleFormAction}
+        lastUsed={lastUsed}
+        setLastUsed={setLastUsed}
       />
 
       <ConfirmModal

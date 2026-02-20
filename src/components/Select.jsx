@@ -55,7 +55,7 @@ export default function Select({ label, options = [], value, onChange, placehold
   }, [isOpen]);
 
   return (
-    <div className="mb-4 relative" ref={containerRef}>
+    <div className="relative" ref={containerRef}>
       {label && (
         <label className="block mb-1.5 text-sm text-gray-700">{label}</label>
       )}
@@ -102,7 +102,7 @@ export default function Select({ label, options = [], value, onChange, placehold
               />
             </div>
             <hr className="my-1.5 border-gray-300" />
-            <div className="max-h-48 grid overflow-auto px-0.5 gap-0.5 rounded-b-xl">
+            <div className="max-h-48 grid overflow-auto p-0.5 pt-0 gap-0.5 rounded-b-xl">
               {filteredOptions.length > 0 ? (
                 filteredOptions.map((opt) => (
                   <div

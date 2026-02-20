@@ -1,14 +1,12 @@
-// api/productionConfig.js
+import { apiClient } from './apiClient';
 
-import axios from "axios";
+const PRODUCTION_CONFIG_URL = "/production-configs";
 
-const BASE = "/api/production-config";
-
-export const fetchProductionConfig = () =>
-  axios.get(BASE).then((r) => r.data);
+export const fetchProductionConfig = (date) =>
+  apiClient.get(PRODUCTION_CONFIG_URL, { params: date ? { date } : {} }).then((r) => r.data);
 
 export const updateProductionConfig = (data) =>
-  axios.put(BASE, data).then((r) => r.data);
+  apiClient.put(PRODUCTION_CONFIG_URL, data).then((r) => r.data);
 
 export const createProductionConfig = (payload) =>
-  api.post("/production-config", payload).then((res) => res.data);
+  apiClient.post(PRODUCTION_CONFIG_URL, payload).then((res) => res.data);

@@ -115,6 +115,7 @@ export default function ProductionConfigFormModal({ isOpen, onClose, onSave }) {
               value={form[field.key]}
               onChange={handleChange(field.key)}
               disabled={submitting}
+              autocomplete="off"
               required
               className={errors[field.key] ? "border-red-400 focus:ring-red-200" : ""}
             />
