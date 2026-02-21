@@ -19,8 +19,8 @@ export default function Select({ label, options = [], value, onChange, placehold
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
       setDropdownStyle({
-        top: rect.bottom + window.scrollY + 8,
-        left: rect.left + window.scrollX,
+        top: rect.bottom + 8,   // ✅ scrollY hata do
+        left: rect.left,        // ✅ scrollX hata do
         width: rect.width,
       });
     }
@@ -86,7 +86,7 @@ export default function Select({ label, options = [], value, onChange, placehold
               top: dropdownStyle.top,
               left: dropdownStyle.left,
               width: dropdownStyle.width,
-              zIndex: 50,
+              zIndex: 9999,  // ✅ 50 se 9999
             }}
             className="bg-white border border-gray-400 rounded-2xl shadow max-h-65 overflow-hidden p-1"
           >
