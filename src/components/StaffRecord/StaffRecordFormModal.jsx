@@ -464,7 +464,7 @@ export default function StaffRecordFormModal({
               rounds:   parseFloat(r.rounds)   || 0,
             }))
           : [],
-        bonus_qty:  bonusQty  ? parseInt(bonusQty)    : 0,
+        bonus_qty:  bonusQty  ? parseFloat(bonusQty)    : 0,
         bonus_rate: bonusRate ? parseFloat(bonusRate) : null,
         fix_amount: fixAmount ? parseFloat(fixAmount) : null,
       };

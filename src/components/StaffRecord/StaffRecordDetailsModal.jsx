@@ -261,7 +261,7 @@ export default function StaffRecordDetailsModal({ isOpen, onClose, initialData, 
           <div>
             <SectionHeader icon={Gift} title="Bonus" />
             <InfoGrid col={3}>
-              <InfoCell label="Qty" value={fmt(initialData.bonus_qty)} />
+              <InfoCell label="Qty" value={fmt(initialData.bonus_qty, 1)} />
               <InfoCell label="Rate / Bonus" value={fmt(initialData.bonus_rate, 2)} />
               <InfoCell label="Total Bonus" value={fmt(initialData.bonus_amount, 2)} />
             </InfoGrid>

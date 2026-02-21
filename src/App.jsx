@@ -20,6 +20,7 @@ import StaffRecords from './pages/StaffRecords';
 import Users from './pages/Users';
 import Sessions from './pages/Sessions';
 import Settings from './pages/Settings';
+import SalarySlips from './pages/SalarySlips';
 
 export default function App() {
   return (
@@ -116,6 +117,12 @@ export default function App() {
             <Route path="/staff-records" element={
               <ProtectedRoute>
                 <Layout><StaffRecords /></Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/salary-slips" element={
+              <ProtectedRoute>
+                <Layout><SalarySlips /></Layout>
               </ProtectedRoute>
             } />
 
