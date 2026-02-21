@@ -1,29 +1,27 @@
-// api/staffRecord.js
+import { apiClient } from './apiClient';
 
-import axios from "axios";
-
-const BASE = "/api/staff-records";
+const STAFF_RECORDS_URL = "/staff-records";
 
 export const fetchStaffRecords = (params) =>
-  axios.get(BASE, { params }).then((r) => r.data);
+  apiClient.get(STAFF_RECORDS_URL, { params }).then((r) => r.data);
 
 export const fetchStaffRecordStats = () =>
-  axios.get(`${BASE}/stats`).then((r) => r.data);
+  apiClient.get(`${STAFF_RECORDS_URL}/stats`).then((r) => r.data);
 
 export const fetchStaffLastRecord = (staff_id) =>
-  axios.get(`${BASE}/last/${staff_id}`).then((r) => r.data);
+  apiClient.get(`${STAFF_RECORDS_URL}/last/${staff_id}`).then((r) => r.data);
 
 export const fetchStaffRecord = (id) =>
-  axios.get(`${BASE}/${id}`).then((r) => r.data);
+  apiClient.get(`${STAFF_RECORDS_URL}/${id}`).then((r) => r.data);
 
 export const createStaffRecord = (data) =>
-  axios.post(BASE, data).then((r) => r.data);
+  apiClient.post(STAFF_RECORDS_URL, data).then((r) => r.data);
 
 export const updateStaffRecord = (id, data) =>
-  axios.put(`${BASE}/${id}`, data).then((r) => r.data);
+  apiClient.put(`${STAFF_RECORDS_URL}/${id}`, data).then((r) => r.data);
 
 export const deleteStaffRecord = (id) =>
-  axios.delete(`${BASE}/${id}`).then((r) => r.data);
+  apiClient.delete(`${STAFF_RECORDS_URL}/${id}`).then((r) => r.data);
 
 export const toggleStaffRecordStatus = (id) =>
-  axios.patch(`/api/staff/${id}/toggle-status`).then((r) => r.data);
+  apiClient.patch(`${STAFF_RECORDS_URL}/${id}/toggle-status`).then((r) => r.data);

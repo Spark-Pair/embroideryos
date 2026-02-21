@@ -1,7 +1,7 @@
 // pages/StaffRecords.jsx
 
 import React, { useState, useRef, useEffect } from "react";
-import { Plus, CircleCheck, XCircle, Building2 } from "lucide-react";
+import { Plus, FileText, Banknote, Gift } from "lucide-react";
 import {
   fetchStaffRecords,
   fetchStaffRecordStats,
@@ -24,13 +24,20 @@ import { useToast } from "../context/ToastContext";
 export default function StaffRecords() {
   const { showToast } = useToast();
 
-  const [stats, setStats] = useState({ total: 0, active: 0, inactive: 0 });
+  const [stats, setStats] = useState({
+    record_count:       0,
+    total_final_amount: 0,
+    total_bonus_amount: 0,
+  });
   const [staffRecords, setStaffRecords] = useState([]);
-  const [lastUsed, setLastUsed] = useState({ staffId: null, attendanceHistory: { last: null, secondLast: null, } });
+  const [lastUsed, setLastUsed] = useState({
+    staffId: null,
+    attendanceHistory: { last: null, secondLast: null },
+  });
   const [pagination, setPagination] = useState({
-    currentPage: 1,
-    totalPages: 1,
-    totalItems: 0,
+    currentPage:  1,
+    totalPages:   1,
+    totalItems:   0,
     itemsPerPage: 30,
   });
   const [loading, setLoading] = useState(false);
@@ -43,16 +50,24 @@ export default function StaffRecords() {
   });
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-  const [filters, setFilters] = useState({ name: "", status: "" });
+  const [filters, setFilters] = useState({
+    name: "", attendance: "", date_from: "", date_to: "",
+  });
 
   const tableScrollRef = useRef(null);
 
-  // ── Loaders ───────────────────────────────────────────────────────────────────
+  // ── Loaders ──────────────────────────────────────────────────────────────────
 
-  const loadStats = async () => {
+  const loadStats = async (filterParams = filters) => {
     try {
-      const res = await fetchStaffRecordStats();
-      setStats(res.data ?? { total: 0, active: 0, inactive: 0 });
+      const res = await fetchStaffRecordStats(filterParams);
+      setStats(
+        res.data?.amounts ?? {
+          record_count:       0,
+          total_final_amount: 0,
+          total_bonus_amount: 0,
+        }
+      );
     } catch {
       showToast({ type: "error", message: "Failed to load stats" });
     }
@@ -64,7 +79,7 @@ export default function StaffRecords() {
       const res = await fetchStaffRecords({ page, limit: 30, ...filterParams });
       setStaffRecords(res.data ?? []);
       if (res.pagination) setPagination(res.pagination);
-      loadStats();
+      loadStats(filterParams);
     } catch {
       showToast({ type: "error", message: "Failed to load staff records" });
     } finally {
@@ -72,7 +87,7 @@ export default function StaffRecords() {
     }
   };
 
-  // ── Initial load ───────────────────────────────────────────────────────────────
+  // ── Initial load ──────────────────────────────────────────────────────────────
 
   useEffect(() => {
     loadRecords();
@@ -84,12 +99,12 @@ export default function StaffRecords() {
     }
   }, [pagination.currentPage]);
 
-  // ── Handlers ──────────────────────────────────────────────────────────────────
+  // ── Handlers ─────────────────────────────────────────────────────────────────
 
-  const handlePageChange    = (page) => loadRecords(page);
-  const handleApplyFilters  = () => { loadRecords(1, filters); setIsFilterOpen(false); };
-  const handleResetFilters  = () => {
-    const reset = { name: "", status: "" };
+  const handlePageChange   = (page) => loadRecords(page);
+  const handleApplyFilters = () => { loadRecords(1, filters); setIsFilterOpen(false); };
+  const handleResetFilters = () => {
+    const reset = { name: "", attendance: "", date_from: "", date_to: "" };
     setFilters(reset);
     loadRecords(1, reset);
     setIsFilterOpen(false);
@@ -105,9 +120,9 @@ export default function StaffRecords() {
     if (action === "toggleStatus") {
       setDetailsModal({ isOpen: false, data: null });
       setConfirmModal({
-        isOpen: true,
-        title:       data.isActive ? "Deactivate Staff" : "Activate Staff",
-        message:     `Are you sure you want to ${data.isActive ? "deactivate" : "activate"} "${data?.staff_id?.name || "this record"}"?`,
+        isOpen:      true,
+        title:       data.isActive ? "Deactivate Record" : "Activate Record",
+        message:     `Are you sure you want to ${data.isActive ? "deactivate" : "activate"} this record for "${data?.staff_id?.name || "this staff"}"?`,
         variant:     data.isActive ? "danger" : "success",
         confirmText: data.isActive ? "Deactivate" : "Activate",
         onConfirm: async () => {
@@ -150,15 +165,32 @@ export default function StaffRecords() {
       onChange:    (e) => setFilters((p) => ({ ...p, name: e.target.value })),
     },
     {
-      label:    "Status",
+      label:    "Attendance",
       type:     "select",
-      value:    filters.status,
+      value:    filters.attendance,
       options:  [
-        { label: "All",           value: "" },
-        { label: "Active Only",   value: "active" },
-        { label: "Inactive Only", value: "inactive" },
+        { label: "All",     value: "" },
+        { label: "Day",     value: "Day" },
+        { label: "Night",   value: "Night" },
+        { label: "Half",    value: "Half" },
+        { label: "Absent",  value: "Absent" },
+        { label: "Off",     value: "Off" },
+        { label: "Close",   value: "Close" },
+        { label: "Sunday",  value: "Sunday" },
       ],
-      onChange: (val) => setFilters((p) => ({ ...p, status: val })),
+      onChange: (val) => setFilters((p) => ({ ...p, attendance: val })),
+    },
+    {
+      label:    "Date From",
+      type:     "date",
+      value:    filters.date_from,
+      onChange: (e) => setFilters((p) => ({ ...p, date_from: e.target.value })),
+    },
+    {
+      label:    "Date To",
+      type:     "date",
+      value:    filters.date_to,
+      onChange: (e) => setFilters((p) => ({ ...p, date_to: e.target.value })),
     },
   ];
 
@@ -169,7 +201,7 @@ export default function StaffRecords() {
       <div className="relative z-10 max-w-7xl mx-auto h-full flex flex-col">
         <PageHeader
           title="Staff Records"
-          subtitle="Manage attendance and production entries."
+          subtitle="Manage daily attendance and production entries."
           actionLabel="Add Record"
           actionIcon={Plus}
           onAction={() => setFormModal({ isOpen: true, data: null })}
@@ -177,9 +209,37 @@ export default function StaffRecords() {
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          <StatCard label="Total Records"   value={stats.total}    icon={Building2}   />
-          <StatCard label="Active Staff"    value={stats.active}   icon={CircleCheck} variant="success" />
-          <StatCard label="Inactive Staff"  value={stats.inactive} icon={XCircle}     variant="danger"  />
+          <StatCard
+            label="Total Records"
+            value={stats.record_count}
+            icon={FileText}
+          />
+          <StatCard
+            label="Total Final Amount"
+            value={
+              stats.total_final_amount != null
+                ? Number(stats.total_final_amount).toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })
+                : "—"
+            }
+            icon={Banknote}
+            variant="success"
+          />
+          <StatCard
+            label="Total Bonus Amount"
+            value={
+              stats.total_bonus_amount != null
+                ? Number(stats.total_bonus_amount).toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })
+                : "—"
+            }
+            icon={Gift}
+            variant="warning"
+          />
         </div>
 
         {/* Table */}
@@ -199,13 +259,14 @@ export default function StaffRecords() {
                 style={{ boxShadow: "0 1px 0 0 rgba(209,213,219,1)" }}
               >
                 <tr className="text-sm tracking-wider text-gray-500">
-                  <th className="px-7 py-3.5 font-medium">Id</th>
-                  <th className="px-7 py-3.5 font-medium">Staff Name</th>
-                  <th className="px-7 py-3.5 font-medium">Date</th>
-                  <th className="px-7 py-3.5 font-medium">Attendance</th>
-                  <th className="px-7 py-3.5 font-medium">Total PCs</th>
-                  <th className="px-7 py-3.5 font-medium">On Target Amt</th>
-                  <th className="px-7 py-3.5 font-medium text-right">Actions</th>
+                  <th className="px-5 py-3.5 font-medium">#</th>
+                  <th className="px-5 py-3.5 font-medium">Staff Name</th>
+                  <th className="px-5 py-3.5 font-medium">Date</th>
+                  <th className="px-5 py-3.5 font-medium">Attendance</th>
+                  <th className="px-5 py-3.5 font-medium">PCs / Rounds</th>
+                  <th className="px-5 py-3.5 font-medium">Production / Bonus</th>
+                  <th className="px-5 py-3.5 font-medium">Final Amount</th>
+                  <th className="px-5 py-3.5 font-medium text-right">Actions</th>
                 </tr>
               </thead>
 
@@ -213,17 +274,25 @@ export default function StaffRecords() {
                 <TableSkeleton rows={30} />
               ) : (
                 <tbody className="divide-y divide-gray-200">
-                  {staffRecords.map((item, index) => (
-                    <StaffRecordRow
-                      key={item._id}
-                      item={item}
-                      index={index}
-                      startIndex={(pagination.currentPage - 1) * pagination.itemsPerPage}
-                      onView={(data)         => setDetailsModal({ isOpen: true, data })}
-                      onEdit={(data)         => setFormModal({ isOpen: true, data })}
-                      onToggleStatus={(data) => handleDetailsAction("toggleStatus", data)}
-                    />
-                  ))}
+                  {staffRecords.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-7 py-16 text-center text-sm text-gray-400">
+                        No records found.
+                      </td>
+                    </tr>
+                  ) : (
+                    staffRecords.map((item, index) => (
+                      <StaffRecordRow
+                        key={item._id}
+                        item={item}
+                        index={index}
+                        startIndex={(pagination.currentPage - 1) * pagination.itemsPerPage}
+                        onView={(data)         => setDetailsModal({ isOpen: true, data })}
+                        onEdit={(data)         => setFormModal({ isOpen: true, data })}
+                        onToggleStatus={(data) => handleDetailsAction("toggleStatus", data)}
+                      />
+                    ))
+                  )}
                 </tbody>
               )}
             </table>

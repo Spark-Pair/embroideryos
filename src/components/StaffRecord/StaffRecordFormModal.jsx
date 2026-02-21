@@ -36,9 +36,9 @@ const NO_BONUS      = new Set(["Absent", "Close"]);
 const DEFAULT_CONFIG = {
   stitch_rate:      0.001,
   applique_rate:    1.111,
-  on_target_pct:    0,
-  after_target_pct: 0,
-  target_amount:    0,
+  on_target_pct:    30,
+  after_target_pct: 34,
+  target_amount:    900,
   pcs_per_round:    12,
   bonus_rate:       200,
   off_amount:       300,
@@ -57,10 +57,24 @@ const toDateInput = (d) => d ? new Date(d).toISOString().split("T")[0] : "";
 function resolveDate(joiningDate, lastRecordDate) {
   const jd = joiningDate ? new Date(joiningDate) : null;
   const lr = lastRecordDate ? new Date(lastRecordDate) : null;
+
   if (!jd && !lr) return "";
+
   if (jd && !lr) return toDateInput(jd);
-  if (lr && !jd) { const n = new Date(lr); n.setDate(n.getDate() + 1); return toDateInput(n); }
-  if (lr > jd)   { const n = new Date(lr); n.setDate(n.getDate() + 1); return toDateInput(n); }
+
+  if (lr && !jd) {
+    const n = new Date(lr);
+    n.setDate(n.getDate() + 1);
+    return toDateInput(n);
+  }
+
+  // ✅ changed condition
+  if (lr >= jd) {
+    const n = new Date(lr);
+    n.setDate(n.getDate() + 1);
+    return toDateInput(n);
+  }
+
   return toDateInput(jd);
 }
 
@@ -357,6 +371,8 @@ export default function StaffRecordFormModal({
     setDateLoading(true);
     try {
       const res = await fetchStaffLastRecord(staffId);
+      console.log(res);
+      
       setDate(resolveDate(staff?.joining_date, res.data?.last_record_date ?? null));
       setLastUsed((prev) => ({ ...prev, staffId }));
     } catch {
