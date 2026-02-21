@@ -11,8 +11,8 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["favicon.ico", "icon.png"],
       manifest: {
-        name: "Raza Embroidery",
-        short_name: "Raza Embroidery",
+        name: "EmbroideryOS",
+        short_name: "EmbroideryOS",
         start_url: ".",
         display: "standalone",
         theme_color: "#127475",
