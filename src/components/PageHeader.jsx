@@ -1,5 +1,11 @@
-import React from "react";
+import React, { useEffect } from "react";
 import Button from "./Button";
+import { useShortcut } from "../hooks/useShortcuts";
+import {
+  formatComboDisplay,
+  isEventMatchingShortcut,
+  shouldIgnoreGlobalShortcutTarget,
+} from "../utils/shortcuts";
 
 export default function PageHeader({
   title,
@@ -8,6 +14,24 @@ export default function PageHeader({
   onAction,
   actionIcon,
 }) {
+  const primaryActionShortcut = useShortcut("page_header_primary_action");
+
+  useEffect(() => {
+    if (!actionLabel || !onAction || !primaryActionShortcut) return;
+
+    const onKeyDown = (e) => {
+      if (e.repeat) return;
+      if (shouldIgnoreGlobalShortcutTarget(e.target)) return;
+      if (!isEventMatchingShortcut(e, primaryActionShortcut)) return;
+
+      e.preventDefault();
+      onAction();
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [actionLabel, onAction, primaryActionShortcut]);
+
   return (
     <div className="flex justify-between items-start mb-5">
       <div>
@@ -16,7 +40,11 @@ export default function PageHeader({
       </div>
 
       {actionLabel && onAction && (
-        <Button icon={actionIcon} onClick={onAction}>
+        <Button
+          icon={actionIcon}
+          onClick={onAction}
+          title={`Shortcut: ${formatComboDisplay(primaryActionShortcut)}`}
+        >
           {actionLabel}
         </Button>
       )}

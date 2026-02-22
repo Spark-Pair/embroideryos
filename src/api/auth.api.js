@@ -87,3 +87,8 @@ export const refreshAccessToken = async () => {
   storage.updateAccessToken(res.data.accessToken);
   return res.data;
 };
+
+export const updateMyShortcuts = async (shortcuts) => {
+  const res = await apiClient.patch("/auth/shortcuts", { shortcuts });
+  return res.data;
+};

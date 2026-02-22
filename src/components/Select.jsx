@@ -12,6 +12,7 @@ const Select = forwardRef(function Select(
   const [dropdownStyle, setDropdownStyle] = useState({});
   const containerRef = useRef(null);
   const triggerRef = useRef(null);
+  const searchRef = useRef(null);
   const optionRefs = useRef([]);
   const suppressNextFocusOpenRef = useRef(false);
 
@@ -90,6 +91,11 @@ const Select = forwardRef(function Select(
     if (!isOpen || activeIndex < 0) return;
     optionRefs.current[activeIndex]?.scrollIntoView({ block: "nearest" });
   }, [activeIndex, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    searchRef.current?.focus({ preventScroll: true });
+  }, [isOpen]);
 
   const moveActive = (delta) => {
     if (!filteredOptions.length) return;
@@ -182,6 +188,7 @@ const Select = forwardRef(function Select(
             <div className="relative">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               <input
+                ref={searchRef}
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}

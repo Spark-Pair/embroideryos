@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LayoutGrid, Users, FileText, DollarSign, CreditCard, Users2, Settings, LogOut, Building2, Banknote, Repeat, ChevronDown, History } from 'lucide-react';
+import { LayoutGrid, Users, FileText, DollarSign, CreditCard, Users2, Settings, LogOut, Building2, Banknote, Repeat, ChevronDown, History, Keyboard } from 'lucide-react';
 import SidebarNavItem from './SidebarNavItem';
 import useAuth from '../hooks/useAuth';
 import { motion, AnimatePresence } from "framer-motion";
@@ -167,6 +167,14 @@ const SidebarNav = ({ currentPath, handleLogout }) => {
                         <span className="text-sm text-gray-700">Settings</span>
                       </button>
                       
+                      <button
+                        onClick={() => handleDropdownAction(() => navigate('/keyboard-shortcuts'))}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-200/60 text-left rounded-xl cursor-pointer"
+                      >
+                        <Keyboard className="w-4 h-4 text-gray-600" />
+                        <span className="text-sm text-gray-700">Keyboard Shortcuts</span>
+                      </button>
+
                       <button
                         onClick={() => handleDropdownAction(() => navigate('/sessions'))}
                         className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-200/60 text-left rounded-xl cursor-pointer"

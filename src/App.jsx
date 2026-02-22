@@ -21,6 +21,7 @@ import Users from './pages/Users';
 import Sessions from './pages/Sessions';
 import Settings from './pages/Settings';
 import SalarySlips from './pages/SalarySlips';
+import KeyboardShortcuts from './pages/KeyboardShortcuts';
 
 export default function App() {
   return (
@@ -123,6 +124,12 @@ export default function App() {
             <Route path="/salary-slips" element={
               <ProtectedRoute>
                 <Layout><SalarySlips /></Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/keyboard-shortcuts" element={
+              <ProtectedRoute>
+                <Layout><KeyboardShortcuts /></Layout>
               </ProtectedRoute>
             } />
 

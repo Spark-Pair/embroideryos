@@ -514,6 +514,7 @@ export default function StaffRecordFormModal({
               onChange={handleAttendance}
               options={ATTENDANCE_OPTIONS}
               placeholder="Select type..."
+              disabled={!date}
             />
           </div>
         </div>
