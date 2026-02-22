@@ -119,16 +119,6 @@ function calcTotals(rows, cfg) {
 
 // ─── Production Row ───────────────────────────────────────────────────────────
 
-// Same column next row focus — stopPropagation prevents global hook interference
-const handleEnter = (field) => (e) => {
-  if (e.key !== "Enter") return;
-  e.preventDefault();
-  e.stopPropagation();
-  const inputs = [...document.querySelectorAll(`input[data-field="${field}"]`)];
-  const next = inputs[inputs.indexOf(e.target) + 1];
-  if (next) next.focus();
-};
-
 function ProductionRow({ row, index, cfg, onChange, onRemove, canRemove }) {
   const { total_stitch, on_target_amt, after_target_amt } = calcRow(row, cfg);
 
@@ -146,16 +136,16 @@ function ProductionRow({ row, index, cfg, onChange, onRemove, canRemove }) {
     <tr className="group border-b border-gray-300 hover:bg-emerald-50/30 transition-colors">
       <td className="px-1.5 py-2 text-center text-xs font-medium text-gray-400 w-8">{index + 1}</td>
       <td className="px-1.5 py-2">
-        <input type="number" value={row.d_stitch} onChange={handle("d_stitch")} onKeyDown={handleEnter("d_stitch")} data-field="d_stitch" placeholder="0" className={ci} />
+        <input type="number" value={row.d_stitch} onChange={handle("d_stitch")} data-field="d_stitch" placeholder="0" className={ci} />
       </td>
       <td className="px-1.5 py-2">
-        <input type="number" value={row.applique} onChange={handle("applique")} onKeyDown={handleEnter("applique")} data-field="applique" placeholder="0" className={ci} />
+        <input type="number" value={row.applique} onChange={handle("applique")} data-field="applique" placeholder="0" className={ci} />
       </td>
       <td className="px-1.5 py-2">
-        <input type="number" value={row.rounds}   onChange={handle("rounds")}   onKeyDown={handleEnter("rounds")}   data-field="rounds"   placeholder="0" className={ci} />
+        <input type="number" value={row.rounds}   onChange={handle("rounds")}   data-field="rounds"   placeholder="0" className={ci} />
       </td>
       <td className="px-1.5 py-2">
-        <input type="number" value={row.pcs}      onChange={handle("pcs")}      onKeyDown={handleEnter("pcs")}      data-field="pcs"      placeholder="0" className={ci} />
+        <input type="number" value={row.pcs}      onChange={handle("pcs")}      data-field="pcs"      placeholder="0" className={ci} />
       </td>
       <td className="px-3 py-2 text-right text-sm text-gray-600 tabular-nums">{formatNumbers(total_stitch)}</td>
       <td className="px-3 py-2 text-right text-sm font-medium text-rose-700 tabular-nums">{formatNumbers(on_target_amt, 2)}</td>

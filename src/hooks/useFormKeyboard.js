@@ -6,6 +6,7 @@ export function useFormKeyboard({ onEnterSubmit } = {}) {
       if (e.key !== "Enter") return;
       if (e.target.tagName === "TEXTAREA") return;
       if (e.target.type === "submit") return;
+      if (e.target.closest("[data-select-dropdown='true']")) return;
 
       const FOCUSABLE = [
         'input:not([disabled])',
@@ -22,7 +23,6 @@ export function useFormKeyboard({ onEnterSubmit } = {}) {
         e.preventDefault();
         e.stopPropagation();
         next.focus();
-        if (next.dataset.focusable === "select") next.click();
       } else if (onEnterSubmit) {
         e.preventDefault();
         onEnterSubmit();

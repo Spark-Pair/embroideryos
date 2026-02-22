@@ -8,15 +8,19 @@ const Select = forwardRef(function Select(
 ) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [activeIndex, setActiveIndex] = useState(-1);
   const [dropdownStyle, setDropdownStyle] = useState({});
   const containerRef = useRef(null);
   const triggerRef = useRef(null);
+  const optionRefs = useRef([]);
+  const suppressNextFocusOpenRef = useRef(false);
 
   const filteredOptions = options.filter(opt =>
     opt.label.toLowerCase().includes(search.toLowerCase())
   );
 
   const selectedOption = options.find(opt => opt.value === value);
+  const selectedFilteredIndex = filteredOptions.findIndex(opt => opt.value === value);
 
   const updateDropdownPosition = () => {
     if (triggerRef.current) {
@@ -29,11 +33,24 @@ const Select = forwardRef(function Select(
     }
   };
 
-  const handleToggle = () => {
+  const openDropdown = useCallback(() => {
     if (disabled) return;
-    if (!isOpen) updateDropdownPosition();
-    setIsOpen(prev => !prev);
-  };
+    updateDropdownPosition();
+    setIsOpen(true);
+  }, [disabled]);
+
+  const closeDropdown = useCallback(() => {
+    setIsOpen(false);
+    setSearch("");
+    setActiveIndex(-1);
+  }, []);
+
+  const selectOption = useCallback((opt) => {
+    onChange(opt.value);
+    closeDropdown();
+    suppressNextFocusOpenRef.current = true;
+    triggerRef.current?.focus();
+  }, [onChange, closeDropdown]);
 
   // Expose focus on trigger via ref
   useEffect(() => {
@@ -45,13 +62,12 @@ const Select = forwardRef(function Select(
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (containerRef.current && !containerRef.current.contains(e.target)) {
-        setIsOpen(false);
-        setSearch("");
+        closeDropdown();
       }
     };
     window.addEventListener("click", handleClickOutside);
     return () => window.removeEventListener("click", handleClickOutside);
-  }, []);
+  }, [closeDropdown]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -64,6 +80,35 @@ const Select = forwardRef(function Select(
     };
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    if (selectedFilteredIndex >= 0) setActiveIndex(selectedFilteredIndex);
+    else setActiveIndex(filteredOptions.length ? 0 : -1);
+  }, [isOpen, search, selectedFilteredIndex, filteredOptions.length]);
+
+  useEffect(() => {
+    if (!isOpen || activeIndex < 0) return;
+    optionRefs.current[activeIndex]?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex, isOpen]);
+
+  const moveActive = (delta) => {
+    if (!filteredOptions.length) return;
+    setActiveIndex((prev) => {
+      const next = prev < 0 ? 0 : prev + delta;
+      if (next < 0) return filteredOptions.length - 1;
+      if (next >= filteredOptions.length) return 0;
+      return next;
+    });
+  };
+
+  const handleTriggerFocus = () => {
+    if (suppressNextFocusOpenRef.current) {
+      suppressNextFocusOpenRef.current = false;
+      return;
+    }
+    openDropdown();
+  };
+
   return (
     <div className="relative" ref={containerRef}>
       {label && (
@@ -72,13 +117,37 @@ const Select = forwardRef(function Select(
 
       <div
         ref={triggerRef}
-        onClick={handleToggle}
+        onClick={openDropdown}
+        onFocus={handleTriggerFocus}
         tabIndex={disabled ? -1 : 0}
         data-focusable="select"
         onKeyDown={(e) => {
-          if (e.key === "Enter") {
+          if (e.key === "Escape") {
+            e.preventDefault();
             e.stopPropagation();
-            handleToggle();
+            closeDropdown();
+            return;
+          }
+          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!isOpen) {
+              openDropdown();
+              return;
+            }
+            moveActive(e.key === "ArrowDown" ? 1 : -1);
+            return;
+          }
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!isOpen) {
+              openDropdown();
+              return;
+            }
+            if (activeIndex >= 0 && filteredOptions[activeIndex]) {
+              selectOption(filteredOptions[activeIndex]);
+            }
           }
         }}
         className={`w-full bg-gray-50 border border-gray-400 rounded-xl px-4 py-2 flex justify-between items-center transition
@@ -107,6 +176,7 @@ const Select = forwardRef(function Select(
               width: dropdownStyle.width,
               zIndex: 9999,
             }}
+            data-select-dropdown="true"
             className="bg-white border border-gray-400 rounded-2xl shadow max-h-65 overflow-hidden p-1"
           >
             <div className="relative">
@@ -118,21 +188,42 @@ const Select = forwardRef(function Select(
                 placeholder="Search..."
                 className="w-full pl-8 pr-4 py-2.5 text-sm border border-gray-400 outline-none focus:ring-0 rounded-xl"
                 onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    closeDropdown();
+                    return;
+                  }
+                  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    moveActive(e.key === "ArrowDown" ? 1 : -1);
+                    return;
+                  }
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (activeIndex >= 0 && filteredOptions[activeIndex]) {
+                      selectOption(filteredOptions[activeIndex]);
+                    }
+                  }
+                }}
               />
             </div>
             <hr className="my-1.5 border-gray-300" />
             <div className="max-h-48 grid overflow-auto p-0.5 pt-0 gap-0.5 rounded-b-xl">
               {filteredOptions.length > 0 ? (
-                filteredOptions.map((opt) => (
+                filteredOptions.map((opt, idx) => (
                   <div
                     key={opt.value}
-                    onClick={() => {
-                      onChange(opt.value);
-                      setIsOpen(false);
-                      setSearch("");
-                    }}
+                    ref={(el) => { optionRefs.current[idx] = el; }}
+                    onMouseEnter={() => setActiveIndex(idx)}
+                    onClick={() => selectOption(opt)}
                     className={`flex items-center justify-between px-4 py-2.5 cursor-pointer rounded-xl ${
-                      value === opt.value
+                      idx === activeIndex
+                        ? "bg-teal-50 text-teal-800"
+                        : value === opt.value
                         ? "bg-teal-100/85 text-teal-700 hover:bg-teal-200/85"
                         : "text-gray-700 hover:bg-gray-200/85"
                     }`}
