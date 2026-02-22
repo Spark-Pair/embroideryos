@@ -1,8 +1,11 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, forwardRef } from "react";
 import { ChevronDown, Check, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-export default function Select({ label, options = [], value, onChange, placeholder = "Select..." }) {
+const Select = forwardRef(function Select(
+  { label, options = [], value, onChange, placeholder = "Select...", disabled = false },
+  ref
+) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [dropdownStyle, setDropdownStyle] = useState({});
@@ -19,17 +22,25 @@ export default function Select({ label, options = [], value, onChange, placehold
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
       setDropdownStyle({
-        top: rect.bottom + 8,   // ✅ scrollY hata do
-        left: rect.left,        // ✅ scrollX hata do
+        top: rect.bottom + 8,
+        left: rect.left,
         width: rect.width,
       });
     }
   };
 
   const handleToggle = () => {
+    if (disabled) return;
     if (!isOpen) updateDropdownPosition();
     setIsOpen(prev => !prev);
   };
+
+  // Expose focus on trigger via ref
+  useEffect(() => {
+    if (ref) {
+      ref.current = triggerRef.current;
+    }
+  }, [ref, triggerRef.current]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -42,7 +53,6 @@ export default function Select({ label, options = [], value, onChange, placehold
     return () => window.removeEventListener("click", handleClickOutside);
   }, []);
 
-  // Reposition on scroll/resize
   useEffect(() => {
     if (!isOpen) return;
     const handle = () => updateDropdownPosition();
@@ -63,7 +73,16 @@ export default function Select({ label, options = [], value, onChange, placehold
       <div
         ref={triggerRef}
         onClick={handleToggle}
-        className="w-full bg-gray-50 border border-gray-400 rounded-xl px-4 py-2 flex justify-between items-center cursor-pointer hover:border-gray-500 focus-within:ring-2 focus-within:ring-teal-300 transition"
+        tabIndex={disabled ? -1 : 0}
+        data-focusable="select"
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.stopPropagation();
+            handleToggle();
+          }
+        }}
+        className={`w-full bg-gray-50 border border-gray-400 rounded-xl px-4 py-2 flex justify-between items-center transition
+          ${disabled ? "opacity-55 cursor-not-allowed" : "cursor-pointer hover:border-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-300"}`}
       >
         <span className={selectedOption ? "text-gray-900" : "text-gray-400"}>
           {selectedOption ? selectedOption.label : placeholder}
@@ -86,7 +105,7 @@ export default function Select({ label, options = [], value, onChange, placehold
               top: dropdownStyle.top,
               left: dropdownStyle.left,
               width: dropdownStyle.width,
-              zIndex: 9999,  // ✅ 50 se 9999
+              zIndex: 9999,
             }}
             className="bg-white border border-gray-400 rounded-2xl shadow max-h-65 overflow-hidden p-1"
           >
@@ -131,4 +150,6 @@ export default function Select({ label, options = [], value, onChange, placehold
       </AnimatePresence>
     </div>
   );
-}
+});
+
+export default Select;

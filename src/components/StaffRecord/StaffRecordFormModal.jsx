@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Plus, Trash2, Loader2, Gift, Lock, CheckCircle2, AlertCircle } from "lucide-react";
 import Modal from "../Modal";
 import Button from "../Button";
@@ -10,6 +10,7 @@ import { fetchProductionConfig } from "../../api/productionConfig";
 import { FinalAmountCard } from "../FinalAmountCard";
 import { SectionHeader } from "../SectionHeader";
 import { formatNumbers } from "../../utils";
+import { useFormKeyboard } from "../../hooks/useFormKeyboard";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -60,24 +61,10 @@ const toDateInput = (d) => d ? new Date(d).toISOString().split("T")[0] : "";
 function resolveDate(joiningDate, lastRecordDate) {
   const jd = joiningDate ? new Date(joiningDate) : null;
   const lr = lastRecordDate ? new Date(lastRecordDate) : null;
-
   if (!jd && !lr) return "";
-
   if (jd && !lr) return toDateInput(jd);
-
-  if (lr && !jd) {
-    const n = new Date(lr);
-    n.setDate(n.getDate() + 1);
-    return toDateInput(n);
-  }
-
-  // ✅ changed condition
-  if (lr >= jd) {
-    const n = new Date(lr);
-    n.setDate(n.getDate() + 1);
-    return toDateInput(n);
-  }
-
+  if (lr && !jd) { const n = new Date(lr); n.setDate(n.getDate() + 1); return toDateInput(n); }
+  if (lr >= jd)  { const n = new Date(lr); n.setDate(n.getDate() + 1); return toDateInput(n); }
   return toDateInput(jd);
 }
 
@@ -89,8 +76,7 @@ function calcRow(row, cfg) {
   const rounds    = parseFloat(row.rounds)   || 0;
   const applique  = parseFloat(row.applique) || 0;
   const stitch    = stitchRaw > 0 && stitchRaw <= (cfg.stitch_cap ?? DEFAULT_CONFIG.stitch_cap)
-    ? (cfg.stitch_cap ?? DEFAULT_CONFIG.stitch_cap)
-    : stitchRaw;
+    ? (cfg.stitch_cap ?? DEFAULT_CONFIG.stitch_cap) : stitchRaw;
 
   const stitch_rate      = cfg.stitch_rate      ?? DEFAULT_CONFIG.stitch_rate;
   const applique_rate    = cfg.applique_rate    ?? DEFAULT_CONFIG.applique_rate;
@@ -133,6 +119,16 @@ function calcTotals(rows, cfg) {
 
 // ─── Production Row ───────────────────────────────────────────────────────────
 
+// Same column next row focus — stopPropagation prevents global hook interference
+const handleEnter = (field) => (e) => {
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  e.stopPropagation();
+  const inputs = [...document.querySelectorAll(`input[data-field="${field}"]`)];
+  const next = inputs[inputs.indexOf(e.target) + 1];
+  if (next) next.focus();
+};
+
 function ProductionRow({ row, index, cfg, onChange, onRemove, canRemove }) {
   const { total_stitch, on_target_amt, after_target_amt } = calcRow(row, cfg);
 
@@ -150,16 +146,16 @@ function ProductionRow({ row, index, cfg, onChange, onRemove, canRemove }) {
     <tr className="group border-b border-gray-300 hover:bg-emerald-50/30 transition-colors">
       <td className="px-1.5 py-2 text-center text-xs font-medium text-gray-400 w-8">{index + 1}</td>
       <td className="px-1.5 py-2">
-        <input type="number" value={row.d_stitch} onChange={handle("d_stitch")} placeholder="0" className={ci} />
+        <input type="number" value={row.d_stitch} onChange={handle("d_stitch")} onKeyDown={handleEnter("d_stitch")} data-field="d_stitch" placeholder="0" className={ci} />
       </td>
       <td className="px-1.5 py-2">
-        <input type="number" value={row.applique} onChange={handle("applique")} placeholder="0" className={ci} />
+        <input type="number" value={row.applique} onChange={handle("applique")} onKeyDown={handleEnter("applique")} data-field="applique" placeholder="0" className={ci} />
       </td>
       <td className="px-1.5 py-2">
-        <input type="number" value={row.pcs} onChange={handle("pcs")} placeholder="0" className={ci} />
+        <input type="number" value={row.rounds}   onChange={handle("rounds")}   onKeyDown={handleEnter("rounds")}   data-field="rounds"   placeholder="0" className={ci} />
       </td>
       <td className="px-1.5 py-2">
-        <input type="number" value={row.rounds} onChange={handle("rounds")} placeholder="0" className={ci} />
+        <input type="number" value={row.pcs}      onChange={handle("pcs")}      onKeyDown={handleEnter("pcs")}      data-field="pcs"      placeholder="0" className={ci} />
       </td>
       <td className="px-3 py-2 text-right text-sm text-gray-600 tabular-nums">{formatNumbers(total_stitch)}</td>
       <td className="px-3 py-2 text-right text-sm font-medium text-rose-700 tabular-nums">{formatNumbers(on_target_amt, 2)}</td>
@@ -181,8 +177,8 @@ function TotalsRow({ totals }) {
   return (
     <tr className="border-t border-gray-300 bg-gray-50/80 font-semibold text-sm">
       <td className="px-3.5 py-2.5 text-xs text-gray-500 uppercase tracking-wider" colSpan={3}>Totals</td>
-      <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{formatNumbers(totals.pcs)}</td>
       <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{formatNumbers(totals.rounds)}</td>
+      <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{formatNumbers(totals.pcs)}</td>
       <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{formatNumbers(totals.total_stitch)}</td>
       <td className="px-3 py-2.5 text-right tabular-nums text-rose-700">{formatNumbers(totals.on_target_amt, 2)}</td>
       <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700">{formatNumbers(totals.after_target_amt, 2)}</td>
@@ -203,6 +199,10 @@ export default function StaffRecordFormModal({
 }) {
   const isEdit = !!initialData;
 
+  // ── Refs for auto-focus flow ──
+  const staffRef      = useRef(null);
+  const attendanceRef = useRef(null);
+
   // ── State ──
   const [cfg,           setCfg]           = useState(DEFAULT_CONFIG);
   const [cfgLoading,    setCfgLoading]    = useState(false);
@@ -218,6 +218,9 @@ export default function StaffRecordFormModal({
   const [staffLoading,  setStaffLoading]  = useState(false);
   const [dateLoading,   setDateLoading]   = useState(false);
   const [isAutoSelectStaff, setIsAutoSelectStaff] = useState(false);
+
+  // ── Global keyboard nav + Enter to submit ──
+  useFormKeyboard({ onEnterSubmit: handleSubmit });
 
   // ── Fetch config when date changes ──
   useEffect(() => {
@@ -264,6 +267,9 @@ export default function StaffRecordFormModal({
         if (lastUsed?.staffId && !isEdit) {
           handleStaffSelect(lastUsed.staffId);
           setIsAutoSelectStaff(true);
+        } else if (!isEdit) {
+          // No last used staff — focus staff select
+          setTimeout(() => staffRef.current?.focus(), 150);
         }
 
         if (lastUsed?.attendanceHistory?.last && !isEdit && lastUsed?.attendanceHistory?.last !== "Sunday") {
@@ -316,6 +322,10 @@ export default function StaffRecordFormModal({
     const staff = staffList.find((s) => s._id === staffId);
     setSelectedStaff(staff);
     setDateLoading(true);
+
+    // Focus attendance after staff selected
+    setTimeout(() => attendanceRef.current?.focus(), 50);
+
     try {
       const res = await fetchStaffLastRecord(staffId);
       setDate(resolveDate(staff?.joining_date, res.data?.last_record_date ?? null));
@@ -332,10 +342,18 @@ export default function StaffRecordFormModal({
     setLastUsed((prev) => ({
       ...prev,
       attendanceHistory: {
-        last:     val,
+        last:       val,
         secondLast: prev?.attendanceHistory?.last ?? null,
       },
     }));
+
+    // Focus first production input if attendance requires it
+    if (val && !NO_PRODUCTION.has(val)) {
+      setTimeout(() => {
+        const first = document.querySelector('input[data-field="d_stitch"]');
+        if (first) first.focus();
+      }, 50);
+    }
   };
 
   // ── Derived ──
@@ -392,7 +410,7 @@ export default function StaffRecordFormModal({
     : staffList.find((s) => s._id === selectedStaff)?.name;
 
   // ── Submit ──
-  const handleSubmit = async () => {
+  async function handleSubmit() {
     if (!selectedStaff || !date || !attendance) return;
     setSubmitting(true);
     try {
@@ -409,16 +427,16 @@ export default function StaffRecordFormModal({
               rounds:   parseFloat(r.rounds)   || 0,
             }))
           : [],
-        bonus_qty:  bonusQty  ? parseFloat(bonusQty)    : 0,
-        bonus_rate: bonusRate ? parseFloat(bonusRate) : null,
-        fix_amount: fixAmount ? parseFloat(fixAmount) : null,
+        bonus_qty:  bonusQty  ? parseFloat(bonusQty)  : 0,
+        bonus_rate: bonusRate ? parseFloat(bonusRate)  : null,
+        fix_amount: fixAmount ? parseFloat(fixAmount)  : null,
       };
       await onAction(isEdit ? "edit" : "add", isEdit ? { id: initialData._id, ...payload } : payload);
       onClose();
     } finally {
       setSubmitting(false);
     }
-  };
+  }
 
   // ─────────────────────────────────────────────────────────────────────────────
 
@@ -478,6 +496,7 @@ export default function StaffRecordFormModal({
               <Input icon={<Loader2 className="h-4 w-4 animate-spin" />} label="Staff" placeholder="Loading..." readOnly />
             ) : (
               <Select
+                ref={staffRef}
                 label="Staff"
                 value={typeof selectedStaff === "object" ? selectedStaff?._id ?? "" : selectedStaff ?? ""}
                 onChange={handleStaffSelect}
@@ -499,6 +518,7 @@ export default function StaffRecordFormModal({
 
             {/* Attendance */}
             <Select
+              ref={attendanceRef}
               label="Attendance"
               value={attendance}
               onChange={handleAttendance}
@@ -530,8 +550,8 @@ export default function StaffRecordFormModal({
                     <th className="px-1.5 py-2.5 text-center w-8">#</th>
                     <th className="px-1.5 py-2.5 text-left">D. Stitch</th>
                     <th className="px-1.5 py-2.5 text-left">Applique</th>
-                    <th className="px-1.5 py-2.5 text-left">PCs</th>
                     <th className="px-1.5 py-2.5 text-left">Rounds</th>
+                    <th className="px-1.5 py-2.5 text-left">PCs</th>
                     <th className="px-3 py-2.5 text-right text-nowrap">Total Stitch</th>
                     <th className="px-3 py-2.5 text-right text-nowrap text-rose-700">({cfg.on_target_pct}%)</th>
                     <th className="px-3 py-2.5 text-right text-nowrap text-emerald-700">({cfg.after_target_pct}%)</th>
@@ -557,7 +577,7 @@ export default function StaffRecordFormModal({
 
             {/* Target status bar */}
             {totals.on_target_amt > 0 && (
-              <div className={`flex items-center gap-3 rounded-xl px-4 py-2.5 text-xs
+              <div className={`flex items-center mt-2 gap-3 rounded-xl px-4 py-2.5 text-xs
                 ${targetMet ? "bg-emerald-50 border border-emerald-200" : "bg-amber-50 border border-amber-200"}`}>
                 {targetMet
                   ? <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />

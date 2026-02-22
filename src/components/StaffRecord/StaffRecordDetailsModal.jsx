@@ -47,8 +47,8 @@ function ProductionRowsTable({ rows, snapshot }) {
             <th className="px-3 py-2.5 text-center w-8">#</th>
             <th className="px-3 py-2.5 text-right">D. Stitch</th>
             <th className="px-3 py-2.5 text-right">Applique</th>
-            <th className="px-3 py-2.5 text-right">PCs</th>
             <th className="px-3 py-2.5 text-right">Rounds</th>
+            <th className="px-3 py-2.5 text-right">PCs</th>
             <th className="px-3 py-2.5 text-right">Total Stitch</th>
             <th className="px-3 py-2.5 text-right text-rose-500">
               ({snapshot?.on_target_pct ?? "—"}%)
@@ -64,8 +64,8 @@ function ProductionRowsTable({ rows, snapshot }) {
               <td className="px-3 py-2.5 text-center text-xs text-gray-400 font-medium">{i + 1}</td>
               <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{formatNumbers(row.d_stitch)}</td>
               <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{formatNumbers(row.applique)}</td>
-              <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-gray-700">{formatNumbers(row.pcs)}</td>
               <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{formatNumbers(row.rounds)}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-gray-700">{formatNumbers(row.pcs)}</td>
               <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{formatNumbers(row.total_stitch)}</td>
               <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-rose-600">{formatNumbers(row.on_target_amt, 2)}</td>
               <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-emerald-600">{formatNumbers(row.after_target_amt, 2)}</td>
@@ -78,10 +78,10 @@ function ProductionRowsTable({ rows, snapshot }) {
             <tr className="bg-gray-50 border-t border-gray-300 text-sm font-bold text-gray-500">
               <td className="px-3.5 py-2.5 text-left text-gray-400" colSpan={3}>Totals</td>
               <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">
-                {formatNumbers(rows.reduce((s, r) => s + (r.pcs || 0), 0))}
+                {formatNumbers(rows.reduce((s, r) => s + (r.rounds || 0), 0))}
               </td>
               <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">
-                {formatNumbers(rows.reduce((s, r) => s + (r.rounds || 0), 0))}
+                {formatNumbers(rows.reduce((s, r) => s + (r.pcs || 0), 0))}
               </td>
               <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">
                 {formatNumbers(rows.reduce((s, r) => s + (r.total_stitch || 0), 0))}
