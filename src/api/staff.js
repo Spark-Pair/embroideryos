@@ -15,6 +15,11 @@ export const fetchStaffs = async (params = {}) => {
   return res.data;
 };
 
+export const fetchStaffNames = async (data) => {
+  const res = await apiClient.get(`${STAFF_URL}/names`, data);
+  return res.data;
+};
+
 export const fetchStaffStats = async () => {
   const res = await apiClient.get(`${STAFF_URL}/stats`);
   return res.data;

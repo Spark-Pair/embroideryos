@@ -52,7 +52,7 @@ export default function CustomerFormModal({
       }
     >
       {
-        <form className="grid grid-cols-1 gap-3">
+        <form className="grid grid-cols-1 gap-3 p-0.5">
           <Input
             label="Customer Name"
             value={formData.name}

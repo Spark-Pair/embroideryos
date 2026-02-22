@@ -83,7 +83,7 @@ export default function UserPasswordResetModal({
         </div>
       }
     >
-      <div className="space-y-4">
+      <div className="space-y-4 p-0.5">
         <div>
           <Input
             label="New Password"

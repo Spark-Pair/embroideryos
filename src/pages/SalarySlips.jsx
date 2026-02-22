@@ -29,155 +29,7 @@ const buildMonthOptions = () => {
 
 const MONTH_OPTIONS = buildMonthOptions();
 
-// ── Print via window.open — pure inline-styled HTML, no Tailwind needed ───────
-
-function printSlips(slips) {
-  // Build one slip's HTML block
-  const slipHTML = (emp) => {
-    const amount   = Number(emp.amount)   || 0;
-    const arrears  = Number(emp.arrears)  || 0;
-    const advance  = Number(emp.advance)  || 0;
-    const bonusQty = Number(emp.bonusQty) || 0;
-    const bonusAmt = Number(emp.bonusAmt) || 0;
-    const total    = Number(emp.total)    || 0;
-
-    const arrearsColor = arrears < 0 ? "#dc2626" : "#16a34a";
-
-    const row = (label, value, valueStyle = "") => `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0;">
-        <span style="color:#1f2937;font-size:9px;">${label}</span>
-        <span style="font-weight:600;font-size:9px;${valueStyle}">${value}</span>
-      </div>
-      <div style="border-top:1px solid #6b7280;margin:2px 0;"></div>`;
-
-    return `
-      <div style="
-        border: 1px solid #6b7280;
-        border-radius: 14px;
-        overflow: hidden;
-        page-break-inside: avoid;
-        break-inside: avoid;
-        padding: 5px;
-        background: #fff;
-        box-sizing: border-box;
-      ">
-        <!-- Header -->
-        <div style="
-          background: rgba(15,118,110,0.15);
-          padding: 7px 12px;
-          border-radius: 10px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        ">
-          <span style="font-weight:700;font-size:11px;color:#111827;text-transform:capitalize;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:65%;">
-            ${emp.name || "EMPLOYEE NAME"}
-          </span>
-          <span style="font-weight:600;font-size:9px;color:#0f766e;white-space:nowrap;">
-            ${emp.month}
-          </span>
-        </div>
-
-        <!-- Body rows -->
-        <div style="padding: 6px 6px 2px 6px;">
-          ${row("Arrears:", arrears.toLocaleString(), `color:${arrearsColor};`)}
-          ${row("Amount:", amount.toLocaleString())}
-          ${row(`Bonus (${bonusQty} units):`, bonusAmt.toLocaleString())}
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0;">
-            <span style="color:#1f2937;font-size:9px;">Advance:</span>
-            <span style="font-weight:600;font-size:9px;color:#dc2626;">-${advance.toLocaleString()}</span>
-          </div>
-        </div>
-
-        <!-- Net Amount -->
-        <div style="
-          background: rgba(15,118,110,0.15);
-          padding: 6px 10px;
-          border-radius: 8px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-top: 4px;
-        ">
-          <span style="font-weight:700;font-size:9px;color:#111827;">Net Amount:</span>
-          <span style="font-weight:700;font-size:12px;color:#0f766e;">${total.toLocaleString()}</span>
-        </div>
-
-        <!-- Payment line -->
-        <div style="
-          margin-top: 5px;
-          border: 1px solid #6b7280;
-          border-radius: 8px;
-          padding: 5px 8px;
-          display: flex;
-          align-items: center;
-          gap: 6px;
-        ">
-          <span style="font-size:8px;font-weight:500;color:#374151;white-space:nowrap;">Payment:</span>
-          <div style="flex:1;border-bottom:1px dashed #6b7280;height:10px;"></div>
-        </div>
-      </div>`;
-  };
-
-  const allSlipsHTML = slips.map(slipHTML).join("");
-
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Salary Slips</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-
-    @page {
-      size: A4 portrait;
-      margin: 8mm 8mm 8mm 8mm;
-    }
-
-    body {
-      font-family: Arial, sans-serif;
-      background: #fff;
-      width: 100%;
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-      width: 100%;
-    }
-
-    /* Each slip must not break across pages */
-    .grid > div {
-      page-break-inside: avoid;
-      break-inside: avoid;
-    }
-
-    @media print {
-      body { margin: 0; padding: 0; }
-      .grid { gap: 6px; }
-    }
-  </style>
-</head>
-<body>
-  <div class="grid">
-    ${allSlipsHTML}
-  </div>
-  <script>
-    window.onload = function() {
-      setTimeout(function() { window.print(); }, 300);
-    };
-  </script>
-</body>
-</html>`;
-
-  const w = window.open("", "_blank", "width=900,height=700");
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-}
-
-// ── Screen Slip Card (Tailwind — for preview on page) ─────────────────────────
+// ── Screen Slip Card — ORIGINAL STYLING, UNTOUCHED ───────────────────────────
 
 function SlipCard({ emp }) {
   const amount   = Number(emp.amount)   || 0;
@@ -308,6 +160,68 @@ export default function SalarySlipsPage() {
     }
   };
 
+  // ── Print: inject @media print to isolate only the slips grid ───────────────
+  const handlePrint = () => {
+    const styleId = "__slip_print_style__";
+    document.getElementById(styleId)?.remove();
+
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.innerHTML = `
+      @media print {
+        @page { size: A4 portrait; margin: 8mm; }
+
+        /* Hide everything */
+        body * { visibility: hidden !important; }
+
+        /* Show slips root + all its descendants */
+        #salary-slips-print-root,
+        #salary-slips-print-root * { visibility: visible !important; }
+
+        /* Take over the full page */
+        #salary-slips-print-root {
+          position: fixed !important;
+          top: 0 !important;
+          left: 0 !important;
+          width: 100vw !important;
+          height: auto !important;
+          padding: 8mm !important;
+          box-sizing: border-box !important;
+          background: white !important;
+        }
+
+        /* Force the inner grid to render correctly */
+        #salary-slips-print-root > div {
+          display: grid !important;
+          grid-template-columns: repeat(2, 1fr) !important;
+          gap: 12px !important;
+          width: 100% !important;
+        }
+
+        /* Each slip card — block + no page break inside */
+        #salary-slips-print-root > div > div {
+          display: block !important;
+          break-inside: avoid !important;
+          page-break-inside: avoid !important;
+          box-sizing: border-box !important;
+          width: 100% !important;
+        }
+
+        /* Fix flex rows inside each card */
+        #salary-slips-print-root .flex {
+          display: flex !important;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+
+    window.print();
+
+    window.addEventListener("afterprint", () => {
+      document.getElementById(styleId)?.remove();
+    }, { once: true });
+  };
+
   const grandTotal = slips.reduce((s, sl) => s + sl.total, 0);
 
   return (
@@ -391,7 +305,7 @@ export default function SalarySlipsPage() {
 
         {generated && slips.length > 0 && (
           <button
-            onClick={() => printSlips(slips)}
+            onClick={handlePrint}
             className="flex items-center gap-2 px-6 py-2.5 bg-white border border-[#127475] text-[#127475] rounded-xl text-sm font-semibold hover:bg-teal-50 transition-colors"
           >
             <Printer className="w-4 h-4" />
@@ -421,13 +335,19 @@ export default function SalarySlipsPage() {
             Salary Slip Preview — {slips.length} slips
           </h1>
 
-          <div className="grid grid-cols-3 gap-4">
-            {slips.map((slip) => (
-              <SlipCard key={slip.id} emp={slip} />
-            ))}
+          {/*
+            id="salary-slips-print-root" is what the print CSS targets.
+            Same SlipCards, same Tailwind classes — screen and print are identical.
+          */}
+          <div id="salary-slips-print-root">
+            <div className="grid grid-cols-3 gap-4">
+              {slips.map((slip) => (
+                <SlipCard key={slip.id} emp={slip} />
+              ))}
+            </div>
           </div>
 
-          {/* Grand Total */}
+          {/* Grand Total — screen only, print CSS hides it automatically */}
           <div className="mt-5 p-4 sm:p-5 bg-white border border-gray-300 rounded-3xl shadow-sm">
             <div className="flex items-center justify-between bg-white border border-gray-400 px-4 py-2 rounded-xl">
               <label className="text-gray-700 tracking-wide">Grand Total Payable Amount</label>

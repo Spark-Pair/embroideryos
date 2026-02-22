@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight, SlidersHorizontal, Download } from "lucide-react";
 import Button from "../Button";
 
-export default function TableToolbar({ currentPage, totalPages, onPageChange, onFilter, onExport }) {
+export default function TableToolbar({ currentPage, totalPages, onPageChange, onFilter, onExport, onReport }) {
   return (
     <div className="p-5 border-b border-gray-300 flex flex-wrap justify-between items-center gap-4">
       <div className="flex items-center bg-gray-100 rounded-xl p-1 border border-gray-300">
@@ -39,9 +39,12 @@ export default function TableToolbar({ currentPage, totalPages, onPageChange, on
         <Button icon={SlidersHorizontal} outline={true} variant="secondary" size="sm" onClick={onFilter}>
           Filters
         </Button>
-        <Button icon={Download} outline={true} variant="secondary" size="sm" onClick={onExport}>
+        {onExport && (<Button icon={Download} outline={true} variant="secondary" size="sm" onClick={onExport}>
           Export
-        </Button>
+        </Button>)}
+        {onReport && (<Button icon={Download} outline={true} variant="secondary" size="sm" onClick={onReport}>
+          Generate Report
+        </Button>)}
       </div>
     </div>
   );

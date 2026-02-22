@@ -57,7 +57,7 @@ export default function BusinessFormModal({
       }
     >
       {
-        <form className="grid grid-cols-2 gap-x-5 gap-y-3">
+        <form className="grid grid-cols-2 gap-x-5 gap-y-3 p-0.5">
           <Input
             label="Business Name"
             value={formData.name}

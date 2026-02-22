@@ -249,7 +249,7 @@ export default function StaffRecords() {
             totalPages={pagination.totalPages}
             onPageChange={handlePageChange}
             onFilter={() => setIsFilterOpen(true)}
-            onExport={() => console.log("Export")}
+            onReport={() => console.log("Report")}
           />
 
           <div ref={tableScrollRef} className="flex-1 overflow-auto">
@@ -271,7 +271,7 @@ export default function StaffRecords() {
               </thead>
 
               {loading ? (
-                <TableSkeleton rows={30} />
+                <TableSkeleton rows={30} columns={8} />
               ) : (
                 <tbody className="divide-y divide-gray-200">
                   {staffRecords.length === 0 ? (

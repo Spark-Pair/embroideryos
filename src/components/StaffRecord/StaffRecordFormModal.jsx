@@ -4,9 +4,12 @@ import Modal from "../Modal";
 import Button from "../Button";
 import Input from "../Input";
 import Select from "../Select";
-import { fetchStaffs } from "../../api/staff";
+import { fetchStaffNames } from "../../api/staff";
 import { fetchStaffLastRecord } from "../../api/staffRecord";
 import { fetchProductionConfig } from "../../api/productionConfig";
+import { FinalAmountCard } from "../FinalAmountCard";
+import { SectionHeader } from "../SectionHeader";
+import { formatNumbers } from "../../utils";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -128,29 +131,6 @@ function calcTotals(rows, cfg) {
   );
 }
 
-const fmt = (n, d = 0) =>
-  n == null || isNaN(n) ? "—"
-  : Number(n).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
-
-// ─── Section Header ───────────────────────────────────────────────────────────
-
-function SectionHeader({ step, title, subtitle, right }) {
-  return (
-    <div className="flex items-start justify-between border-t border-gray-300 pt-3">
-      <div className="flex items-center gap-3">
-        <div className="flex items-center justify-center w-7 h-7 rounded-full bg-[#127475] text-white text-xs font-bold shrink-0">
-          {step}
-        </div>
-        <div>
-          <p className="text-sm font-semibold text-gray-800">{title}</p>
-          {subtitle && <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>}
-        </div>
-      </div>
-      {right}
-    </div>
-  );
-}
-
 // ─── Production Row ───────────────────────────────────────────────────────────
 
 function ProductionRow({ row, index, cfg, onChange, onRemove, canRemove }) {
@@ -181,9 +161,9 @@ function ProductionRow({ row, index, cfg, onChange, onRemove, canRemove }) {
       <td className="px-1.5 py-2">
         <input type="number" value={row.rounds} onChange={handle("rounds")} placeholder="0" className={ci} />
       </td>
-      <td className="px-3 py-2 text-right text-sm text-gray-600 tabular-nums">{fmt(total_stitch)}</td>
-      <td className="px-3 py-2 text-right text-sm font-medium text-rose-700 tabular-nums">{fmt(on_target_amt, 2)}</td>
-      <td className="px-3 py-2 text-right text-sm font-medium text-emerald-700 tabular-nums">{fmt(after_target_amt, 2)}</td>
+      <td className="px-3 py-2 text-right text-sm text-gray-600 tabular-nums">{formatNumbers(total_stitch)}</td>
+      <td className="px-3 py-2 text-right text-sm font-medium text-rose-700 tabular-nums">{formatNumbers(on_target_amt, 2)}</td>
+      <td className="px-3 py-2 text-right text-sm font-medium text-emerald-700 tabular-nums">{formatNumbers(after_target_amt, 2)}</td>
       <td className="px-3 py-2 text-center w-8">
         <button
           type="button"
@@ -201,46 +181,13 @@ function TotalsRow({ totals }) {
   return (
     <tr className="border-t border-gray-300 bg-gray-50/80 font-semibold text-sm">
       <td className="px-3.5 py-2.5 text-xs text-gray-500 uppercase tracking-wider" colSpan={3}>Totals</td>
-      <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{fmt(totals.pcs)}</td>
-      <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{fmt(totals.rounds)}</td>
-      <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{fmt(totals.total_stitch)}</td>
-      <td className="px-3 py-2.5 text-right tabular-nums text-rose-700">{fmt(totals.on_target_amt, 2)}</td>
-      <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700">{fmt(totals.after_target_amt, 2)}</td>
+      <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{formatNumbers(totals.pcs)}</td>
+      <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{formatNumbers(totals.rounds)}</td>
+      <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{formatNumbers(totals.total_stitch)}</td>
+      <td className="px-3 py-2.5 text-right tabular-nums text-rose-700">{formatNumbers(totals.on_target_amt, 2)}</td>
+      <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700">{formatNumbers(totals.after_target_amt, 2)}</td>
       <td />
     </tr>
-  );
-}
-
-// ─── Final Amount Card ────────────────────────────────────────────────────────
-
-function FinalAmountCard({ amount, isFixed, breakdown }) {
-  if (!amount && amount !== 0) return null;
-  return (
-    <div className={`rounded-2xl px-3 py-2.5 border ${isFixed ? "bg-amber-50 border-amber-200" : "bg-gray-50 border-gray-200"}`}>
-      <div className="flex items-center justify-between px-1.5">
-        <div className="flex items-center gap-2">
-          {isFixed
-            ? <Lock className="h-4 w-4 text-amber-600" />
-            : <CheckCircle2 className="h-4 w-4 text-gray-600" />
-          }
-          <span className={`text-sm font-semibold ${isFixed ? "text-amber-700" : "text-gray-700"}`}>
-            {isFixed ? "Final Amount (Fixed)" : "Final Amount"}
-          </span>
-        </div>
-        <span className={`text-2xl font-bold tabular-nums ${isFixed ? "text-amber-700" : "text-gray-700"}`}>
-          {fmt(amount, 2)}
-        </span>
-      </div>
-      {breakdown && (
-        <div className={`mt-2 p-2 pb-1 border-t ${isFixed ? "border-amber-200" : "border-gray-200"} flex flex-wrap gap-x-4 gap-y-1`}>
-          {breakdown.map((item, i) => (
-            <span key={i} className={`text-xs ${isFixed ? "text-amber-600" : "text-gray-600"}`}>
-              {item.label}: <span className="font-semibold">{fmt(item.value, 2)}</span>
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -307,7 +254,7 @@ export default function StaffRecordFormModal({
     const load = async () => {
       setStaffLoading(true);
       try {
-        const r = await fetchStaffs({ limit: 200, status: "active" });
+        const r = await fetchStaffNames({ status: "active" });
         setStaffList(r.data || []);
       } catch {
         setStaffList([]);
@@ -371,8 +318,6 @@ export default function StaffRecordFormModal({
     setDateLoading(true);
     try {
       const res = await fetchStaffLastRecord(staffId);
-      console.log(res);
-      
       setDate(resolveDate(staff?.joining_date, res.data?.last_record_date ?? null));
       setLastUsed((prev) => ({ ...prev, staffId }));
     } catch {
@@ -491,12 +436,12 @@ export default function StaffRecordFormModal({
             {selectedStaff && !attendance && "← Select attendance type"}
             {selectedStaff && attendance && !isFixed && bonusAmount > 0 && (
               <span className="text-emerald-600 font-medium">
-                Base {fmt(previewBase, 2)} + Bonus {fmt(bonusAmount, 2)} = {fmt(previewFinal, 2)}
+                Base {formatNumbers(previewBase, 2)} + Bonus {formatNumbers(bonusAmount, 2)} = {formatNumbers(previewFinal, 2)}
               </span>
             )}
             {selectedStaff && attendance && isFixed && (
               <span className="text-amber-600 font-medium flex items-center gap-1">
-                <Lock className="h-3 w-3" /> Fixed at {fmt(previewFinal, 2)}
+                <Lock className="h-3 w-3" /> Fixed at {formatNumbers(previewFinal, 2)}
               </span>
             )}
           </div>
@@ -516,10 +461,10 @@ export default function StaffRecordFormModal({
         </div>
       }
     >
-      <div className="h-full overflow-scroll px-0.5 grid gap-3">
+      <div className="h-full overflow-scroll p-0.5 grid gap-3">
 
         {/* ── Step 1: Staff + Date + Attendance ── */}
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col">
           <SectionHeader
             step="1"
             title="Basic Info"
@@ -565,7 +510,7 @@ export default function StaffRecordFormModal({
 
         {/* ── Step 2: Production Table ── */}
         {showProduction && (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col">
             <SectionHeader
               step="2"
               title="Production Entry"
@@ -622,16 +567,16 @@ export default function StaffRecordFormModal({
                   <span className="text-emerald-700">
                     <span className="font-semibold">Target Met</span>
                     {" "}— Effective amount (After Target):{" "}
-                    <span className="font-bold">{fmt(totals.after_target_amt, 2)}</span>
+                    <span className="font-bold">{formatNumbers(totals.after_target_amt, 2)}</span>
                   </span>
                 ) : (
                   <span className="text-amber-700">
                     <span className="font-semibold">
-                      {fmt((cfg.target_amount ?? DEFAULT_CONFIG.target_amount) - totals.on_target_amt, 2)} short
+                      {formatNumbers((cfg.target_amount ?? DEFAULT_CONFIG.target_amount) - totals.on_target_amt, 2)} short
                     </span>
                     {" "}of target · Current:{" "}
-                    <span className="font-semibold">{fmt(totals.on_target_amt, 2)}</span>
-                    {" "}· Target: {fmt(cfg.target_amount ?? DEFAULT_CONFIG.target_amount, 2)}
+                    <span className="font-semibold">{formatNumbers(totals.on_target_amt, 2)}</span>
+                    {" "}· Target: {formatNumbers(cfg.target_amount ?? DEFAULT_CONFIG.target_amount, 2)}
                   </span>
                 )}
               </div>
@@ -641,7 +586,7 @@ export default function StaffRecordFormModal({
 
         {/* ── Step 3: Bonus ── */}
         {showBonus && (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col">
             <SectionHeader
               step={showProduction ? "3" : "2"}
               title="Bonus"
@@ -661,7 +606,7 @@ export default function StaffRecordFormModal({
               />
               <div className="grow">
                 <Input
-                  label={`Per Bonus Rate${cfg.bonus_rate ? ` (default: ${fmt(cfg.bonus_rate, 2)})` : ""}`}
+                  label={`Per Bonus Rate${cfg.bonus_rate ? ` (default: ${formatNumbers(cfg.bonus_rate, 2)})` : ""}`}
                   type="number"
                   value={bonusRate}
                   onChange={(e) => setBonusRate(e.target.value)}
@@ -674,7 +619,7 @@ export default function StaffRecordFormModal({
                 icon={<Gift className="h-4 w-4 text-gray-400" />}
                 iconPosition="right"
                 type="text"
-                value={fmt(bonusAmount, 2)}
+                value={formatNumbers(bonusAmount, 2)}
                 disabled={true}
               />
             </div>
@@ -683,7 +628,7 @@ export default function StaffRecordFormModal({
 
         {/* ── Step 4: Fix Amount ── */}
         {attendance && !NO_BONUS.has(attendance) && (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col">
             <SectionHeader
               step={showProduction ? "4" : showBonus ? "3" : "2"}
               title="Fix Amount"
