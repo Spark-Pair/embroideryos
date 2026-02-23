@@ -72,6 +72,13 @@ function openPrintWindow({ staffName, monthLabel, summary, reportRows, totalDedu
 
   @page {
     size: A4 portrait;
+    margin: 0.5in, 0.5in, 0.5in, 0.6in;
+  }
+
+  @media print {
+    html {
+      zoom: 85%;
+    }
   }
 
   body {
@@ -87,7 +94,7 @@ function openPrintWindow({ staffName, monthLabel, summary, reportRows, totalDedu
   .info-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    border: 0.75pt solid #d1d5db;
+    border: 0.75pt solid #646769;
     border-radius: 8pt;
     overflow: hidden;
     margin-bottom: 12pt;
@@ -95,21 +102,21 @@ function openPrintWindow({ staffName, monthLabel, summary, reportRows, totalDedu
   }
   .ic {
     padding: 6pt 10pt;
-    border-right: 0.75pt solid #e5e7eb;
-    border-bottom: 0.75pt solid #e5e7eb;
+    border-right: 0.75pt solid #646769;
+    border-bottom: 0.75pt solid #646769;
     display: flex;
     align-items: center;
     gap: 4pt;
   }
   .ic:nth-child(4n)        { border-right: none; }
   .ic:nth-last-child(-n+4) { border-bottom: none; }
-  .ic-lbl { font-size: 7pt; text-transform: uppercase; letter-spacing: 0.06em; color: #6b7280; white-space: nowrap; }
+  .ic-lbl { font-size: 7pt; text-transform: uppercase; letter-spacing: 0.06em; color: #303233; white-space: nowrap; }
   .ic-val { font-weight: 600; color: #111; font-variant-numeric: tabular-nums; }
   .ic-val.red { color: #b91c1c; }
 
   /* ── Table ── */
   .tbl-wrap {
-    border: 0.75pt solid #d1d5db;
+    border: 0.75pt solid #646769;
     border-radius: 8pt;
     overflow: hidden;
   }
@@ -124,7 +131,7 @@ function openPrintWindow({ staffName, monthLabel, summary, reportRows, totalDedu
 
   th {
     background: #1e293b;
-    color: #cbd5e1;
+    color: #dee6ef;
     font-size: 7pt;
     font-weight: 600;
     text-transform: uppercase;
@@ -143,21 +150,21 @@ function openPrintWindow({ staffName, monthLabel, summary, reportRows, totalDedu
   }
   td.r    { text-align: right; }
   td.bold { font-weight: 600; }
-  td.td-num  { color: #6b7280; font-size: 7pt; }
+  td.td-num  { font-size: 7.5pt; }
   td.td-date { white-space: nowrap; font-weight: 500; }
 
   /* Row types — matches screen exactly */
   tr.row-prod { background: #fff;    color: #1f2937; }
-  tr.row-day  { background: #e5e7eb; color: #000; }   /* bg-gray-200/85 */
+  tr.row-day  { background: #bcbcbc; color: #000; }   /* bg-gray-200/85 */
 
   /* ── Print footer ── */
   .print-footer {
     display: flex;
     justify-content: space-between;
     font-size: 7pt;
-    color: #9ca3af;
+    color: #646769;
     margin-top: 10pt;
-    border-top: 0.5pt solid #e5e7eb;
+    border-top: 0.5pt solid #646769;
     padding-top: 5pt;
   }
 </style>
