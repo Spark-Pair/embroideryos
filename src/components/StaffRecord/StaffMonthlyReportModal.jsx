@@ -72,12 +72,12 @@ function openPrintWindow({ staffName, monthLabel, summary, reportRows, totalDedu
 
   @page {
     size: A4 portrait;
-    margin: 0.5in, 0.5in, 0.5in, 0.6in;
+    margin: 0.4in 0.4in 0.4in 0.5in;
   }
-
+    
   @media print {
     html {
-      zoom: 85%;
+      zoom: 95%;
     }
   }
 
@@ -88,13 +88,14 @@ function openPrintWindow({ staffName, monthLabel, summary, reportRows, totalDedu
     background: #fff;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+    padding: 1pt;
   }
 
   /* ── Info grid — matches screen grid 4-col ── */
   .info-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    border: 0.75pt solid #646769;
+    border: 0.75pt solid #111;
     border-radius: 8pt;
     overflow: hidden;
     margin-bottom: 12pt;
@@ -102,22 +103,22 @@ function openPrintWindow({ staffName, monthLabel, summary, reportRows, totalDedu
   }
   .ic {
     padding: 6pt 10pt;
-    border-right: 0.75pt solid #646769;
-    border-bottom: 0.75pt solid #646769;
+    border-right: 0.75pt solid #111;
+    border-bottom: 0.75pt solid #111;
     display: flex;
     align-items: center;
     gap: 4pt;
   }
   .ic:nth-child(4n)        { border-right: none; }
   .ic:nth-last-child(-n+4) { border-bottom: none; }
-  .ic-lbl { font-size: 7pt; text-transform: uppercase; letter-spacing: 0.06em; color: #303233; white-space: nowrap; }
+  .ic-lbl { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.06em; color: #111; white-space: nowrap; }
   .ic-val { font-weight: 600; color: #111; font-variant-numeric: tabular-nums; }
-  .ic-val.red { color: #b91c1c; }
+  .ic-val.red { color: #111; }
 
   /* ── Table ── */
   .tbl-wrap {
-    border: 0.75pt solid #646769;
-    border-radius: 8pt;
+    border: 0.75pt solid #111;
+    border-radius: 10pt;
     overflow: hidden;
   }
   table {
@@ -157,6 +158,10 @@ function openPrintWindow({ staffName, monthLabel, summary, reportRows, totalDedu
   tr.row-prod { background: #fff;    color: #1f2937; }
   tr.row-day  { background: #bcbcbc; color: #000; }   /* bg-gray-200/85 */
 
+  tr:nth-last-child(1) td {
+    border-bottom: 0px;
+  }
+
   /* ── Print footer ── */
   .print-footer {
     display: flex;
@@ -171,7 +176,6 @@ function openPrintWindow({ staffName, monthLabel, summary, reportRows, totalDedu
 </head>
 <body>
 <div>
-
   <!-- Info Grid -->
   <div class="info-grid">${infoHtml}</div>
 
