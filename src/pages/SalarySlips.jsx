@@ -171,7 +171,8 @@ function normalizePrintStyles() {
   style.id = styleId;
   style.innerHTML = `
     @media print {
-      @page { size: A4 portrait; margin: 8mm; }
+      html { zoom: 85%; }
+      @page { size: A4 portrait; margin: 0mm; }
       body * { visibility: hidden !important; }
       #salary-slips-print-root,
       #salary-slips-print-root * { visibility: visible !important; }
