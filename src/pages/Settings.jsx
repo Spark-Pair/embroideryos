@@ -29,6 +29,7 @@ const DISPLAY_FIELDS = [
   { key: "target_amount",    label: "Daily Target Amount"   },
   { key: "off_amount",       label: "Off Day Amount"        },
   { key: "bonus_rate",       label: "Bonus Rate"            },
+  { key: "allowance",        label: "Monthly Allowance"     },
 ];
 
 // ── Config Card ───────────────────────────────────────────────────────────────

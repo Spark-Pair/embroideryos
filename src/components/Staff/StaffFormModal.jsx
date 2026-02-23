@@ -20,6 +20,7 @@ export default function StaffFormModal({
       name: initialData?.name || "",
       joining_date: formatDate(initialData?.joining_date, "yyyy-mm-dd") || "",
       salary: initialData?.salary || "",
+      opening_balance: initialData?.opening_balance ?? "",
     });
   }, [initialData]); // ✅ dependency array
 
@@ -81,6 +82,16 @@ export default function StaffFormModal({
             placeholder="Enter Decided Salary"
             onChange={(e) =>
               setFormData((prev) => ({ ...prev, salary: e.target.value }))
+            }
+          />
+          <Input
+            label="Opening Balance"
+            type="number"
+            value={formData.opening_balance}
+            required={false}
+            placeholder="Enter Opening Balance"
+            onChange={(e) =>
+              setFormData((prev) => ({ ...prev, opening_balance: e.target.value }))
             }
           />
         </form>

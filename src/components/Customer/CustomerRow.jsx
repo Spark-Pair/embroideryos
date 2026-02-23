@@ -2,7 +2,7 @@ import { Edit3, Eye, Power, MoreVertical } from "lucide-react";
 import ContextMenu from "../ContextMenu";
 import StatusBadge from "../StatusBadge";
 import { useState } from "react";
-import { formatDate } from "../../utils";
+import { formatNumbers } from "../../utils";
 
 export default function CustomerRow({ item, index, startIndex, onView, onEdit, onToggleStatus }) {
   const [activeMenu, setActiveMenu] = useState(null);
@@ -16,6 +16,7 @@ export default function CustomerRow({ item, index, startIndex, onView, onEdit, o
       <td className="px-7 py-4 font-semibold text-gray-800">{item.name}</td>
       <td className="px-7 py-4 text-sm text-gray-500 font-light">{item.person}</td>
       <td className="px-7 py-3.5 text-sm font-medium tracking-wider">{item.rate}</td>
+      <td className="px-7 py-3.5 text-sm text-gray-500 font-light">{formatNumbers(item.opening_balance, 1) ?? '---'}</td>
       <td className="px-7 py-3.5">
         <StatusBadge active={item.isActive} />
       </td>

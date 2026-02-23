@@ -70,7 +70,7 @@ const Input = forwardRef(
     };
 
     const handleFocus = (e) => {
-      if (e.target.type === 'date') {
+      if (e.target.type === 'date' || e.target.type === 'month') {
         try {
           e.target.showPicker();
         } catch {

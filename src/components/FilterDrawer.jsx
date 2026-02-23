@@ -40,7 +40,7 @@ export default function FilterDrawer({ isOpen, onClose, filters = [], onApply, o
               <div className="flex-1 space-y-6 overflow-auto px-3">
                 {filters.map((f, i) => (
                   <div key={i}>
-                    {f.type === "text" || f.type === "number" || f.type === "date" ? (
+                    {f.type === "text" || f.type === "number" || f.type === "date" || f.type === "month" ? (
                       <Input
                         label={f.label}
                         type={f.type}

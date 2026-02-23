@@ -3,6 +3,7 @@ import Button from "../Button";
 import Modal from "../Modal";
 import ModalDetails from "../ModalDetails";
 import StatusBadge from "../StatusBadge";
+import { formatNumbers } from "../../utils";
 
 export default function CustomerDetailsModal({
   isOpen,
@@ -47,6 +48,7 @@ export default function CustomerDetailsModal({
             { label: "Customer Name", value: initialData?.name },
             { label: "Contact Person", value: initialData?.person },
             { label: "Rate", value: initialData?.rate },
+            { label: "Opening Balance", value: formatNumbers(initialData?.opening_balance, 1) },
           ]}
         />
       }

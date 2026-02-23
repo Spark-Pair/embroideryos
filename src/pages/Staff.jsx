@@ -161,15 +161,23 @@ export default function Staffs() {
 
   const handleStaffFormActions = async (action, data) => {
     try {
+      const normalizedData = {
+        ...data,
+        opening_balance:
+          data.opening_balance === "" || data.opening_balance == null
+            ? 0
+            : Number(data.opening_balance),
+      };
+
       if (action === "add") {
-        await createStaff(data);
+        await createStaff(normalizedData);
 
         showToast({
           type: 'success',
           message: "Staff added successfully"
         });
       } else if (action === "edit") {
-        await updateStaff(data.id, data);
+        await updateStaff(data.id, normalizedData);
         
         showToast({
           type: 'success',
@@ -261,6 +269,7 @@ export default function Staffs() {
                   <th className="px-7 py-3.5 font-medium">Staff Name</th>
                   <th className="px-7 py-3.5 font-medium">Joining Date</th>
                   <th className="px-7 py-3.5 font-medium">Salary</th>
+                  <th className="px-7 py-3.5 font-medium">Opening Balance</th>
                   <th className="px-7 py-3.5 font-medium">Status</th>
                   <th className="px-7 py-3.5 font-medium text-right">
                     Actions

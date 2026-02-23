@@ -161,15 +161,23 @@ export default function Customers() {
 
   const handleCustomerFormActions = async (action, data) => {
     try {
+      const normalizedData = {
+        ...data,
+        opening_balance:
+          data.opening_balance === "" || data.opening_balance == null
+            ? 0
+            : Number(data.opening_balance),
+      };
+
       if (action === "add") {
-        await createCustomer(data);
+        await createCustomer(normalizedData);
 
         showToast({
           type: 'success',
           message: "Customer added successfully"
         });
       } else if (action === "edit") {
-        await updateCustomer(data.id, data);
+        await updateCustomer(data.id, normalizedData);
         
         showToast({
           type: 'success',
@@ -261,6 +269,7 @@ export default function Customers() {
                   <th className="px-7 py-3.5 font-medium">Customer Name</th>
                   <th className="px-7 py-3.5 font-medium">Person Name</th>
                   <th className="px-7 py-3.5 font-medium">Rate</th>
+                  <th className="px-7 py-3.5 font-medium">Opening Balance</th>
                   <th className="px-7 py-3.5 font-medium">Status</th>
                   <th className="px-7 py-3.5 font-medium text-right">
                     Actions

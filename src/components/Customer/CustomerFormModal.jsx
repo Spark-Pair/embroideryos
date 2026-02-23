@@ -19,6 +19,7 @@ export default function CustomerFormModal({
       name: initialData?.name || "",
       person: initialData?.person || "",
       rate: initialData?.rate || "",
+      opening_balance: initialData?.opening_balance ?? "",
     });
   }, [initialData]); // ✅ dependency array
 
@@ -80,6 +81,16 @@ export default function CustomerFormModal({
             placeholder="Enter Decided Rate"
             onChange={(e) =>
               setFormData((prev) => ({ ...prev, rate: e.target.value }))
+            }
+          />
+          <Input
+            label="Opening Balance"
+            type="number"
+            required={false}
+            value={formData.opening_balance}
+            placeholder="Enter Opening Balance"
+            onChange={(e) =>
+              setFormData((prev) => ({ ...prev, opening_balance: e.target.value }))
             }
           />
         </form>

@@ -15,13 +15,14 @@ const FIELDS = [
   { key: "target_amount",    label: "Daily Target Amount", hint: "Target earnings per day",                  step: "1",      type: "number" },
   { key: "off_amount",       label: "Off Day Amount",      hint: "Amount for non-salary staff on Off days",  step: "1",      type: "number" },
   { key: "bonus_rate",       label: "Bonus Rate",          hint: "Default amount per bonus unit (e.g. 200)", step: "1",      type: "number" },
+  { key: "allowance",        label: "Monthly Allowance",   hint: "Allowance when monthly attendance criteria pass", step: "1", type: "number" },
   { key: "effective_date",   label: "Effective Date",      hint: "Config applies from this date onwards",    type: "date"   },
 ];
 
 const EMPTY_FORM = {
   stitch_rate: "", applique_rate: "", on_target_pct: "",
   after_target_pct: "", pcs_per_round: "", target_amount: "",
-  off_amount: "", bonus_rate: "", effective_date: "",
+  off_amount: "", bonus_rate: "", allowance: "1500", effective_date: "",
 };
 
 export default function ProductionConfigFormModal({ isOpen, onClose, onSave }) {

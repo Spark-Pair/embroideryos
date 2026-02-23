@@ -16,6 +16,7 @@ export default function StaffRow({ item, index, startIndex, onView, onEdit, onTo
       <td className="px-7 py-4 font-semibold text-gray-800">{item.name}</td>
       <td className="px-7 py-4 text-sm text-gray-500 font-light">{formatDate(item.joining_date, "dd-MMM-YYYY, DDD")}</td>
       <td className="px-7 py-4 text-sm text-gray-500 font-light">{formatNumbers(item.salary, 1) ?? '---'}</td>
+      <td className="px-7 py-4 text-sm text-gray-500 font-light">{formatNumbers(item.opening_balance, 1) ?? '---'}</td>
       <td className="px-7 py-3.5">
         <StatusBadge active={item.isActive} />
       </td>

@@ -47,6 +47,7 @@ const DEFAULT_CONFIG = {
   target_amount:    900,
   pcs_per_round:    12,
   bonus_rate:       200,
+  allowance:        1500,
   off_amount:       300,
   stitch_cap:       5000,
 };

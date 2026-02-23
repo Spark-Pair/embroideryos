@@ -8,6 +8,9 @@ export const fetchStaffRecords = (params) =>
 export const fetchStaffRecordStats = () =>
   apiClient.get(`${STAFF_RECORDS_URL}/stats`).then((r) => r.data);
 
+export const fetchStaffRecordMonths = () =>
+  apiClient.get(`${STAFF_RECORDS_URL}/months`).then((r) => r.data);
+
 export const fetchStaffLastRecord = (staff_id) =>
   apiClient.get(`${STAFF_RECORDS_URL}/last/${staff_id}`).then((r) => r.data);
 

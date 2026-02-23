@@ -24,6 +24,7 @@ const adminNav = [
   { id: 'invoices', icon: <FileText className="w-4.5 h-4.5" />, label: 'Invoices', path: '/invoices' },
   { id: 'staff', icon: <Users2 className="w-4.5 h-4.5" />, label: 'Staff', path: '/staff' },
   { id: 'staff-records', icon: <FileText className="w-4.5 h-4.5" />, label: 'Staff Records', path: '/staff-records' },
+  { id: 'staff-payments', icon: <Banknote className="w-4.5 h-4.5" />, label: 'Staff Payments', path: '/staff-payments' },
   { id: 'salary-slips', icon: <FileText className="w-4.5 h-4.5" />, label: 'Salary Slips', path: '/salary-slips' },
 ];
 
@@ -38,6 +39,7 @@ const staffNav = [
   { id: 'invoices', icon: <FileText className="w-4.5 h-4.5" />, label: 'Invoices', path: '/invoices' },
   { id: 'staff', icon: <Users2 className="w-4.5 h-4.5" />, label: 'Staff', path: '/staff' },
   { id: 'staff-records', icon: <FileText className="w-4.5 h-4.5" />, label: 'Staff Records', path: '/staff-records' },
+  { id: 'staff-payments', icon: <Banknote className="w-4.5 h-4.5" />, label: 'Staff Payments', path: '/staff-payments' },
 ];
 
 const SidebarNav = ({ currentPath, handleLogout }) => {

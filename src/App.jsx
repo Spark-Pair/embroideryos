@@ -22,6 +22,7 @@ import Sessions from './pages/Sessions';
 import Settings from './pages/Settings';
 import SalarySlips from './pages/SalarySlips';
 import KeyboardShortcuts from './pages/KeyboardShortcuts';
+import StaffPayments from './pages/StaffPayments';
 
 export default function App() {
   return (
@@ -124,6 +125,12 @@ export default function App() {
             <Route path="/salary-slips" element={
               <ProtectedRoute>
                 <Layout><SalarySlips /></Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/staff-payments" element={
+              <ProtectedRoute>
+                <Layout><StaffPayments /></Layout>
               </ProtectedRoute>
             } />
 

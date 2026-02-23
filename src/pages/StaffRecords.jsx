@@ -14,6 +14,7 @@ import StatCard from "../components/StatCard";
 import TableToolbar from "../components/table/TableToolbar";
 import StaffRecordDetailsModal from "../components/StaffRecord/StaffRecordDetailsModal";
 import StaffRecordFormModal from "../components/StaffRecord/StaffRecordFormModal";
+import StaffMonthlyReportModal from "../components/StaffRecord/StaffMonthlyReportModal";
 import StaffRecordRow from "../components/StaffRecord/StaffRecordRow";
 import FilterDrawer from "../components/FilterDrawer";
 import TableSkeleton from "../components/table/TableLoader";
@@ -49,6 +50,7 @@ export default function StaffRecords() {
     isOpen: false, title: "", message: "", onConfirm: () => {}, variant: "danger",
   });
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [reportModal, setReportModal] = useState(false);
 
   const [filters, setFilters] = useState({
     name: "", attendance: "", date_from: "", date_to: "",
@@ -249,7 +251,7 @@ export default function StaffRecords() {
             totalPages={pagination.totalPages}
             onPageChange={handlePageChange}
             onFilter={() => setIsFilterOpen(true)}
-            onReport={() => console.log("Report")}
+            onReport={() => setReportModal(true)}
           />
 
           <div ref={tableScrollRef} className="flex-1 overflow-auto">
@@ -333,6 +335,11 @@ export default function StaffRecords() {
         filters={filterConfig}
         onApply={handleApplyFilters}
         onReset={handleResetFilters}
+      />
+
+      <StaffMonthlyReportModal
+        isOpen={reportModal}
+        onClose={() => setReportModal(false)}
       />
     </>
   );
