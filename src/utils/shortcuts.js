@@ -4,10 +4,16 @@ export const SHORTCUT_ACTIONS = [
     label: "Primary Page Action",
     description: "Triggers the main action button shown in page headers.",
   },
+  {
+    id: "production_add_row",
+    label: "Production: Add Row",
+    description: "Add a new production row from last input (pcs/rounds)",
+  },
 ];
 
 export const DEFAULT_SHORTCUTS = {
   page_header_primary_action: "Ctrl+Space",
+  production_add_row: "ArrowRight",
 };
 
 const MODIFIER_KEYS = new Set(["Control", "Shift", "Alt", "Meta"]);

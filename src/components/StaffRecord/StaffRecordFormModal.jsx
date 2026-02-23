@@ -11,6 +11,8 @@ import { FinalAmountCard } from "../FinalAmountCard";
 import { SectionHeader } from "../SectionHeader";
 import { formatNumbers } from "../../utils";
 import { useFormKeyboard } from "../../hooks/useFormKeyboard";
+import { useShortcut } from "../../hooks/useShortcuts";
+import { isEventMatchingShortcut } from "../../utils/shortcuts";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -119,8 +121,11 @@ function calcTotals(rows, cfg) {
 
 // ─── Production Row ───────────────────────────────────────────────────────────
 
-function ProductionRow({ row, index, cfg, onChange, onRemove, canRemove }) {
+
+function ProductionRow({ row, index, cfg, onChange, onRemove, canRemove, onAddRow, isLast }) {
   const { total_stitch, on_target_amt, after_target_amt } = calcRow(row, cfg);
+
+  const handleFocus = (e) => e.target.select();
 
   const handle = (field) => (e) => {
     const val = e.target.value;
@@ -130,22 +135,33 @@ function ProductionRow({ row, index, cfg, onChange, onRemove, canRemove }) {
       onChange(row._key, { ...row, [field]: val });
   };
 
+  const addRowShortcut = useShortcut("production_add_row"); // ← dynamic
+
+  const handleKeyDown = (field) => (e) => {
+    if (!isLast) return;
+    if (field !== "pcs" && field !== "rounds") return;
+    if (!isEventMatchingShortcut(e, addRowShortcut)) return;
+
+    e.preventDefault();
+    onAddRow();
+  };
+
   const ci = "w-full border border-gray-400/85 px-2.5 py-1.5 rounded-lg text-sm focus:ring-2 focus:ring-emerald-300 focus:outline-none bg-gray-50 transition";
 
   return (
     <tr className="group border-b border-gray-300 hover:bg-emerald-50/30 transition-colors">
       <td className="px-1.5 py-2 text-center text-xs font-medium text-gray-400 w-8">{index + 1}</td>
       <td className="px-1.5 py-2">
-        <input type="number" value={row.d_stitch} onChange={handle("d_stitch")} data-field="d_stitch" placeholder="0" className={ci} />
+        <input type="number" value={row.d_stitch} onChange={handle("d_stitch")} onFocus={handleFocus} data-field="d_stitch" placeholder="0" className={ci} />
       </td>
       <td className="px-1.5 py-2">
-        <input type="number" value={row.applique} onChange={handle("applique")} data-field="applique" placeholder="0" className={ci} />
+        <input type="number" value={row.applique} onChange={handle("applique")} onFocus={handleFocus} data-field="applique" placeholder="0" className={ci} />
       </td>
       <td className="px-1.5 py-2">
-        <input type="number" value={row.rounds}   onChange={handle("rounds")}   data-field="rounds"   placeholder="0" className={ci} />
+        <input type="number" value={row.rounds}   onChange={handle("rounds")}  onFocus={handleFocus} data-field="rounds" onKeyDown={handleKeyDown("rounds")}  placeholder="0" className={ci} />
       </td>
       <td className="px-1.5 py-2">
-        <input type="number" value={row.pcs}      onChange={handle("pcs")}      data-field="pcs"      placeholder="0" className={ci} />
+        <input type="number" value={row.pcs}      onChange={handle("pcs")}      onFocus={handleFocus} data-field="pcs"   onKeyDown={handleKeyDown("pcs")}   placeholder="0" className={ci} />
       </td>
       <td className="px-3 py-2 text-right text-sm text-gray-600 tabular-nums">{formatNumbers(total_stitch)}</td>
       <td className="px-3 py-2 text-right text-sm font-medium text-rose-700 tabular-nums">{formatNumbers(on_target_amt, 2)}</td>
@@ -207,7 +223,8 @@ export default function StaffRecordFormModal({
   const [staffList,     setStaffList]     = useState([]);
   const [staffLoading,  setStaffLoading]  = useState(false);
   const [dateLoading,   setDateLoading]   = useState(false);
-  const [isAutoSelectStaff, setIsAutoSelectStaff] = useState(false);
+    
+  const autoSelectedRef = useRef(false);
 
   // ── Global keyboard nav + Enter to submit ──
   useFormKeyboard({ onEnterSubmit: handleSubmit });
@@ -242,35 +259,58 @@ export default function StaffRecordFormModal({
       setBonusRate("");
       setFixAmount("");
       setCfg(DEFAULT_CONFIG);
+      autoSelectedRef.current = false;
     }
 
     const load = async () => {
       setStaffLoading(true);
       try {
         const r = await fetchStaffNames({ status: "active" });
-        setStaffList(r.data || []);
+        const list = r.data || [];
+        setStaffList(list);
+
+        if (!isEdit && lastUsed?.staffId) {
+          // Pass list directly — don't rely on stale state
+          await handleStaffSelect(lastUsed.staffId, list);
+          autoSelectedRef.current = true;
+        } else if (!isEdit) {
+          setTimeout(() => staffRef.current?.focus(), 150);
+        }
       } catch {
         setStaffList([]);
       } finally {
         setStaffLoading(false);
-
-        if (lastUsed?.staffId && !isEdit) {
-          handleStaffSelect(lastUsed.staffId);
-          setIsAutoSelectStaff(true);
-        } else if (!isEdit) {
-          // No last used staff — focus staff select
-          setTimeout(() => staffRef.current?.focus(), 150);
-        }
-
-        if (lastUsed?.attendanceHistory?.last && !isEdit && lastUsed?.attendanceHistory?.last !== "Sunday") {
-          handleAttendance(lastUsed.attendanceHistory.last);
-        } else if (lastUsed?.attendanceHistory?.secondLast && !isEdit && lastUsed?.attendanceHistory?.secondLast !== "Sunday") {
-          handleAttendance(lastUsed.attendanceHistory.secondLast);
-        }
       }
     };
     load();
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!date || isEdit || !autoSelectedRef.current) return;
+    
+    // Date is now resolved, now apply last used attendance
+    const last       = lastUsed?.attendanceHistory?.last;
+    const secondLast = lastUsed?.attendanceHistory?.secondLast;
+
+    const dayOfWeek = new Date(date).getDay();
+    if (dayOfWeek === 0) {
+      handleAttendance("Sunday");
+    } else if (last && last !== "Sunday") {
+      handleAttendance(last);
+      setTimeout(() => {
+        const first = document.querySelector('input[data-field="d_stitch"]');
+        if (first) first.focus();
+      }, 50);
+    } else if (secondLast && secondLast !== "Sunday") {
+      handleAttendance(secondLast);
+      setTimeout(() => {
+        const first = document.querySelector('input[data-field="d_stitch"]');
+        if (first) first.focus();
+      }, 50);
+    } else {
+      setTimeout(() => attendanceRef.current?.focus(), 50);
+    }
+  }, [date]); // fires when date resolves after auto-staff-select
 
   // ── Pre-fill on edit ──
   useEffect(() => {
@@ -296,24 +336,28 @@ export default function StaffRecordFormModal({
 
   // ── Auto-set Sunday attendance ──
   useEffect(() => {
-    if (!date) return;
+    if (!date || isEdit) return;
+    if (autoSelectedRef.current) return; // handled by the effect above
+
     const day = new Date(date).getDay();
     if (day === 0) {
       handleAttendance("Sunday");
-    } else if (!isAutoSelectStaff) {
+    } else {
+      // Only clear if manually changed (not auto-selected flow)
       handleAttendance("");
     }
   }, [date]);
 
+
   // ── Staff select ──
-  const handleStaffSelect = async (staffId) => {
-    setIsAutoSelectStaff(false);
+  const handleStaffSelect = async (staffId, list = staffList) => {
+    autoSelectedRef.current = false;
     if (!staffId) { setSelectedStaff(null); setDate(""); return; }
-    const staff = staffList.find((s) => s._id === staffId);
+
+    const staff = list.find((s) => s._id === staffId);
     setSelectedStaff(staff);
     setDateLoading(true);
 
-    // Focus attendance after staff selected
     setTimeout(() => attendanceRef.current?.focus(), 50);
 
     try {
@@ -337,13 +381,25 @@ export default function StaffRecordFormModal({
       },
     }));
 
-    // Focus first production input if attendance requires it
-    if (val && !NO_PRODUCTION.has(val)) {
-      setTimeout(() => {
-        const first = document.querySelector('input[data-field="d_stitch"]');
-        if (first) first.focus();
-      }, 50);
-    }
+    if (!val) return;
+
+    setTimeout(() => {
+      // Production visible — d_stitch focus
+      if (!NO_PRODUCTION.has(val)) {
+        const dStitch = document.querySelector('input[data-field="d_stitch"]');
+        if (dStitch) { dStitch.focus(); return; }
+      }
+
+      // Koi aur input ho — us pe focus
+      const firstInput = document.querySelector(
+        'input[data-focus-first="true"]:not([disabled]):not([readonly])'
+      );
+      if (firstInput) { firstInput.focus(); return; }
+
+      // Kuch nahi — Save button pe focus, Enter se submit hoga
+      const saveBtn = document.querySelector('button[data-save-btn="true"]');
+      if (saveBtn) saveBtn.focus();
+    }, 50);
   };
 
   // ── Derived ──
@@ -428,6 +484,15 @@ export default function StaffRecordFormModal({
     }
   }
 
+  const handleAddRow = useCallback(() => {
+    const newKey = crypto.randomUUID();
+    setRows((p) => [...p, { ...emptyRow(), _key: newKey }]);
+    setTimeout(() => {
+      const inputs = document.querySelectorAll('input[data-field="d_stitch"]');
+      if (inputs.length) inputs[inputs.length - 1].focus();
+    }, 30);
+  }, []);
+
   // ─────────────────────────────────────────────────────────────────────────────
 
   return (
@@ -460,6 +525,7 @@ export default function StaffRecordFormModal({
             <Button
               variant="primary"
               onClick={handleSubmit}
+              data-save-btn="true"
               disabled={!selectedStaff || !date || !attendance || submitting}
               loading={submitting}
             >
@@ -528,7 +594,7 @@ export default function StaffRecordFormModal({
               subtitle={`Rate: ${cfg.stitch_rate} · Applique: ${cfg.applique_rate} · On Target: ${cfg.on_target_pct}% · After Target: ${cfg.after_target_pct}% · ${cfg.pcs_per_round ?? DEFAULT_CONFIG.pcs_per_round} PCs/Round`}
               right={
                 <Button size="sm" variant="primary" outline icon={Plus}
-                  onClick={() => setRows((p) => [...p, emptyRow()])}>
+                  onClick={handleAddRow}>
                   Add Row
                 </Button>
               }
@@ -558,6 +624,8 @@ export default function StaffRecordFormModal({
                       cfg={cfg}
                       onChange={handleRowChange}
                       onRemove={handleRowRemove}
+                      onAddRow={handleAddRow}          // ← add
+                      isLast={idx === rows.length - 1} // ← add
                       canRemove={rows.length > 1}
                     />
                   ))}
@@ -612,6 +680,7 @@ export default function StaffRecordFormModal({
                 value={bonusQty}
                 onChange={(e) => setBonusQty(e.target.value)}
                 placeholder="0"
+                data-focus-first="true"
                 step="0.001"
                 required={false}
               />
