@@ -1,10 +1,12 @@
 // pages/Settings.jsx
 
 import React, { useState, useEffect } from "react";
-import { Plus, SlidersHorizontal, CalendarDays, CheckCircle2, Clock } from "lucide-react";
+import { Plus, SlidersHorizontal, CalendarDays, CheckCircle2, Clock, ImageUp } from "lucide-react";
 import { fetchProductionConfig, createProductionConfig } from "../api/productionConfig";
+import { fetchMyInvoiceBanner, updateMyInvoiceBanner } from "../api/business";
 import PageHeader from "../components/PageHeader";
 import ProductionConfigFormModal from "../components/StaffRecord/ProductionConfigFormModal";
+import InvoiceBannerModal from "../components/Invoice/InvoiceBannerModal";
 import { useToast } from "../context/ToastContext";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -130,6 +132,8 @@ export default function SettingsPage() {
   const [records,    setRecords]    = useState([]);
   const [loading,    setLoading]    = useState(false);
   const [formModal,  setFormModal]  = useState(false);
+  const [invoiceBanner, setInvoiceBanner] = useState("");
+  const [bannerModalOpen, setBannerModalOpen] = useState(false);
 
   // ── Load all configs ───────────────────────────────────────────────────────
   // Assumes API returns array when no params — adjust if your endpoint differs
@@ -151,6 +155,19 @@ export default function SettingsPage() {
   };
 
   useEffect(() => { loadConfigs(); }, []);
+
+  useEffect(() => {
+    const loadInvoiceBanner = async () => {
+      try {
+        const res = await fetchMyInvoiceBanner();
+        setInvoiceBanner(res?.invoice_banner_data || "");
+      } catch {
+        setInvoiceBanner("");
+      }
+    };
+
+    loadInvoiceBanner();
+  }, []);
 
   // ── Save new config ────────────────────────────────────────────────────────
 
@@ -175,6 +192,20 @@ export default function SettingsPage() {
   const activeRecord = records.find(
     (r) => r.effective_date && new Date(r.effective_date) <= today
   );
+
+  const handleSaveBanner = async (bannerData) => {
+    try {
+      const res = await updateMyInvoiceBanner(bannerData);
+      setInvoiceBanner(res?.invoice_banner_data || "");
+      showToast({ type: "success", message: "Invoice banner updated" });
+    } catch (err) {
+      showToast({
+        type: "error",
+        message: err.response?.data?.message || "Failed to update invoice banner",
+      });
+      throw err;
+    }
+  };
 
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -228,6 +259,37 @@ export default function SettingsPage() {
             )}
           </SettingsSection>
 
+          <SettingsSection
+            title="Invoice Banner"
+            description="This banner appears at the top of invoice preview and print."
+            icon={ImageUp}
+            action={
+              <button
+                onClick={() => setBannerModalOpen(true)}
+                className="flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 transition-colors"
+              >
+                <ImageUp size={15} />
+                Manage Banner
+              </button>
+            }
+          >
+            {invoiceBanner ? (
+              <div className="rounded-2xl border border-gray-200 overflow-hidden bg-white">
+                <img
+                  src={invoiceBanner}
+                  alt="Current invoice banner"
+                  className="w-full max-h-72 object-cover"
+                />
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 py-12 flex flex-col items-center justify-center text-gray-400">
+                <ImageUp className="h-6 w-6 mb-2" />
+                <p className="text-sm font-medium text-gray-500">No invoice banner set</p>
+                <p className="text-xs text-gray-400 mt-1">Upload one using the button above.</p>
+              </div>
+            )}
+          </SettingsSection>
+
         </div>
       </div>
 
@@ -236,6 +298,13 @@ export default function SettingsPage() {
         isOpen={formModal}
         onClose={() => setFormModal(false)}
         onSave={handleSave}
+      />
+
+      <InvoiceBannerModal
+        isOpen={bannerModalOpen}
+        onClose={() => setBannerModalOpen(false)}
+        initialBanner={invoiceBanner}
+        onSave={handleSaveBanner}
       />
     </>
   );

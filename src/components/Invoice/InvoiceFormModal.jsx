@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCcw, Save, Trash2 } from "lucide-react";
+import { ImageUp, RefreshCcw, Save, Trash2 } from "lucide-react";
 import Modal from "../Modal";
 import Button from "../Button";
 import Input from "../Input";
@@ -15,6 +15,15 @@ function toDateInput(value = new Date()) {
   return `${y}-${m}-${day}`;
 }
 
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Unable to read image"));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function InvoiceFormModal({ isOpen, onClose, onAction }) {
   const [orderGroups, setOrderGroups] = useState([]);
   const [loadingGroups, setLoadingGroups] = useState(false);
@@ -24,6 +33,7 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction }) {
   const [selectedOrderIds, setSelectedOrderIds] = useState([]);
   const [invoiceDate, setInvoiceDate] = useState(toDateInput());
   const [note, setNote] = useState("");
+  const [invoiceImageData, setInvoiceImageData] = useState("");
   const [error, setError] = useState("");
 
   const loadGroups = async () => {
@@ -43,7 +53,31 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction }) {
     setSelectedOrderIds([]);
     setInvoiceDate(toDateInput());
     setNote("");
+    setInvoiceImageData("");
     setError("");
+  };
+
+  const handlePickImage = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setError("Please select an image file.");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Invoice image size should be less than 5MB.");
+      return;
+    }
+
+    try {
+      const data = await readFileAsDataUrl(file);
+      setInvoiceImageData(data);
+      setError("");
+    } catch {
+      setError("Failed to read selected image.");
+    }
   };
 
   useEffect(() => {
@@ -115,6 +149,7 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction }) {
         order_ids: selectedOrderIds,
         invoice_date: invoiceDate || undefined,
         note,
+        image_data: invoiceImageData || "",
       });
       onClose();
     } catch (err) {
@@ -233,6 +268,39 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction }) {
             />
             <Input label="Invoice Date" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
             <Input label="Note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional note" required={false} />
+            <div>
+              <label className="block mb-1.5 text-sm text-gray-700">Invoice Image (Optional)</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handlePickImage}
+                className="block w-full text-sm text-gray-700 file:mr-3 file:px-3 file:py-1.5 file:rounded-xl file:border file:border-gray-300 file:bg-gray-50 file:cursor-pointer"
+              />
+            </div>
+            {invoiceImageData ? (
+              <div className="rounded-xl border border-gray-300 bg-white p-2">
+                <img
+                  src={invoiceImageData}
+                  alt="Invoice image preview"
+                  className="w-full max-h-40 object-cover rounded-lg"
+                />
+                <div className="mt-2 flex justify-end">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    outline
+                    onClick={() => setInvoiceImageData("")}
+                  >
+                    Remove Image
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 py-6 flex flex-col items-center justify-center text-gray-400">
+                <ImageUp className="h-5 w-5 mb-1.5" />
+                <p className="text-xs">No image selected</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
