@@ -9,11 +9,23 @@ export const SHORTCUT_ACTIONS = [
     label: "Production: Add Row",
     description: "Add a new production row from last input (pcs/rounds)",
   },
+  {
+    id: "order_toggle_rate_to_stitch",
+    label: "Order: Toggle Rate to Stitch",
+    description: "Toggle reverse calculation mode in Order form (Rate -> Stitch).",
+  },
+  {
+    id: "order_toggle_two_side",
+    label: "Order: Toggle 2-Side",
+    description: "Toggle 2-side mode in Order form.",
+  },
 ];
 
 export const DEFAULT_SHORTCUTS = {
   page_header_primary_action: "Ctrl+Space",
   production_add_row: "ArrowRight",
+  order_toggle_rate_to_stitch: "Alt+R",
+  order_toggle_two_side: "Alt+2",
 };
 
 const MODIFIER_KEYS = new Set(["Control", "Shift", "Alt", "Meta"]);

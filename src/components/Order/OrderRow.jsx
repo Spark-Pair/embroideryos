@@ -1,10 +1,9 @@
-import { Copy, Edit3, Eye, MoreVertical, Power } from "lucide-react";
+import { Copy, Edit3, Eye, MoreVertical } from "lucide-react";
 import { useState } from "react";
 import ContextMenu from "../ContextMenu";
-import StatusBadge from "../StatusBadge";
 import { formatDate, formatNumbers } from "../../utils";
 
-export default function OrderRow({ item, index, startIndex, onView, onEdit, onRepeat, onToggleStatus }) {
+export default function OrderRow({ item, index, startIndex, onView, onEdit, onRepeat }) {
   const [activeMenu, setActiveMenu] = useState(null);
 
   return (
@@ -19,9 +18,6 @@ export default function OrderRow({ item, index, startIndex, onView, onEdit, onRe
       </td>
       <td className="px-5 py-4 text-sm text-gray-600">{formatNumbers(item.rate, 2)}</td>
       <td className="px-5 py-4 text-sm font-semibold text-emerald-700">{formatNumbers(item.total_amount, 2)}</td>
-      <td className="px-5 py-4">
-        <StatusBadge active={item.isActive} />
-      </td>
       <td className="px-5 py-4 text-right relative">
         <button
           onClick={(e) => {
@@ -66,20 +62,6 @@ export default function OrderRow({ item, index, startIndex, onView, onEdit, onRe
           >
             <Copy size={16} strokeWidth={2.5} />
             Repeat Item
-          </button>
-          <div className="h-[1px] bg-gray-200 my-1.5" />
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleStatus(item);
-              setActiveMenu(null);
-            }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl cursor-pointer ${
-              item.isActive ? "text-rose-500 hover:bg-rose-50" : "text-emerald-500 hover:bg-emerald-50"
-            }`}
-          >
-            <Power size={16} strokeWidth={2.5} />
-            {item.isActive ? "Mark Inactive" : "Mark Active"}
           </button>
         </ContextMenu>
       </td>

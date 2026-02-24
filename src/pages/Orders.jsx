@@ -1,10 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Plus, FileText, Banknote, CircleCheck } from "lucide-react";
+import { Plus, FileText, Banknote } from "lucide-react";
 import {
   createOrder,
   fetchOrders,
   fetchOrderStats,
-  toggleOrderStatus,
   updateOrder,
 } from "../api/order";
 
@@ -13,7 +12,6 @@ import TableToolbar from "../components/table/TableToolbar";
 import FilterDrawer from "../components/FilterDrawer";
 import TableSkeleton from "../components/table/TableLoader";
 import PageHeader from "../components/PageHeader";
-import ConfirmModal from "../components/ConfirmModal";
 import OrderFormModal from "../components/Order/OrderFormModal";
 import OrderRow from "../components/Order/OrderRow";
 import OrderDetailsModal from "../components/Order/OrderDetailsModal";
@@ -24,7 +22,6 @@ export default function Orders() {
 
   const [stats, setStats] = useState({
     total_orders: 0,
-    active_orders: 0,
     total_amount: 0,
   });
   const [orders, setOrders] = useState([]);
@@ -32,20 +29,11 @@ export default function Orders() {
   const [detailsModal, setDetailsModal] = useState({ isOpen: false, data: null });
   const [formModal, setFormModal] = useState({ isOpen: false, data: null });
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [confirmModal, setConfirmModal] = useState({
-    isOpen: false,
-    title: "",
-    message: "",
-    variant: "danger",
-    confirmText: "Confirm",
-    onConfirm: () => {},
-  });
   const [filters, setFilters] = useState({
     customer_name: "",
     machine_no: "",
     date_from: "",
     date_to: "",
-    status: "",
   });
   const [pagination, setPagination] = useState({
     currentPage: 1,
@@ -62,7 +50,6 @@ export default function Orders() {
       setStats(
         res.data || {
           total_orders: 0,
-          active_orders: 0,
           total_amount: 0,
         }
       );
@@ -101,7 +88,7 @@ export default function Orders() {
     setIsFilterOpen(false);
   };
   const handleResetFilters = () => {
-    const reset = { customer_name: "", machine_no: "", date_from: "", date_to: "", status: "" };
+    const reset = { customer_name: "", machine_no: "", date_from: "", date_to: "" };
     setFilters(reset);
     loadOrders(1, reset);
     setIsFilterOpen(false);
@@ -136,25 +123,6 @@ export default function Orders() {
       return;
     }
 
-    if (action === "toggleStatus") {
-      setDetailsModal({ isOpen: false, data: null });
-      setConfirmModal({
-        isOpen: true,
-        title: data.isActive ? "Deactivate Order" : "Activate Order",
-        message: `Are you sure you want to ${data.isActive ? "deactivate" : "activate"} order "${data.lot_no || data.customer_name}"?`,
-        variant: data.isActive ? "danger" : "success",
-        confirmText: data.isActive ? "Deactivate" : "Activate",
-        onConfirm: async () => {
-          try {
-            await toggleOrderStatus(data._id);
-            loadOrders(pagination.currentPage);
-            showToast({ type: "success", message: "Status updated" });
-          } catch (err) {
-            showToast({ type: "error", message: err.response?.data?.message || "Failed to update status" });
-          }
-        },
-      });
-    }
   };
 
   const filterConfig = [
@@ -184,17 +152,6 @@ export default function Orders() {
       value: filters.date_to,
       onChange: (e) => setFilters((prev) => ({ ...prev, date_to: e.target.value })),
     },
-    {
-      label: "Status",
-      type: "select",
-      value: filters.status,
-      options: [
-        { label: "All", value: "" },
-        { label: "Active Only", value: "active" },
-        { label: "Inactive Only", value: "inactive" },
-      ],
-      onChange: (value) => setFilters((prev) => ({ ...prev, status: value })),
-    },
   ];
 
   return (
@@ -210,7 +167,6 @@ export default function Orders() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
           <StatCard label="Total Orders" value={stats.total_orders} icon={FileText} />
-          <StatCard label="Active Orders" value={stats.active_orders} icon={CircleCheck} variant="success" />
           <StatCard
             label="Total Amount"
             value={Number(stats.total_amount || 0).toLocaleString("en-US", {
@@ -245,18 +201,17 @@ export default function Orders() {
                   <th className="px-5 py-3.5 font-medium">Quantity</th>
                   <th className="px-5 py-3.5 font-medium">Rate</th>
                   <th className="px-5 py-3.5 font-medium">Total Amount</th>
-                  <th className="px-5 py-3.5 font-medium">Status</th>
                   <th className="px-5 py-3.5 font-medium text-right">Actions</th>
                 </tr>
               </thead>
 
               {loading ? (
-                <TableSkeleton rows={30} columns={10} />
+                <TableSkeleton rows={30} columns={9} />
               ) : (
                 <tbody className="divide-y divide-gray-200">
                   {orders.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="px-7 py-16 text-center text-sm text-gray-400">
+                      <td colSpan={9} className="px-7 py-16 text-center text-sm text-gray-400">
                         No orders found.
                       </td>
                     </tr>
@@ -270,7 +225,6 @@ export default function Orders() {
                         onView={(data) => setDetailsModal({ isOpen: true, data })}
                         onEdit={(data) => setFormModal({ isOpen: true, data, forceAdd: false })}
                         onRepeat={(data) => setFormModal({ isOpen: true, data, forceAdd: true })}
-                        onToggleStatus={(data) => handleOrderDetailsActions("toggleStatus", data)}
                       />
                     ))
                   )}
@@ -294,16 +248,6 @@ export default function Orders() {
         forceAdd={!!formModal.forceAdd}
         onClose={() => setFormModal({ isOpen: false, data: null, forceAdd: false })}
         onAction={handleOrderFormAction}
-      />
-
-      <ConfirmModal
-        isOpen={confirmModal.isOpen}
-        onClose={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
-        onConfirm={confirmModal.onConfirm}
-        title={confirmModal.title}
-        message={confirmModal.message}
-        variant={confirmModal.variant}
-        confirmText={confirmModal.confirmText}
       />
 
       <FilterDrawer

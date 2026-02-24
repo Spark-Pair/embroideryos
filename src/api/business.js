@@ -39,3 +39,13 @@ export const toggleBusinessStatus = async (id) => {
   const res = await apiClient.patch(`${BUSINESS_URL}/${id}/toggle-status`);
   return res.data;
 };
+
+export const fetchMyInvoiceBanner = async () => {
+  const res = await apiClient.get(`${BUSINESS_URL}/me/invoice-banner`);
+  return res.data;
+};
+
+export const updateMyInvoiceBanner = async (invoice_banner_data) => {
+  const res = await apiClient.patch(`${BUSINESS_URL}/me/invoice-banner`, { invoice_banner_data });
+  return res.data;
+};

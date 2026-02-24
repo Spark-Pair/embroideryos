@@ -16,6 +16,3 @@ export const createOrder = (data) =>
 
 export const updateOrder = (id, data) =>
   apiClient.put(`${ORDERS_URL}/${id}`, data).then((r) => r.data);
-
-export const toggleOrderStatus = (id) =>
-  apiClient.patch(`${ORDERS_URL}/${id}/toggle-status`).then((r) => r.data);
