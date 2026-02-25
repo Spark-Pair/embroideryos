@@ -3,73 +3,145 @@ import Modal from "../Modal";
 import Button from "../Button";
 import { formatDate, formatNumbers } from "../../utils";
 
+/**
+ * PRINT LAYOUT MATH
+ * A4 landscape = 297mm × 210mm | @page margin: 0
+ * Each copy = 148.5mm wide, 5mm padding all sides
+ * Content = 138.5mm × 200mm
+ * After cut: all 4 sides = 5mm equal ✓
+ * MAX ORDERS = 6
+ */
+export const MAX_INVOICE_ORDERS = 6;
+
 const PRINT_STYLE = `
-@media print {
-  body * { visibility: hidden !important; }
-  #invoice-print-root, #invoice-print-root * { visibility: visible !important; }
+  @media print {
+    html, body {
+      width: 297mm !important;
+      height: 210mm !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: hidden !important;
+    }
 
-  #invoice-print-root {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 297mm !important;
-    min-height: 210mm !important;
-    margin: 0 !important;
-    padding: 4mm !important;
-    box-sizing: border-box !important;
-    border: 0 !important;
-    box-shadow: none !important;
-    border-radius: 0 !important;
-    background: #fff !important;
-  }
+    body * { visibility: hidden !important; }
+    #invoice-print-root, #invoice-print-root * { visibility: visible !important; }
 
-  #invoice-print-root .print-layout {
-    display: flex !important;
-    gap: 4mm !important;
-    width: 100% !important;
-    min-height: 200mm !important;
-  }
+    #invoice-print-root {
+      position: fixed !important;
+      left: 0 !important;
+      top: 0 !important;
+      width: 297mm !important;
+      height: 210mm !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      box-sizing: border-box !important;
+      background: #fff !important;
+      overflow: hidden !important;
+      border: 0 !important;
+      box-shadow: none !important;
+      border-radius: 0 !important;
+    }
 
-  #invoice-print-root .invoice-copy {
-    width: calc((100% - 4mm) / 2) !important;
-    min-height: 200mm !important;
-    border: 1px solid #d1d5db !important;
-    border-radius: 2mm !important;
-    overflow: hidden !important;
-    background: #fff !important;
-    page-break-inside: avoid !important;
-  }
+    #invoice-print-root .screen-only {
+      display: none !important;
+      visibility: hidden !important;
+    }
 
-  #invoice-print-root .invoice-body {
-    padding: 4mm !important;
-  }
+    #invoice-print-root .print-layout {
+      display: flex !important;
+      flex-direction: row !important;
+      width: 297mm !important;
+      height: 210mm !important;
+      overflow: hidden !important;
+      box-sizing: border-box !important;
+    }
 
-  #invoice-print-root .invoice-banner {
-    max-height: 22mm !important;
-  }
+    #invoice-print-root .print-copy {
+      display: flex !important;
+      flex-direction: column !important;
+      width: 148.5mm !important;
+      height: 210mm !important;
+      padding: 5mm !important;
+      box-sizing: border-box !important;
+      overflow: hidden !important;
+      flex-shrink: 0 !important;
+      background: #fff !important;
+    }
 
-  #invoice-print-root .invoice-image {
-    max-height: 40mm !important;
-  }
+    #invoice-print-root .copy-divider {
+      display: none !important;
+    }
 
-  #invoice-print-root .print-only {
-    display: block !important;
-  }
+    #invoice-print-root .invoice-copy {
+      display: flex !important;
+      flex-direction: column !important;
+      width: 100% !important;
+      height: 100% !important;
+      overflow: hidden !important;
+      background: #fff !important;
+      box-sizing: border-box !important;
+    }
 
-  #invoice-print-root .screen-only {
-    display: none !important;
-  }
+    #invoice-print-root .invoice-banner-wrap {
+      flex-shrink: 0 !important;
+      width: 100% !important;
+      line-height: 0 !important;
+      margin-bottom: 4mm !important;
+    }
 
-  #invoice-print-root * {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
+    #invoice-print-root .invoice-banner {
+      width: 100% !important;
+      height: auto !important;
+      display: block !important;
+    }
 
-  @page {
-    size: A4 landscape;
-    margin: 0;
+    #invoice-print-root .invoice-body {
+      flex: 1 1 auto !important;
+      overflow: hidden !important;
+      width: 100% !important;
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 4px !important;
+    }
+
+    #invoice-print-root .invoice-summary {
+      flex-shrink: 0 !important;
+    }
+
+    #invoice-print-root .invoice-image-wrap {
+      flex-shrink: 0 !important;
+      width: 100% !important;
+      height: 60mm !important;
+      border: 1px solid #e5e7eb !important;
+      border-radius: 6px !important;
+      background: #f9fafb !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      overflow: hidden !important;
+      box-sizing: border-box !important;
+      padding: 3mm !important;
+    }
+
+    #invoice-print-root .invoice-image {
+      max-width: 100% !important;
+      max-height: 54mm !important;
+      width: auto !important;
+      height: auto !important;
+      object-fit: contain !important;
+      display: block !important;
+    }
+
+    #invoice-print-root * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    @page {
+      size: A4 landscape;
+      margin: 0;
+    }
   }
-}
 `;
 
 function injectPrintStyle() {
@@ -82,132 +154,175 @@ function injectPrintStyle() {
 
 function InvoiceDocument({ invoice, businessName, bannerUrl }) {
   const invoiceNo = invoice?._id ? String(invoice._id).slice(-8).toUpperCase() : "N/A";
-  const orders = invoice?.orders || [];
+  const orders = (invoice?.orders || []).slice(0, MAX_INVOICE_ORDERS);
   const totalAmt = invoice?.total_amount ?? 0;
   const outstandingBalance = Number(invoice?.outstanding_balance) || 0;
   const newBalance = Number(invoice?.new_balance) || outstandingBalance + Number(totalAmt || 0);
+  const hasBanner = !!bannerUrl;
 
   return (
-    <div className="invoice-copy bg-white text-gray-900 overflow-hidden">
-      {bannerUrl && (
-        <img
-          src={bannerUrl}
-          alt="Invoice banner"
-          className="invoice-banner w-full h-auto object-cover"
-        />
+    <div
+      className="invoice-copy bg-white"
+      style={{ fontFamily: "'Segoe UI', sans-serif", boxSizing: "border-box" }}
+    >
+      {/* ── Banner ── */}
+      {hasBanner && (
+        <div
+          className="invoice-banner-wrap"
+          style={{ width: "100%", flexShrink: 0, marginBottom: "10px", lineHeight: 0 }}
+        >
+          <img
+            src={bannerUrl}
+            alt="Invoice banner"
+            className="invoice-banner"
+            style={{ width: "100%", height: "auto", display: "block" }}
+          />
+        </div>
       )}
 
-      <div className="invoice-body space-y-3" style={{ fontFamily: "'Segoe UI', sans-serif" }}>
-        <div className="flex items-start justify-between gap-3 border-b border-gray-200 pb-2">
-          <div>
-            <p className="text-base font-semibold tracking-tight text-gray-900 leading-tight">
-              {businessName || "EmbroideryOS"}
-            </p>
-            <p className="text-[10px] text-gray-500 mt-0.5">Billing Statement</p>
+      <div
+        className="invoice-body"
+        style={{ display: "flex", flexDirection: "column", gap: "8px", flex: "1 1 auto", overflow: "hidden" }}
+      >
+        {/* ── Header: only when NO banner ── */}
+        {!hasBanner && (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+            <span style={{ fontSize: "11px", fontWeight: 700, color: "#111827" }}>{businessName || "EmbroideryOS"}</span>
+            <span style={{ fontSize: "9px", fontWeight: 500, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.08em" }}>Invoice</span>
           </div>
-          <div className="text-right">
-            <p className="text-xl font-semibold tracking-tight text-gray-900">Invoice</p>
+        )}
+
+        {/* ── Meta ── */}
+        <div style={{ flexShrink: 0, padding: "7px 10px", background: "#f9fafb", borderRadius: "8px", border: "1px solid #e5e7eb" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "4px" }}>
+            <span style={{ fontSize: "13px", fontWeight: 800, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "60%" }}>
+              {invoice.customer_name || "-"}
+            </span>
+            <span style={{ fontSize: "10px", fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}>
+              INV-{invoiceNo}
+            </span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <span style={{ fontSize: "10px", fontWeight: 400, color: "#6b7280" }}>
+              {invoice.customer_person || "-"}
+            </span>
+            <span style={{ fontSize: "10px", fontWeight: 400, color: "#6b7280" }}>
+              {formatDate(invoice.invoice_date, "DD MMM yyyy") || "-"}
+            </span>
           </div>
         </div>
 
-        <div className="grid grid-cols-4 border border-gray-200 rounded-lg overflow-hidden text-[11px]">
-          {[
-            { label: "Customer Name", value: invoice.customer_name || "-" },
-            { label: "Customer Person", value: invoice.customer_person || "-" },
-            { label: "Invoice Date", value: formatDate(invoice.invoice_date, "DD MMM yyyy") || "-" },
-            { label: "Bill No", value: `INV-${invoiceNo}` },
-          ].map((item, idx) => (
-            <div key={item.label} className={`px-2 py-1.5 ${idx !== 3 ? "border-r border-gray-100" : ""}`}>
-              <p className="text-[9px] uppercase tracking-wider text-gray-500 font-medium">{item.label}</p>
-              <p className="mt-0.5 text-[11px] font-semibold text-gray-900 truncate">{item.value}</p>
-            </div>
-          ))}
-        </div>
-
-        <div className="overflow-hidden rounded-lg border border-gray-200">
-          <table className="w-full text-left border-collapse text-[10px]">
+        {/* ── Orders table ── */}
+        <div style={{ border: "1px solid #e5e7eb", borderRadius: "10px", overflow: "hidden", flexShrink: 0 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", tableLayout: "fixed" }}>
+            <colgroup>
+              <col style={{ width: "5%" }} />
+              <col style={{ width: "16%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "32%" }} />
+              <col style={{ width: "13%" }} />
+              <col style={{ width: "11%" }} />
+              <col style={{ width: "13%" }} />
+            </colgroup>
             <thead>
-              <tr className="bg-gray-50 text-gray-700 uppercase tracking-wider">
-                {["#", "Date", "Lot", "Machine", "Description", "Qty", "Rate", "Amount"].map((h, i) => (
-                  <th key={h} className={`${i >= 5 ? "text-right" : ""} px-1.5 py-1.5 font-medium`}>
+              <tr style={{ background: "#f3f4f6" }}>
+                {["#", "Date", "Lot", "Description", "Qty", "Rate", "Amount"].map((h, i) => (
+                  <th key={h} style={{ padding: "7px 6px", fontWeight: 700, textAlign: i >= 4 ? "right" : "left", fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#111827", whiteSpace: "nowrap" }}>
                     {h}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {orders.map((order, idx) => (
-                <tr key={order._id} className={idx % 2 === 0 ? "bg-white text-gray-800" : "bg-gray-50/60 text-gray-800"}>
-                  <td className="px-1.5 py-1 text-gray-600">{idx + 1}</td>
-                  <td className="px-1.5 py-1 whitespace-nowrap font-medium">{formatDate(order.date, "DD MMM yyyy")}</td>
-                  <td className="px-1.5 py-1">{order.lot_no || "-"}</td>
-                  <td className="px-1.5 py-1">{order.machine_no || "-"}</td>
-                  <td className="px-1.5 py-1">{order.description || "-"}</td>
-                  <td className="px-1.5 py-1 text-right tabular-nums">{formatNumbers(order.quantity, 0)} {order.unit}</td>
-                  <td className="px-1.5 py-1 text-right tabular-nums">{formatNumbers(order.rate, 2)}</td>
-                  <td className="px-1.5 py-1 text-right tabular-nums font-semibold">{formatNumbers(order.total_amount, 2)}</td>
+                <tr key={order._id ?? idx} style={{ background: idx % 2 === 0 ? "#fff" : "#f9fafb", borderTop: "1px solid #f3f4f6" }}>
+                  <td style={{ padding: "6px", color: "#111827", fontWeight: 400 }}>{idx + 1}</td>
+                  <td style={{ padding: "6px", fontWeight: 600, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {formatDate(order.date, "DD MMM yyyy")}
+                  </td>
+                  <td style={{ padding: "6px", fontWeight: 400, color: "#111827", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {order.lot_no || "-"}
+                  </td>
+                  <td style={{ padding: "6px", fontWeight: 400, color: "#111827", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {order.description || "-"}
+                  </td>
+                  <td style={{ padding: "6px", textAlign: "right", fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
+                    {formatNumbers(order.quantity, 0)} {order.unit}
+                  </td>
+                  <td style={{ padding: "6px", textAlign: "right", fontWeight: 400, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
+                    {formatNumbers(order.rate, 2)}
+                  </td>
+                  <td style={{ padding: "6px", textAlign: "right", fontWeight: 800, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
+                    {formatNumbers(order.total_amount, 2)}
+                  </td>
                 </tr>
               ))}
             </tbody>
-
-            <tfoot>
-              <tr className="bg-gray-50">
-                <td colSpan={7} className="px-1.5 py-1.5 text-right font-bold tracking-wider text-gray-700 uppercase">Total</td>
-                <td className="px-1.5 py-1.5 text-right font-extrabold text-gray-900 tabular-nums">{formatNumbers(totalAmt, 2)}</td>
-              </tr>
-            </tfoot>
           </table>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        {/* Spacer */}
+        <div style={{ flex: "1 1 auto" }} />
+
+        {/* ── Summary ── */}
+        <div className="invoice-summary" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", flexShrink: 0 }}>
           <div>
             {invoice.note && (
-              <div className="rounded-lg px-2 py-1.5 border border-gray-200 bg-gray-50/70">
-                <p className="text-[9px] font-medium uppercase tracking-wider text-gray-600">Notes</p>
-                <p className="text-[10px] text-gray-700 mt-0.5 break-words">{invoice.note}</p>
+              <div style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "8px 10px", background: "#f9fafb", height: "100%", boxSizing: "border-box" }}>
+                <p style={{ fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.07em", color: "#111827", margin: 0, fontWeight: 600 }}>Notes</p>
+                <p style={{ fontSize: "11px", fontWeight: 400, color: "#111827", margin: "3px 0 0", wordBreak: "break-word" }}>{invoice.note}</p>
               </div>
             )}
           </div>
-
-          <div className="rounded-lg border border-gray-200 p-2 bg-gray-50/70">
-            <div className="space-y-1.5 text-[10px]">
-              <div className="flex items-center justify-between">
-                <span className="text-gray-600">Outstanding</span>
-                <span className="tabular-nums text-gray-800">{formatNumbers(outstandingBalance, 2)}</span>
+          <div style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "8px 10px", background: "#f9fafb" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px" }}>
+                <span style={{ fontWeight: 400, color: "#111827" }}>Outstanding</span>
+                <span style={{ fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" }}>{formatNumbers(outstandingBalance, 2)}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-gray-600">Sub Total</span>
-                <span className="tabular-nums text-gray-800">{formatNumbers(totalAmt, 2)}</span>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px" }}>
+                <span style={{ fontWeight: 400, color: "#111827" }}>Sub Total</span>
+                <span style={{ fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" }}>{formatNumbers(totalAmt, 2)}</span>
               </div>
-              <div className="flex items-center justify-between pt-1 border-t border-gray-200">
-                <span className="font-semibold text-gray-900">New Balance</span>
-                <span className="font-extrabold text-sm tabular-nums text-gray-900">{formatNumbers(newBalance, 2)}</span>
+              <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1.5px solid #e5e7eb", paddingTop: "5px" }}>
+                <span style={{ fontWeight: 700, color: "#111827", fontSize: "11px" }}>New Balance</span>
+                <span style={{ fontWeight: 900, fontSize: "14px", fontVariantNumeric: "tabular-nums", color: "#111827" }}>
+                  {formatNumbers(newBalance, 2)}
+                </span>
               </div>
             </div>
           </div>
         </div>
 
-        {invoice.image_data && (
-          <div className="rounded-lg border border-gray-300 bg-gray-50 p-2">
-            <img
-              src={invoice.image_data}
-              alt="Invoice attachment"
-              className="invoice-image w-full h-auto object-contain rounded"
-            />
+        {/* ── Image box: always shown, empty if no image ── */}
+        {(
+          <div
+            className="invoice-image-wrap"
+            style={{
+              flexShrink: 0,
+              width: "100%",
+              height: "190px",
+              border: "1px solid #e5e7eb",
+              borderRadius: "10px",
+              background: "#f9fafb",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              overflow: "hidden",
+              boxSizing: "border-box",
+              padding: "8px",
+            }}
+          >
+            {invoice.image_data && invoice.image_data.trim() !== "" && (
+              <img
+                src={invoice.image_data}
+                alt=""
+                className="invoice-image"
+                style={{ maxWidth: "100%", maxHeight: "174px", width: "auto", height: "auto", objectFit: "contain", display: "block" }}
+              />
+            )}
           </div>
         )}
-
-        <div className="pt-1 border-t border-gray-200 flex items-end justify-between">
-          <div>
-            <p className="text-[8px] text-gray-400 uppercase tracking-wider">Generated by</p>
-            <p className="text-[10px] font-semibold text-gray-600 mt-0.5">{businessName || "EmbroideryOS"}</p>
-          </div>
-          <div className="text-center">
-            <div style={{ width: "110px", borderTop: "1px solid #6b7280", paddingTop: "4px" }}>
-              <p className="text-[8px] text-gray-400 uppercase tracking-wider">Signature</p>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -224,11 +339,11 @@ export default function InvoicePreviewModal({
 }) {
   injectPrintStyle();
 
+  const ordersCount = invoice?.orders?.length ?? 0;
+  const isOverLimit = ordersCount > MAX_INVOICE_ORDERS;
+
   function handlePrint() {
-    if (onPrint) {
-      onPrint();
-      return;
-    }
+    if (onPrint) { onPrint(); return; }
     window.print();
   }
 
@@ -237,42 +352,58 @@ export default function InvoicePreviewModal({
       isOpen={isOpen}
       onClose={onClose}
       title="Invoice Preview"
-      subtitle="Review and print"
+      subtitle="2 copies · A5 each · A4 Landscape"
       maxWidth="max-w-6xl"
       footer={
         <div className="flex items-center justify-end gap-2.5 w-full">
           <Button variant="secondary" outline icon={X} onClick={onClose}>Close</Button>
-          <Button icon={Printer} onClick={handlePrint} disabled={!invoice || loading}>
-            Print Invoice
-          </Button>
+          <Button icon={Printer} onClick={handlePrint} disabled={!invoice || loading}>Print Invoice</Button>
         </div>
       }
     >
       {loading && (
-        <div className="flex items-center justify-center py-16 text-sm text-gray-400">
-          Loading invoice...
-        </div>
+        <div className="flex items-center justify-center py-16 text-sm text-gray-400">Loading invoice...</div>
       )}
-
       {!loading && !invoice && (
-        <div className="flex items-center justify-center py-16 text-sm text-gray-400">
-          No invoice data available.
-        </div>
+        <div className="flex items-center justify-center py-16 text-sm text-gray-400">No invoice data available.</div>
       )}
 
       {!loading && invoice && (
-        <div className="p-1 overflow-auto">
-          <div id="invoice-print-root" className="mx-auto bg-white">
-            <div className="print-layout block">
-              <div className="screen-only" style={{ width: "560px", margin: "0 auto" }}>
-                <InvoiceDocument invoice={invoice} businessName={businessName} bannerUrl={bannerUrl} />
+        <div className="p-2 overflow-auto">
+          {isOverLimit && (
+            <div style={{ marginBottom: "10px", padding: "8px 12px", background: "#fef3c7", border: "1px solid #f59e0b", borderRadius: "8px", fontSize: "12px", color: "#92400e" }}>
+              ⚠️ This invoice has <strong>{ordersCount} orders</strong> — only first <strong>{MAX_INVOICE_ORDERS}</strong> will print. Please split into multiple invoices.
+            </div>
+          )}
+
+          <div id="invoice-print-root">
+            <div
+              className="screen-only"
+              style={{ display: "flex", justifyContent: "center", background: "#d1d5db", padding: "28px 16px 16px", borderRadius: "12px", position: "relative" }}
+            >
+              <div style={{ position: "absolute", top: 0, bottom: 0, left: "50%", transform: "translateX(-50%)", width: "1px", borderLeft: "2px dashed #9ca3af", pointerEvents: "none", zIndex: 2 }} />
+              <div style={{ position: "absolute", top: "7px", left: "50%", transform: "translateX(-50%)", fontSize: "9px", color: "#6b7280", background: "#d1d5db", padding: "1px 6px", borderRadius: "3px", whiteSpace: "nowrap", zIndex: 3, letterSpacing: "0.06em" }}>
+                ✂ cut here
               </div>
 
-              <div className="print-only" style={{ display: "none" }}>
+              {[1, 2].map((copyNum) => (
+                <div key={copyNum} style={{ position: "relative", margin: "0 4px" }}>
+                  <span style={{ position: "absolute", top: "-20px", left: "50%", transform: "translateX(-50%)", fontSize: "10px", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 600, whiteSpace: "nowrap" }}>
+                    Copy {copyNum}
+                  </span>
+                  <div style={{ width: "390px", height: "553px", background: "#fff", borderRadius: "10px", padding: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.13)", boxSizing: "border-box", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+                    <InvoiceDocument invoice={invoice} businessName={businessName} bannerUrl={bannerUrl} />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="print-layout" style={{ display: "none" }}>
+              <div className="print-copy">
                 <InvoiceDocument invoice={invoice} businessName={businessName} bannerUrl={bannerUrl} />
               </div>
-
-              <div className="print-only" style={{ display: "none" }}>
+              <div className="copy-divider" />
+              <div className="print-copy">
                 <InvoiceDocument invoice={invoice} businessName={businessName} bannerUrl={bannerUrl} />
               </div>
             </div>
