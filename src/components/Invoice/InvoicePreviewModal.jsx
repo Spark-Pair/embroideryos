@@ -19,7 +19,7 @@ const PRINT_STYLE = `
       width: 297mm !important;
       height: 210mm !important;
       margin: 0 !important;
-      padding: 0 !important;
+      padding: 0 1pt !important;
       overflow: hidden !important;
     }
 
