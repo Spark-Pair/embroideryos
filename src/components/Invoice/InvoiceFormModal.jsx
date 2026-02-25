@@ -6,6 +6,8 @@ import Input from "../Input";
 import { fetchInvoiceOrderGroups } from "../../api/invoice";
 import { formatDate, formatNumbers } from "../../utils";
 
+const MAX_INVOICE_ORDERS = 7;
+
 function toDateInput(value = new Date()) {
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return "";
@@ -121,6 +123,10 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction }) {
         if (next.length === 0) setSelectedCustomerId("");
         return next;
       }
+      if (prev.length >= MAX_INVOICE_ORDERS) {
+        setError(`Maximum ${MAX_INVOICE_ORDERS} orders allowed in one invoice.`);
+        return prev;
+      }
       return [...prev, orderId];
     });
   };
@@ -132,12 +138,20 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction }) {
     }
     setError("");
     setSelectedCustomerId(group.customer_id);
-    setSelectedOrderIds((group.orders || []).map((o) => o._id));
+    const allIds = (group.orders || []).map((o) => o._id);
+    if (allIds.length > MAX_INVOICE_ORDERS) {
+      setError(`Customer has more than ${MAX_INVOICE_ORDERS} orders. First ${MAX_INVOICE_ORDERS} selected.`);
+    }
+    setSelectedOrderIds(allIds.slice(0, MAX_INVOICE_ORDERS));
   };
 
   const handleSave = async () => {
     if (!selectedCustomerId || selectedOrderIds.length === 0) {
       setError("Select at least one order first.");
+      return;
+    }
+    if (selectedOrderIds.length > MAX_INVOICE_ORDERS) {
+      setError(`Maximum ${MAX_INVOICE_ORDERS} orders allowed in one invoice.`);
       return;
     }
 
@@ -259,6 +273,7 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction }) {
           <div className="space-y-3">
             <Input label="Customer" value={selectedSummary.customerName || ""} placeholder="Select orders first" readOnly required={false} />
             <Input label="Selected Orders" value={selectedSummary.orderCount ? String(selectedSummary.orderCount) : ""} placeholder="0" readOnly required={false} />
+            <p className="text-[11px] text-gray-500 -mt-2">Max {MAX_INVOICE_ORDERS} orders per invoice</p>
             <Input
               label="Selected Total"
               value={selectedSummary.orderCount ? formatNumbers(selectedSummary.totalAmount, 2) : ""}

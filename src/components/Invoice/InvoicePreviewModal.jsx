@@ -9,9 +9,9 @@ import { formatDate, formatNumbers } from "../../utils";
  * Each copy = 148.5mm wide, 5mm padding all sides
  * Content = 138.5mm × 200mm
  * After cut: all 4 sides = 5mm equal ✓
- * MAX ORDERS = 6
+ * MAX ORDERS = 7
  */
-export const MAX_INVOICE_ORDERS = 6;
+export const MAX_INVOICE_ORDERS = 7;
 
 const PRINT_STYLE = `
   @media print {
@@ -101,7 +101,7 @@ const PRINT_STYLE = `
       width: 100% !important;
       display: flex !important;
       flex-direction: column !important;
-      gap: 4px !important;
+      gap: 8px !important;
     }
 
     #invoice-print-root .invoice-summary {
@@ -111,10 +111,10 @@ const PRINT_STYLE = `
     #invoice-print-root .invoice-image-wrap {
       flex-shrink: 0 !important;
       width: 100% !important;
-      height: 60mm !important;
-      border: 1px solid #e5e7eb !important;
-      border-radius: 6px !important;
-      background: #f9fafb !important;
+      height: 65mm !important;
+      border: 1px solid #111111ed !important;
+      border-radius: 9px !important;
+      background: #dcdcdc !important;
       display: flex !important;
       align-items: center !important;
       justify-content: center !important;
@@ -152,6 +152,18 @@ function injectPrintStyle() {
   document.head.appendChild(s);
 }
 
+function getQuantityInPcs(order) {
+  const pcs = Number(order?.qt_pcs);
+  if (Number.isFinite(pcs) && pcs > 0) return pcs;
+
+  const qty = Number(order?.quantity);
+  if (!Number.isFinite(qty)) return 0;
+
+  if (order?.unit === "Pcs") return qty;
+  if (order?.unit === "Dzn") return qty * 12;
+  return qty;
+}
+
 function InvoiceDocument({ invoice, businessName, bannerUrl }) {
   const invoiceNo = invoice?._id ? String(invoice._id).slice(-8).toUpperCase() : "N/A";
   const orders = (invoice?.orders || []).slice(0, MAX_INVOICE_ORDERS);
@@ -182,7 +194,7 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
 
       <div
         className="invoice-body"
-        style={{ display: "flex", flexDirection: "column", gap: "8px", flex: "1 1 auto", overflow: "hidden" }}
+        style={{ display: "flex", flexDirection: "column", gap: "10px", flex: "1 1 auto", overflow: "hidden" }}
       >
         {/* ── Header: only when NO banner ── */}
         {!hasBanner && (
@@ -193,8 +205,8 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
         )}
 
         {/* ── Meta ── */}
-        <div style={{ flexShrink: 0, padding: "7px 10px", background: "#f9fafb", borderRadius: "8px", border: "1px solid #e5e7eb" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "4px" }}>
+        <div style={{ flexShrink: 0, padding: "6px 10px", background: "#dcdcdc", borderRadius: "8px", border: "1px solid #111111ed" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "2px" }}>
             <span style={{ fontSize: "13px", fontWeight: 800, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "60%" }}>
               {invoice.customer_name || "-"}
             </span>
@@ -203,17 +215,17 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
             </span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-            <span style={{ fontSize: "10px", fontWeight: 400, color: "#6b7280" }}>
+            <span style={{ fontSize: "10px", fontWeight: 400, color: "#111827" }}>
               {invoice.customer_person || "-"}
             </span>
-            <span style={{ fontSize: "10px", fontWeight: 400, color: "#6b7280" }}>
+            <span style={{ fontSize: "10px", fontWeight: 400, color: "#111827" }}>
               {formatDate(invoice.invoice_date, "DD MMM yyyy") || "-"}
             </span>
           </div>
         </div>
 
         {/* ── Orders table ── */}
-        <div style={{ border: "1px solid #e5e7eb", borderRadius: "10px", overflow: "hidden", flexShrink: 0 }}>
+        <div style={{ border: "1px solid #111111ed", borderRadius: "10px", overflow: "hidden", flexShrink: 0 }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", tableLayout: "fixed" }}>
             <colgroup>
               <col style={{ width: "5%" }} />
@@ -225,9 +237,9 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
               <col style={{ width: "13%" }} />
             </colgroup>
             <thead>
-              <tr style={{ background: "#f3f4f6" }}>
-                {["#", "Date", "Lot", "Description", "Qty", "Rate", "Amount"].map((h, i) => (
-                  <th key={h} style={{ padding: "7px 6px", fontWeight: 700, textAlign: i >= 4 ? "right" : "left", fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#111827", whiteSpace: "nowrap" }}>
+              <tr style={{ background: "#1e293b" }}>
+                {["#", "Date", "Lot", "Description", "Qty (Pcs)", "Rate", "Amount"].map((h, i) => (
+                  <th key={h} style={{ padding: "7px 6px", fontWeight: 700, textAlign: i >= 4 ? "right" : "left", fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#fff", whiteSpace: "nowrap" }}>
                     {h}
                   </th>
                 ))}
@@ -235,7 +247,7 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
             </thead>
             <tbody>
               {orders.map((order, idx) => (
-                <tr key={order._id ?? idx} style={{ background: idx % 2 === 0 ? "#fff" : "#f9fafb", borderTop: "1px solid #f3f4f6" }}>
+                <tr key={order._id ?? idx} style={{ background: idx % 2 === 0 ? "#fff" : "#dcdcdc", borderTop: "1px solid #111111ed" }}>
                   <td style={{ padding: "6px", color: "#111827", fontWeight: 400 }}>{idx + 1}</td>
                   <td style={{ padding: "6px", fontWeight: 600, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {formatDate(order.date, "DD MMM yyyy")}
@@ -247,7 +259,7 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
                     {order.description || "-"}
                   </td>
                   <td style={{ padding: "6px", textAlign: "right", fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
-                    {formatNumbers(order.quantity, 0)} {order.unit}
+                    {formatNumbers(getQuantityInPcs(order), 0)} Pcs
                   </td>
                   <td style={{ padding: "6px", textAlign: "right", fontWeight: 400, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
                     {formatNumbers(order.rate, 2)}
@@ -268,13 +280,13 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
         <div className="invoice-summary" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", flexShrink: 0 }}>
           <div>
             {invoice.note && (
-              <div style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "8px 10px", background: "#f9fafb", height: "100%", boxSizing: "border-box" }}>
+              <div style={{ border: "1px solid #111111ed", borderRadius: "10px", padding: "8px 10px", background: "#dcdcdc", height: "100%", boxSizing: "border-box" }}>
                 <p style={{ fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.07em", color: "#111827", margin: 0, fontWeight: 600 }}>Notes</p>
                 <p style={{ fontSize: "11px", fontWeight: 400, color: "#111827", margin: "3px 0 0", wordBreak: "break-word" }}>{invoice.note}</p>
               </div>
             )}
           </div>
-          <div style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "8px 10px", background: "#f9fafb" }}>
+          <div style={{ border: "1px solid #111111ed", borderRadius: "10px", padding: "8px 10px", background: "#dcdcdc" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px" }}>
                 <span style={{ fontWeight: 400, color: "#111827" }}>Outstanding</span>
@@ -284,7 +296,7 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
                 <span style={{ fontWeight: 400, color: "#111827" }}>Sub Total</span>
                 <span style={{ fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" }}>{formatNumbers(totalAmt, 2)}</span>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1.5px solid #e5e7eb", paddingTop: "5px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1.5px solid #111111ed", paddingTop: "5px" }}>
                 <span style={{ fontWeight: 700, color: "#111827", fontSize: "11px" }}>New Balance</span>
                 <span style={{ fontWeight: 900, fontSize: "14px", fontVariantNumeric: "tabular-nums", color: "#111827" }}>
                   {formatNumbers(newBalance, 2)}
@@ -301,10 +313,10 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
             style={{
               flexShrink: 0,
               width: "100%",
-              height: "190px",
-              border: "1px solid #e5e7eb",
+              height: "200px",
+              border: "1px solid #111111ed",
               borderRadius: "10px",
-              background: "#f9fafb",
+              background: "#dcdcdc",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
