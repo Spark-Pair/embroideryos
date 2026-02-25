@@ -1,15 +1,31 @@
-// pages/Settings.jsx
-
-import React, { useState, useEffect } from "react";
-import { Plus, SlidersHorizontal, CalendarDays, CheckCircle2, Clock, ImageUp } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  CalendarDays,
+  CheckCircle2,
+  Clock,
+  ImageUp,
+  Plus,
+  SlidersHorizontal,
+  Wallet,
+  Edit3,
+  Power,
+} from "lucide-react";
 import { fetchProductionConfig, createProductionConfig } from "../api/productionConfig";
 import { fetchMyInvoiceBanner, updateMyInvoiceBanner } from "../api/business";
+import {
+  createExpenseItem,
+  fetchExpenseItems,
+  toggleExpenseItemStatus,
+  updateExpenseItem,
+} from "../api/expenseItem";
 import PageHeader from "../components/PageHeader";
 import ProductionConfigFormModal from "../components/StaffRecord/ProductionConfigFormModal";
 import InvoiceBannerModal from "../components/Invoice/InvoiceBannerModal";
+import Modal from "../components/Modal";
+import Input from "../components/Input";
+import Select from "../components/Select";
+import Button from "../components/Button";
 import { useToast } from "../context/ToastContext";
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 const fmt = (val, isDate = false) => {
   if (val === null || val === undefined || val === "") return "—";
@@ -21,39 +37,31 @@ const fmt = (val, isDate = false) => {
   return typeof val === "number" ? val.toLocaleString() : val;
 };
 
-// Fields to display in each config card — same keys as modal
 const DISPLAY_FIELDS = [
-  { key: "stitch_rate",      label: "Stitch Rate"          },
-  { key: "applique_rate",    label: "Applique Rate"         },
-  { key: "on_target_pct",    label: "On Target %"           },
-  { key: "after_target_pct", label: "After Target %"        },
-  { key: "pcs_per_round",    label: "PCs Per Round"         },
-  { key: "target_amount",    label: "Daily Target Amount"   },
-  { key: "off_amount",       label: "Off Day Amount"        },
-  { key: "bonus_rate",       label: "Bonus Rate"            },
-  { key: "allowance",        label: "Monthly Allowance"     },
+  { key: "stitch_rate", label: "Stitch Rate" },
+  { key: "applique_rate", label: "Applique Rate" },
+  { key: "on_target_pct", label: "On Target %" },
+  { key: "after_target_pct", label: "After Target %" },
+  { key: "pcs_per_round", label: "PCs Per Round" },
+  { key: "target_amount", label: "Daily Target Amount" },
+  { key: "off_amount", label: "Off Day Amount" },
+  { key: "bonus_rate", label: "Bonus Rate" },
+  { key: "allowance", label: "Monthly Allowance" },
 ];
 
-// ── Config Card ───────────────────────────────────────────────────────────────
+const EXPENSE_TYPE_LABEL = {
+  cash: "Cash Expense",
+  supplier: "Supplier Expense",
+  fixed: "Fixed Expense",
+};
 
 function ConfigCard({ record, isActive }) {
   return (
-    <div
-      className={`rounded-2xl border bg-white overflow-hidden transition-shadow hover:shadow-sm ${
-        isActive ? "border-gray-900" : "border-gray-200"
-      }`}
-    >
-      {/* Card header */}
-      <div
-        className={`flex items-center justify-between px-5 py-3.5 border-b ${
-          isActive ? "bg-gray-900 border-gray-900" : "bg-gray-50 border-gray-100"
-        }`}
-      >
+    <div className={`rounded-2xl border bg-white overflow-hidden transition-shadow hover:shadow-sm ${isActive ? "border-gray-900" : "border-gray-200"}`}>
+      <div className={`flex items-center justify-between px-5 py-3.5 border-b ${isActive ? "bg-gray-900 border-gray-900" : "bg-gray-50 border-gray-100"}`}>
         <div className="flex items-center gap-2">
           <CalendarDays size={14} className={isActive ? "text-gray-300" : "text-gray-400"} />
-          <span className={`text-sm font-medium ${isActive ? "text-white" : "text-gray-700"}`}>
-            {fmt(record.effective_date, true)}
-          </span>
+          <span className={`text-sm font-medium ${isActive ? "text-white" : "text-gray-700"}`}>{fmt(record.effective_date, true)}</span>
         </div>
 
         {isActive ? (
@@ -69,7 +77,6 @@ function ConfigCard({ record, isActive }) {
         )}
       </div>
 
-      {/* Fields grid */}
       <div className="grid grid-cols-2 gap-px bg-gray-100">
         {DISPLAY_FIELDS.map(({ key, label }) => (
           <div key={key} className="bg-white px-4 py-3">
@@ -82,21 +89,17 @@ function ConfigCard({ record, isActive }) {
   );
 }
 
-// ── Section wrapper ────────────────────────────────────────────────────────────
-
-function SettingsSection({ title, description, icon: Icon, action, children }) {
+function SettingsSection({ title, description, icon, action, children }) {
   return (
     <div className="rounded-3xl bg-white border border-gray-300 overflow-hidden">
       <div className="flex items-center justify-between px-7 py-5 border-b border-gray-200 bg-gray-50">
         <div className="flex items-center gap-3">
           <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-gray-100 border border-gray-200">
-            <Icon size={17} className="text-gray-500" />
+            {React.createElement(icon, { size: 17, className: "text-gray-500" })}
           </div>
           <div>
             <h2 className="text-sm font-semibold text-gray-800">{title}</h2>
-            {description && (
-              <p className="text-xs text-gray-400 mt-0.5">{description}</p>
-            )}
+            {description && <p className="text-xs text-gray-400 mt-0.5">{description}</p>}
           </div>
         </div>
         {action && <div>{action}</div>}
@@ -105,8 +108,6 @@ function SettingsSection({ title, description, icon: Icon, action, children }) {
     </div>
   );
 }
-
-// ── Skeleton ───────────────────────────────────────────────────────────────────
 
 function ConfigCardSkeleton() {
   return (
@@ -124,27 +125,89 @@ function ConfigCardSkeleton() {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+function ExpenseItemFormModal({ isOpen, onClose, initialData, onSave }) {
+  const mode = initialData ? "edit" : "add";
+  const [formData, setFormData] = useState({
+    id: "",
+    name: "",
+    expense_type: "cash",
+    default_amount: "",
+  });
+
+  useEffect(() => {
+    setFormData({
+      id: initialData?._id || "",
+      name: initialData?.name || "",
+      expense_type: initialData?.expense_type || "cash",
+      default_amount: initialData?.default_amount ?? "",
+    });
+  }, [initialData, isOpen]);
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={mode === "add" ? "Add Expense Item" : "Edit Expense Item"}
+      subtitle="Manage selectable expense/item options"
+      maxWidth="max-w-lg"
+      footer={
+        <div className="flex gap-3">
+          <Button outline variant="secondary" onClick={onClose} className="w-1/3">Discard</Button>
+          <Button
+            className="grow"
+            onClick={async () => {
+              await onSave(mode === "add" ? "add" : "edit", {
+                ...formData,
+                default_amount: formData.default_amount === "" ? 0 : Number(formData.default_amount),
+              });
+              onClose();
+            }}
+          >
+            {mode === "add" ? "Create Item" : "Save Changes"}
+          </Button>
+        </div>
+      }
+    >
+      <div className="grid grid-cols-1 gap-3 p-0.5">
+        <Input label="Item Name" value={formData.name} onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))} capitalize />
+        <Select
+          label="Expense Type"
+          value={formData.expense_type}
+          onChange={(value) => setFormData((p) => ({ ...p, expense_type: value }))}
+          options={[
+            { label: "Cash Expense", value: "cash" },
+            { label: "Supplier Expense", value: "supplier" },
+            { label: "Fixed Expense", value: "fixed" },
+          ]}
+        />
+        <Input
+          label="Default Amount"
+          required={false}
+          type="number"
+          value={formData.default_amount}
+          onChange={(e) => setFormData((p) => ({ ...p, default_amount: e.target.value }))}
+        />
+      </div>
+    </Modal>
+  );
+}
 
 export default function SettingsPage() {
   const { showToast } = useToast();
 
-  const [records,    setRecords]    = useState([]);
-  const [loading,    setLoading]    = useState(false);
-  const [formModal,  setFormModal]  = useState(false);
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [formModal, setFormModal] = useState(false);
   const [invoiceBanner, setInvoiceBanner] = useState("");
   const [bannerModalOpen, setBannerModalOpen] = useState(false);
+  const [expenseItems, setExpenseItems] = useState([]);
+  const [expenseItemModal, setExpenseItemModal] = useState({ isOpen: false, data: null });
 
-  // ── Load all configs ───────────────────────────────────────────────────────
-  // Assumes API returns array when no params — adjust if your endpoint differs
-
-  const loadConfigs = async () => {
+  const loadConfigs = useCallback(async () => {
     try {
       setLoading(true);
       const res = await fetchProductionConfig();
-      // Handle both: array response or single object
       const data = Array.isArray(res.data) ? res.data : [res.data].filter(Boolean);
-      // Sort descending by effective_date — latest first
       data.sort((a, b) => new Date(b.effective_date) - new Date(a.effective_date));
       setRecords(data);
     } catch {
@@ -152,9 +215,18 @@ export default function SettingsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [showToast]);
 
-  useEffect(() => { loadConfigs(); }, []);
+  const loadExpenseItems = useCallback(async () => {
+    try {
+      const res = await fetchExpenseItems();
+      setExpenseItems(res?.data || []);
+    } catch {
+      showToast({ type: "error", message: "Failed to load expense items" });
+    }
+  }, [showToast]);
+
+  useEffect(() => { loadConfigs(); }, [loadConfigs]);
 
   useEffect(() => {
     const loadInvoiceBanner = async () => {
@@ -167,9 +239,8 @@ export default function SettingsPage() {
     };
 
     loadInvoiceBanner();
-  }, []);
-
-  // ── Save new config ────────────────────────────────────────────────────────
+    loadExpenseItems();
+  }, [loadExpenseItems]);
 
   const handleSave = async (payload) => {
     try {
@@ -181,17 +252,17 @@ export default function SettingsPage() {
         type: "error",
         message: err.response?.data?.message || "Failed to add config",
       });
-      throw err; // keep modal open on error
+      throw err;
     }
   };
 
-  // Active = record with latest effective_date that is <= today
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    return now;
+  }, []);
 
-  const activeRecord = records.find(
-    (r) => r.effective_date && new Date(r.effective_date) <= today
-  );
+  const activeRecord = records.find((r) => r.effective_date && new Date(r.effective_date) <= today);
 
   const handleSaveBanner = async (bannerData) => {
     try {
@@ -199,15 +270,16 @@ export default function SettingsPage() {
       setInvoiceBanner(res?.invoice_banner_data || "");
       showToast({ type: "success", message: "Invoice banner updated" });
     } catch (err) {
-      showToast({
-        type: "error",
-        message: err.response?.data?.message || "Failed to update invoice banner",
-      });
+      showToast({ type: "error", message: err.response?.data?.message || "Failed to update invoice banner" });
       throw err;
     }
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
+  const groupedExpenseItems = useMemo(() => ({
+    cash: expenseItems.filter((i) => i.expense_type === "cash"),
+    supplier: expenseItems.filter((i) => i.expense_type === "supplier"),
+    fixed: expenseItems.filter((i) => i.expense_type === "fixed"),
+  }), [expenseItems]);
 
   return (
     <>
@@ -218,8 +290,6 @@ export default function SettingsPage() {
         />
 
         <div className="flex flex-col gap-6 pb-10">
-
-          {/* ── Production Configuration ─────────────────────────────────── */}
           <SettingsSection
             title="Production Configuration"
             description="Global rates and targets applied to all staff records."
@@ -249,14 +319,76 @@ export default function SettingsPage() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 {records.map((record) => (
-                  <ConfigCard
-                    key={record._id}
-                    record={record}
-                    isActive={activeRecord?._id === record._id}
-                  />
+                  <ConfigCard key={record._id} record={record} isActive={activeRecord?._id === record._id} />
                 ))}
               </div>
             )}
+          </SettingsSection>
+
+          <SettingsSection
+            title="Expense Items"
+            description="Manage available items for cash, supplier, and fixed expenses."
+            icon={Wallet}
+            action={
+              <button
+                onClick={() => setExpenseItemModal({ isOpen: true, data: null })}
+                className="flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 transition-colors"
+              >
+                <Plus size={15} />
+                Add Expense Item
+              </button>
+            }
+          >
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {["cash", "supplier", "fixed"].map((type) => (
+                <div key={type} className="rounded-2xl border border-gray-200 overflow-hidden">
+                  <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                    <p className="text-sm font-semibold text-gray-800">{EXPENSE_TYPE_LABEL[type]}</p>
+                  </div>
+                  <div className="max-h-80 overflow-auto divide-y divide-gray-200">
+                    {groupedExpenseItems[type].length === 0 ? (
+                      <p className="px-4 py-5 text-sm text-gray-400">No items found.</p>
+                    ) : groupedExpenseItems[type].map((item) => (
+                      <div key={item._id} className="px-4 py-3.5">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-gray-800">{item.name}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">Default: {fmt(item.default_amount)}</p>
+                            <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-[10px] font-medium ${item.isActive ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>
+                              {item.isActive ? "Active" : "Inactive"}
+                            </span>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            <button
+                              className="p-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100"
+                              onClick={() => setExpenseItemModal({ isOpen: true, data: item })}
+                              aria-label="Edit expense item"
+                            >
+                              <Edit3 size={14} />
+                            </button>
+                            <button
+                              className={`p-2 rounded-lg border ${item.isActive ? "border-rose-300 text-rose-600 hover:bg-rose-50" : "border-emerald-300 text-emerald-600 hover:bg-emerald-50"}`}
+                              onClick={async () => {
+                                try {
+                                  await toggleExpenseItemStatus(item._id);
+                                  loadExpenseItems();
+                                  showToast({ type: "success", message: "Expense item status updated" });
+                                } catch (err) {
+                                  showToast({ type: "error", message: err.response?.data?.message || "Failed to update item status" });
+                                }
+                              }}
+                              aria-label="Toggle expense item status"
+                            >
+                              <Power size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </SettingsSection>
 
           <SettingsSection
@@ -275,11 +407,7 @@ export default function SettingsPage() {
           >
             {invoiceBanner ? (
               <div className="rounded-2xl border border-gray-200 overflow-hidden bg-white">
-                <img
-                  src={invoiceBanner}
-                  alt="Current invoice banner"
-                  className="w-full max-h-72 object-cover"
-                />
+                <img src={invoiceBanner} alt="Current invoice banner" className="w-full max-h-72 object-cover" />
               </div>
             ) : (
               <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 py-12 flex flex-col items-center justify-center text-gray-400">
@@ -289,15 +417,34 @@ export default function SettingsPage() {
               </div>
             )}
           </SettingsSection>
-
         </div>
       </div>
 
-      {/* Add Config Modal */}
       <ProductionConfigFormModal
         isOpen={formModal}
         onClose={() => setFormModal(false)}
         onSave={handleSave}
+      />
+
+      <ExpenseItemFormModal
+        isOpen={expenseItemModal.isOpen}
+        initialData={expenseItemModal.data}
+        onClose={() => setExpenseItemModal({ isOpen: false, data: null })}
+        onSave={async (action, payload) => {
+          try {
+            if (action === "add") {
+              await createExpenseItem(payload);
+              showToast({ type: "success", message: "Expense item added" });
+            } else {
+              await updateExpenseItem(payload.id, payload);
+              showToast({ type: "success", message: "Expense item updated" });
+            }
+            loadExpenseItems();
+          } catch (err) {
+            showToast({ type: "error", message: err.response?.data?.message || "Failed to save expense item" });
+            throw err;
+          }
+        }}
       />
 
       <InvoiceBannerModal

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Eye, Plus } from "lucide-react";
+import { Eye, MoreVertical, Plus } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import TableToolbar from "../components/table/TableToolbar";
 import TableSkeleton from "../components/table/TableLoader";
 import FilterDrawer from "../components/FilterDrawer";
+import ContextMenu from "../components/ContextMenu";
 import { useToast } from "../context/ToastContext";
 import { formatDate, formatNumbers } from "../utils";
 import { createInvoice, fetchInvoice, fetchInvoices } from "../api/invoice";
@@ -24,6 +25,7 @@ export default function Invoices() {
   const [previewModal, setPreviewModal] = useState({ isOpen: false, data: null });
   const [previewLoading, setPreviewLoading] = useState(false);
   const [invoiceBanner, setInvoiceBanner] = useState("");
+  const [activeMenu, setActiveMenu] = useState(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [filters, setFilters] = useState({
     customer_name: "",
@@ -186,16 +188,26 @@ export default function Invoices() {
                         <td className="px-5 py-4 text-sm font-semibold text-gray-800">{invoice.customer_name}</td>
                         <td className="px-5 py-4 text-sm text-gray-600">{formatNumbers(invoice.order_count, 0)}</td>
                         <td className="px-5 py-4 text-sm font-semibold text-emerald-700">{formatNumbers(invoice.total_amount, 2)}</td>
-                        <td className="px-5 py-4 text-right">
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            outline
-                            icon={Eye}
-                            onClick={() => handleOpenPreview(invoice._id)}
+                        <td className="px-5 py-4 text-right relative">
+                          <button
+                            onClick={() => setActiveMenu(activeMenu === invoice._id ? null : invoice._id)}
+                            className="p-2 text-gray-400 hover:text-gray-900 rounded-lg hover:bg-gray-100"
+                            aria-label="Open actions menu"
                           >
-                            Preview
-                          </Button>
+                            <MoreVertical size={18} />
+                          </button>
+                          <ContextMenu isOpen={activeMenu === invoice._id}>
+                            <button
+                              onClick={() => {
+                                handleOpenPreview(invoice._id);
+                                setActiveMenu(null);
+                              }}
+                              className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl text-gray-600 hover:bg-gray-200 cursor-pointer"
+                            >
+                              <Eye size={16} strokeWidth={2.5} />
+                              Preview Invoice
+                            </button>
+                          </ContextMenu>
                         </td>
                       </tr>
                     ))
