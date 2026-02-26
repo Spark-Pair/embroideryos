@@ -26,8 +26,8 @@ import { useToast } from "../context/ToastContext";
 import { formatDate, formatNumbers } from "../utils";
 
 const EXPENSE_TYPE_OPTIONS = [
-  { label: "Cash Expense", value: "cash" },
-  { label: "Supplier Expense", value: "supplier" },
+  { label: "Expense (Cash)", value: "cash" },
+  { label: "Expense (Supplier)", value: "supplier" },
   { label: "Fixed Expense", value: "fixed" },
 ];
 
@@ -51,31 +51,32 @@ function ExpenseEntryModal({ isOpen, onClose, onAction }) {
   const [error, setError] = useState("");
   const [formData, setFormData] = useState({
     expense_type: "cash",
+    fixed_source: "cash",
     supplier_id: "",
     date: new Date().toISOString().slice(0, 10),
     month: new Date().toISOString().slice(0, 7),
     reference_no: "",
     remarks: "",
   });
-  const [rows, setRows] = useState([{ id: 1, item_name: "", amount: "" }]);
-  const [fixedRows, setFixedRows] = useState([]);
+  const [rows, setRows] = useState([{ id: 1, item_name: "", quantity: "", rate: "" }]);
 
   const isFixedMode = formData.expense_type === "fixed";
   const isSupplierMode = formData.expense_type === "supplier";
+  const isFixedSupplierMode = isFixedMode && formData.fixed_source === "supplier";
 
   useEffect(() => {
     if (!isOpen) return;
 
     setFormData({
       expense_type: "cash",
+      fixed_source: "cash",
       supplier_id: "",
       date: new Date().toISOString().slice(0, 10),
       month: new Date().toISOString().slice(0, 7),
       reference_no: "",
       remarks: "",
     });
-    setRows([{ id: 1, item_name: "", amount: "" }]);
-    setFixedRows([]);
+    setRows([{ id: 1, item_name: "", quantity: "", rate: "" }]);
     setError("");
 
     const load = async () => {
@@ -99,9 +100,9 @@ function ExpenseEntryModal({ isOpen, onClose, onAction }) {
     load();
   }, [isOpen]);
 
-  const cashOrSupplierItems = useMemo(
-    () => expenseItems.filter((item) => item.expense_type === formData.expense_type),
-    [expenseItems, formData.expense_type]
+  const regularItems = useMemo(
+    () => expenseItems.filter((item) => item.expense_type !== "fixed"),
+    [expenseItems]
   );
 
   const fixedItems = useMemo(
@@ -109,42 +110,41 @@ function ExpenseEntryModal({ isOpen, onClose, onAction }) {
     [expenseItems]
   );
 
-  useEffect(() => {
-    if (!isFixedMode) return;
-
-    setFixedRows(
-      fixedItems.map((item) => ({
-        id: item._id,
-        item_name: item.name,
-        amount: item.default_amount ?? 0,
-        selected: false,
-      }))
-    );
-  }, [isFixedMode, fixedItems]);
-
-  const itemOptions = cashOrSupplierItems.map((item) => ({ label: item.name, value: item.name }));
+  const itemOptions = (isFixedMode ? fixedItems : regularItems).map((item) => ({ label: item.name, value: item.name }));
   const supplierOptions = suppliers.map((supplier) => ({ label: supplier.name, value: supplier._id }));
+  const selectedFixedSupplierName = useMemo(() => {
+    if (!isFixedSupplierMode) return "";
+    const supplier = suppliers.find((s) => String(s._id) === String(formData.supplier_id));
+    return supplier?.name || "";
+  }, [isFixedSupplierMode, suppliers, formData.supplier_id]);
 
   const addRow = () => {
-    setRows((prev) => [...prev, { id: Date.now(), item_name: "", amount: "" }]);
+    if (isFixedMode) return;
+    setRows((prev) => [...prev, { id: Date.now(), item_name: "", quantity: "", rate: "" }]);
   };
 
   const removeRow = (id) => {
     setRows((prev) => (prev.length === 1 ? prev : prev.filter((row) => row.id !== id)));
   };
 
-  const payloadItems = isFixedMode
-    ? fixedRows
-      .filter((row) => row.selected)
-      .map((row) => ({ item_name: row.item_name, amount: Number(row.amount) }))
-    : rows
-      .filter((row) => row.item_name && Number(row.amount) > 0)
-      .map((row) => ({ item_name: row.item_name, amount: Number(row.amount) }));
+  const payloadItems = rows
+    .filter((row) => row.item_name && Number(row.quantity) > 0 && Number(row.rate) > 0)
+    .map((row) => {
+      const quantity = Number(row.quantity);
+      const rate = Number(row.rate);
+      return {
+        item_name: row.item_name,
+        quantity,
+        rate,
+        amount: quantity * rate,
+      };
+    });
 
   const isValid =
     (!!formData.expense_type &&
       (isFixedMode ? !!formData.month : !!formData.date) &&
       (!isSupplierMode || !!formData.supplier_id) &&
+      (!isFixedSupplierMode || !!formData.supplier_id) &&
       payloadItems.length > 0);
 
   const handleSave = async () => {
@@ -159,8 +159,9 @@ function ExpenseEntryModal({ isOpen, onClose, onAction }) {
     try {
       await onAction({
         expense_type: formData.expense_type,
-        supplier_id: isSupplierMode ? formData.supplier_id : "",
-        date: isFixedMode ? "" : formData.date,
+        fixed_source: isFixedMode ? formData.fixed_source : "",
+        supplier_id: (isSupplierMode || isFixedSupplierMode) ? formData.supplier_id : "",
+        date: isFixedMode ? new Date().toISOString().slice(0, 10) : formData.date,
         month: isFixedMode ? formData.month : formData.date.slice(0, 7),
         reference_no: formData.reference_no,
         remarks: formData.remarks,
@@ -195,11 +196,14 @@ function ExpenseEntryModal({ isOpen, onClose, onAction }) {
         <Select
           label="Expense Type"
           value={formData.expense_type}
-          onChange={(value) => setFormData((prev) => ({ ...prev, expense_type: value, supplier_id: "" }))}
+          onChange={(value) => {
+            setFormData((prev) => ({ ...prev, expense_type: value, fixed_source: "cash", supplier_id: "" }));
+            setRows([{ id: 1, item_name: "", quantity: "", rate: "" }]);
+          }}
           options={EXPENSE_TYPE_OPTIONS}
         />
 
-        {isSupplierMode ? (
+        {isSupplierMode && (
           <Select
             label="Supplier"
             value={formData.supplier_id}
@@ -207,12 +211,24 @@ function ExpenseEntryModal({ isOpen, onClose, onAction }) {
             options={supplierOptions}
             placeholder={loadingOptions ? "Loading suppliers..." : "Select supplier"}
           />
-        ) : (
+        )}
+
+        {isFixedMode && (
           <Input
-            label={isFixedMode ? "Month" : "Date"}
-            type={isFixedMode ? "month" : "date"}
-            value={isFixedMode ? formData.month : formData.date}
-            onChange={(e) => setFormData((prev) => ({ ...prev, [isFixedMode ? "month" : "date"]: e.target.value }))}
+            label="Fixed For"
+            value={formData.fixed_source === "supplier" ? "Supplier" : "Cash"}
+            readOnly
+            required={false}
+          />
+        )}
+
+        {isFixedMode && (
+          <Input
+            label="Supplier"
+            value={isFixedSupplierMode ? selectedFixedSupplierName : ""}
+            placeholder={isFixedSupplierMode ? "" : "Not required"}
+            readOnly
+            required={false}
           />
         )}
 
@@ -225,12 +241,23 @@ function ExpenseEntryModal({ isOpen, onClose, onAction }) {
           />
         )}
 
-        <Input
-          label="Reference No"
-          required={false}
-          value={formData.reference_no}
-          onChange={(e) => setFormData((prev) => ({ ...prev, reference_no: e.target.value }))}
-        />
+        {isFixedMode && (
+          <Input
+            label="Month"
+            type="month"
+            value={formData.month}
+            onChange={(e) => setFormData((prev) => ({ ...prev, month: e.target.value }))}
+          />
+        )}
+
+        {!isFixedMode && (
+          <Input
+            label="Reference No"
+            required={false}
+            value={formData.reference_no}
+            onChange={(e) => setFormData((prev) => ({ ...prev, reference_no: e.target.value }))}
+          />
+        )}
 
         <div className="md:col-span-2">
           <label className="block mb-1.5 text-sm text-gray-700">Remarks <span className="text-gray-400">(Optional)</span></label>
@@ -254,58 +281,73 @@ function ExpenseEntryModal({ isOpen, onClose, onAction }) {
         </div>
 
         <div className="p-3 space-y-2 max-h-72 overflow-auto">
-          {isFixedMode ? (
-            fixedRows.length === 0 ? (
-              <p className="text-sm text-gray-400">No fixed expense items found. Add them from Settings.</p>
-            ) : (
-              fixedRows.map((row, index) => (
-                <div key={row.id} className="grid grid-cols-12 gap-2 items-center border border-gray-200 rounded-xl px-3 py-2">
-                  <div className="col-span-1">
-                    <input
-                      type="checkbox"
-                      checked={row.selected}
-                      onChange={(e) => setFixedRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, selected: e.target.checked } : r)))}
-                      className="h-4 w-4"
-                    />
-                  </div>
-                  <div className="col-span-7 text-sm text-gray-700 font-medium">{index + 1}. {row.item_name}</div>
-                  <div className="col-span-4">
-                    <Input
-                      label=""
-                      type="number"
-                      value={row.amount}
-                      onChange={(e) => setFixedRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, amount: e.target.value } : r)))}
-                    />
-                  </div>
-                </div>
-              ))
-            )
-          ) : (
-            rows.map((row, index) => (
-              <div key={row.id} className="grid grid-cols-12 gap-2 items-end border border-gray-200 rounded-xl px-3 py-2">
-                <div className="col-span-6">
-                  <Select
-                    label={index === 0 ? "Expense / Item" : ""}
-                    value={row.item_name}
-                    onChange={(value) => setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, item_name: value } : r)))}
-                    options={itemOptions}
-                    placeholder={loadingOptions ? "Loading items..." : "Select expense item"}
-                  />
-                </div>
-                <div className="col-span-4">
-                  <Input
-                    label={index === 0 ? "Amount" : ""}
-                    type="number"
-                    value={row.amount}
-                    onChange={(e) => setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, amount: e.target.value } : r)))}
-                  />
-                </div>
-                <div className="col-span-2 pb-1">
-                  <Button size="sm" variant="danger" outline onClick={() => removeRow(row.id)}>Remove</Button>
-                </div>
+          {itemOptions.length === 0 ? (
+            <p className="text-sm text-gray-400">
+              No {isFixedMode ? "fixed " : ""}expense items found. Add them from Settings.
+            </p>
+          ) : rows.map((row, index) => (
+            <div key={row.id} className="grid grid-cols-12 gap-2 items-end border border-gray-200 rounded-xl px-3 py-2">
+              <div className="col-span-5">
+                <Select
+                  label={index === 0 ? "Expense / Item" : ""}
+                  value={row.item_name}
+                  onChange={(value) => {
+                    setRows((prev) => prev.map((r) => {
+                      if (r.id !== row.id) return r;
+                      const selected = (isFixedMode ? fixedItems : regularItems).find((i) => i.name === value);
+                      if (isFixedMode && selected) {
+                        const nextFixedSource = selected.fixed_source === "supplier" ? "supplier" : "cash";
+                        const nextSupplierId = nextFixedSource === "supplier" ? String(selected.supplier_id || "") : "";
+                        setFormData((prevForm) => ({
+                          ...prevForm,
+                          fixed_source: nextFixedSource,
+                          supplier_id: nextSupplierId,
+                        }));
+                        return {
+                          ...r,
+                          item_name: value,
+                          quantity: selected.default_quantity ?? "",
+                          rate: selected.default_rate ?? "",
+                        };
+                      }
+                      return { ...r, item_name: value };
+                    }));
+                  }}
+                  options={itemOptions}
+                  placeholder={loadingOptions ? "Loading items..." : "Select expense item"}
+                />
               </div>
-            ))
-          )}
+              <div className="col-span-2">
+                <Input
+                  label={index === 0 ? "Quantity" : ""}
+                  type="number"
+                  value={row.quantity}
+                  onChange={(e) => setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, quantity: e.target.value } : r)))}
+                />
+              </div>
+              <div className="col-span-2">
+                <Input
+                  label={index === 0 ? "Rate" : ""}
+                  type="number"
+                  value={row.rate}
+                  onChange={(e) => setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, rate: e.target.value } : r)))}
+                />
+              </div>
+              <div className="col-span-2">
+                <Input
+                  label={index === 0 ? "Amount" : ""}
+                  value={formatNumbers(Number(row.quantity || 0) * Number(row.rate || 0), 2)}
+                  readOnly
+                  required={false}
+                />
+              </div>
+              <div className="col-span-1 pb-1">
+                {!isFixedMode && (
+                  <Button size="sm" variant="danger" outline onClick={() => removeRow(row.id)}>X</Button>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </Modal>
@@ -384,6 +426,8 @@ export default function Expenses() {
                   <th className="px-5 py-3.5 font-medium">Type</th>
                   <th className="px-5 py-3.5 font-medium">Expense / Item</th>
                   <th className="px-5 py-3.5 font-medium">Supplier</th>
+                  <th className="px-5 py-3.5 font-medium">Qty</th>
+                  <th className="px-5 py-3.5 font-medium">Rate</th>
                   <th className="px-5 py-3.5 font-medium">Ref No</th>
                   <th className="px-5 py-3.5 font-medium">Amount</th>
                   <th className="px-5 py-3.5 font-medium">Remarks</th>
@@ -392,11 +436,11 @@ export default function Expenses() {
               </thead>
 
               {loading ? (
-                <TableSkeleton rows={30} columns={9} />
+                <TableSkeleton rows={30} columns={11} />
               ) : (
                 <tbody className="divide-y divide-gray-200">
                   {expenses.length === 0 ? (
-                    <tr><td colSpan={9} className="px-7 py-16 text-center text-sm text-gray-400">No expenses found.</td></tr>
+                    <tr><td colSpan={11} className="px-7 py-16 text-center text-sm text-gray-400">No expenses found.</td></tr>
                   ) : expenses.map((item, index) => (
                     <tr key={item._id} className="hover:bg-gray-50/80 transition-colors">
                       <td className="px-5 py-4 text-sm text-gray-500">{(pagination.currentPage - 1) * pagination.itemsPerPage + index + 1}</td>
@@ -408,6 +452,8 @@ export default function Expenses() {
                       </td>
                       <td className="px-5 py-4 text-sm font-semibold text-gray-800">{item.item_name || "-"}</td>
                       <td className="px-5 py-4 text-sm text-gray-600">{item.supplier_name || "-"}</td>
+                      <td className="px-5 py-4 text-sm text-gray-600">{formatNumbers(item.quantity || 0, 2)}</td>
+                      <td className="px-5 py-4 text-sm text-gray-600">{formatNumbers(item.rate || 0, 2)}</td>
                       <td className="px-5 py-4 text-sm text-gray-600">{item.reference_no || "-"}</td>
                       <td className="px-5 py-4 text-sm text-gray-600 font-semibold">{formatNumbers(item.amount, 2)}</td>
                       <td className="px-5 py-4 text-sm text-gray-500 max-w-[220px] truncate" title={item.remarks || ""}>{item.remarks || "-"}</td>

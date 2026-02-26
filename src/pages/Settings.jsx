@@ -18,6 +18,7 @@ import {
   toggleExpenseItemStatus,
   updateExpenseItem,
 } from "../api/expenseItem";
+import { fetchSuppliers } from "../api/supplier";
 import PageHeader from "../components/PageHeader";
 import ProductionConfigFormModal from "../components/StaffRecord/ProductionConfigFormModal";
 import InvoiceBannerModal from "../components/Invoice/InvoiceBannerModal";
@@ -48,12 +49,6 @@ const DISPLAY_FIELDS = [
   { key: "bonus_rate", label: "Bonus Rate" },
   { key: "allowance", label: "Monthly Allowance" },
 ];
-
-const EXPENSE_TYPE_LABEL = {
-  cash: "Cash Expense",
-  supplier: "Supplier Expense",
-  fixed: "Fixed Expense",
-};
 
 function ConfigCard({ record, isActive }) {
   return (
@@ -125,30 +120,64 @@ function ConfigCardSkeleton() {
   );
 }
 
-function ExpenseItemFormModal({ isOpen, onClose, initialData, onSave }) {
+function ExpenseItemFormModal({ isOpen, onClose, initialData, onSave, variant = "general", generalItemOptions = [] }) {
   const mode = initialData ? "edit" : "add";
   const [formData, setFormData] = useState({
     id: "",
     name: "",
-    expense_type: "cash",
+    fixed_source: "cash",
+    supplier_id: "",
+    default_quantity: "",
+    default_rate: "",
     default_amount: "",
   });
+  const [suppliers, setSuppliers] = useState([]);
+  const [loadingSuppliers, setLoadingSuppliers] = useState(false);
+
+  const isFixedVariant = variant === "fixed";
+  const isSupplierFixed = isFixedVariant && formData.fixed_source === "supplier";
+  const supplierOptions = suppliers.map((s) => ({ label: s.name, value: s._id }));
+  const calculatedAmount = (Number(formData.default_quantity) || 0) * (Number(formData.default_rate) || 0);
+  const fixedItemOptions = useMemo(() => {
+    const exists = generalItemOptions.some((opt) => opt.value === formData.name);
+    if (!formData.name || exists) return generalItemOptions;
+    return [{ label: formData.name, value: formData.name }, ...generalItemOptions];
+  }, [generalItemOptions, formData.name]);
 
   useEffect(() => {
     setFormData({
       id: initialData?._id || "",
       name: initialData?.name || "",
-      expense_type: initialData?.expense_type || "cash",
+      fixed_source: initialData?.fixed_source || "cash",
+      supplier_id: initialData?.supplier_id || "",
+      default_quantity: initialData?.default_quantity ?? "",
+      default_rate: initialData?.default_rate ?? "",
       default_amount: initialData?.default_amount ?? "",
     });
   }, [initialData, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !isFixedVariant) return;
+    const loadSuppliers = async () => {
+      setLoadingSuppliers(true);
+      try {
+        const res = await fetchSuppliers({ page: 1, limit: 5000, status: "active" });
+        setSuppliers(res?.data || []);
+      } catch {
+        setSuppliers([]);
+      } finally {
+        setLoadingSuppliers(false);
+      }
+    };
+    loadSuppliers();
+  }, [isOpen, isFixedVariant]);
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={mode === "add" ? "Add Expense Item" : "Edit Expense Item"}
-      subtitle="Manage selectable expense/item options"
+      title={mode === "add" ? (isFixedVariant ? "Add Fixed Expense" : "Add Expense Item") : (isFixedVariant ? "Edit Fixed Expense" : "Edit Expense Item")}
+      subtitle={isFixedVariant ? "Configure fixed expense auto-fill fields for Expense modal" : "This item appears in Expense / Item dropdown"}
       maxWidth="max-w-lg"
       footer={
         <div className="flex gap-3">
@@ -156,37 +185,97 @@ function ExpenseItemFormModal({ isOpen, onClose, initialData, onSave }) {
           <Button
             className="grow"
             onClick={async () => {
-              await onSave(mode === "add" ? "add" : "edit", {
-                ...formData,
-                default_amount: formData.default_amount === "" ? 0 : Number(formData.default_amount),
-              });
+              const payload = isFixedVariant
+                ? {
+                    id: formData.id,
+                    name: formData.name,
+                    expense_type: "fixed",
+                    fixed_source: formData.fixed_source,
+                    supplier_id: formData.fixed_source === "supplier" ? formData.supplier_id : "",
+                    default_quantity: Number(formData.default_quantity || 0),
+                    default_rate: Number(formData.default_rate || 0),
+                    default_amount: formData.default_amount === "" ? calculatedAmount : Number(formData.default_amount),
+                  }
+                : {
+                    id: formData.id,
+                    name: formData.name,
+                    expense_type: initialData?.expense_type || "general",
+                    fixed_source: "",
+                    supplier_id: "",
+                    default_quantity: 0,
+                    default_rate: 0,
+                    default_amount: 0,
+                  };
+
+              await onSave(mode === "add" ? "add" : "edit", payload);
               onClose();
             }}
           >
-            {mode === "add" ? "Create Item" : "Save Changes"}
+            {mode === "add" ? "Create" : "Save Changes"}
           </Button>
         </div>
       }
     >
       <div className="grid grid-cols-1 gap-3 p-0.5">
-        <Input label="Item Name" value={formData.name} onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))} capitalize />
-        <Select
-          label="Expense Type"
-          value={formData.expense_type}
-          onChange={(value) => setFormData((p) => ({ ...p, expense_type: value }))}
-          options={[
-            { label: "Cash Expense", value: "cash" },
-            { label: "Supplier Expense", value: "supplier" },
-            { label: "Fixed Expense", value: "fixed" },
-          ]}
-        />
-        <Input
-          label="Default Amount"
-          required={false}
-          type="number"
-          value={formData.default_amount}
-          onChange={(e) => setFormData((p) => ({ ...p, default_amount: e.target.value }))}
-        />
+        {isFixedVariant ? (
+          <Select
+            label="Expense Item"
+            value={formData.name}
+            onChange={(value) => setFormData((p) => ({ ...p, name: value }))}
+            options={fixedItemOptions}
+            placeholder="Select expense item"
+          />
+        ) : (
+          <Input
+            label="Item Name"
+            value={formData.name}
+            onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
+            capitalize
+          />
+        )}
+
+        {isFixedVariant && (
+          <>
+            <Select
+              label="Fixed For"
+              value={formData.fixed_source}
+              onChange={(value) => setFormData((p) => ({ ...p, fixed_source: value, supplier_id: "" }))}
+              options={[
+                { label: "Cash", value: "cash" },
+                { label: "Supplier", value: "supplier" },
+              ]}
+            />
+
+            {isSupplierFixed && (
+              <Select
+                label="Supplier"
+                value={formData.supplier_id}
+                onChange={(value) => setFormData((p) => ({ ...p, supplier_id: value }))}
+                options={supplierOptions}
+                placeholder={loadingSuppliers ? "Loading suppliers..." : "Select supplier"}
+              />
+            )}
+
+            <Input
+              label="Quantity"
+              type="number"
+              value={formData.default_quantity}
+              onChange={(e) => setFormData((p) => ({ ...p, default_quantity: e.target.value }))}
+            />
+            <Input
+              label="Rate"
+              type="number"
+              value={formData.default_rate}
+              onChange={(e) => setFormData((p) => ({ ...p, default_rate: e.target.value }))}
+            />
+            <Input
+              label="Amount"
+              type="number"
+              value={formData.default_amount === "" ? calculatedAmount : formData.default_amount}
+              onChange={(e) => setFormData((p) => ({ ...p, default_amount: e.target.value }))}
+            />
+          </>
+        )}
       </div>
     </Modal>
   );
@@ -201,7 +290,7 @@ export default function SettingsPage() {
   const [invoiceBanner, setInvoiceBanner] = useState("");
   const [bannerModalOpen, setBannerModalOpen] = useState(false);
   const [expenseItems, setExpenseItems] = useState([]);
-  const [expenseItemModal, setExpenseItemModal] = useState({ isOpen: false, data: null });
+  const [expenseItemModal, setExpenseItemModal] = useState({ isOpen: false, data: null, variant: "general" });
 
   const loadConfigs = useCallback(async () => {
     try {
@@ -276,10 +365,14 @@ export default function SettingsPage() {
   };
 
   const groupedExpenseItems = useMemo(() => ({
-    cash: expenseItems.filter((i) => i.expense_type === "cash"),
-    supplier: expenseItems.filter((i) => i.expense_type === "supplier"),
-    fixed: expenseItems.filter((i) => i.expense_type === "fixed"),
+    general: expenseItems.filter((i) => i.expense_type !== "fixed"),
+    fixed_cash: expenseItems.filter((i) => i.expense_type === "fixed" && (i.fixed_source === "cash" || !i.fixed_source)),
+    fixed_supplier: expenseItems.filter((i) => i.expense_type === "fixed" && i.fixed_source === "supplier"),
   }), [expenseItems]);
+  const generalItemOptions = useMemo(
+    () => groupedExpenseItems.general.map((item) => ({ label: item.name, value: item.name })),
+    [groupedExpenseItems.general]
+  );
 
   return (
     <>
@@ -327,11 +420,11 @@ export default function SettingsPage() {
 
           <SettingsSection
             title="Expense Items"
-            description="Manage available items for cash, supplier, and fixed expenses."
+            description='Set item names used in "Expense / Item" input of Add Expense form.'
             icon={Wallet}
             action={
               <button
-                onClick={() => setExpenseItemModal({ isOpen: true, data: null })}
+                onClick={() => setExpenseItemModal({ isOpen: true, data: null, variant: "general" })}
                 className="flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 transition-colors"
               >
                 <Plus size={15} />
@@ -339,11 +432,71 @@ export default function SettingsPage() {
               </button>
             }
           >
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {["cash", "supplier", "fixed"].map((type) => (
+            <div className="rounded-2xl border border-gray-200 overflow-hidden">
+              <div className="max-h-80 overflow-auto divide-y divide-gray-200">
+                {groupedExpenseItems.general.length === 0 ? (
+                  <p className="px-4 py-5 text-sm text-gray-400">No expense items found.</p>
+                ) : groupedExpenseItems.general.map((item) => (
+                  <div key={item._id} className="px-4 py-3.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">{item.name}</p>
+                        <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-[10px] font-medium ${item.isActive ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>
+                          {item.isActive ? "Active" : "Inactive"}
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <button
+                          className="p-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100"
+                          onClick={() => setExpenseItemModal({ isOpen: true, data: item, variant: "general" })}
+                          aria-label="Edit expense item"
+                        >
+                          <Edit3 size={14} />
+                        </button>
+                        <button
+                          className={`p-2 rounded-lg border ${item.isActive ? "border-rose-300 text-rose-600 hover:bg-rose-50" : "border-emerald-300 text-emerald-600 hover:bg-emerald-50"}`}
+                          onClick={async () => {
+                            try {
+                              await toggleExpenseItemStatus(item._id);
+                              loadExpenseItems();
+                              showToast({ type: "success", message: "Expense item status updated" });
+                            } catch (err) {
+                              showToast({ type: "error", message: err.response?.data?.message || "Failed to update item status" });
+                            }
+                          }}
+                          aria-label="Toggle expense item status"
+                        >
+                          <Power size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </SettingsSection>
+
+          <SettingsSection
+            title="Fixed Expense"
+            description='These auto-fill in Add Expense when Expense Type is "Fixed Expense".'
+            icon={Wallet}
+            action={
+              <button
+                onClick={() => setExpenseItemModal({ isOpen: true, data: null, variant: "fixed" })}
+                className="flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 transition-colors"
+              >
+                <Plus size={15} />
+                Add Fixed Expense
+              </button>
+            }
+          >
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {["fixed_cash", "fixed_supplier"].map((type) => (
                 <div key={type} className="rounded-2xl border border-gray-200 overflow-hidden">
                   <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-                    <p className="text-sm font-semibold text-gray-800">{EXPENSE_TYPE_LABEL[type]}</p>
+                    <p className="text-sm font-semibold text-gray-800">
+                      {type === "fixed_cash" ? "Fixed For Cash" : "Fixed For Supplier"}
+                    </p>
                   </div>
                   <div className="max-h-80 overflow-auto divide-y divide-gray-200">
                     {groupedExpenseItems[type].length === 0 ? (
@@ -353,7 +506,11 @@ export default function SettingsPage() {
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <p className="text-sm font-medium text-gray-800">{item.name}</p>
-                            <p className="text-xs text-gray-500 mt-0.5">Default: {fmt(item.default_amount)}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">Qty: {fmt(item.default_quantity)} | Rate: {fmt(item.default_rate)}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">Amount: {fmt(item.default_amount)}</p>
+                            {item.fixed_source === "supplier" && (
+                              <p className="text-xs text-gray-500 mt-0.5">Supplier: {item.supplier_name || "-"}</p>
+                            )}
                             <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-[10px] font-medium ${item.isActive ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>
                               {item.isActive ? "Active" : "Inactive"}
                             </span>
@@ -361,8 +518,8 @@ export default function SettingsPage() {
                           <div className="flex flex-col gap-2">
                             <button
                               className="p-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100"
-                              onClick={() => setExpenseItemModal({ isOpen: true, data: item })}
-                              aria-label="Edit expense item"
+                              onClick={() => setExpenseItemModal({ isOpen: true, data: item, variant: "fixed" })}
+                              aria-label="Edit fixed expense"
                             >
                               <Edit3 size={14} />
                             </button>
@@ -372,12 +529,12 @@ export default function SettingsPage() {
                                 try {
                                   await toggleExpenseItemStatus(item._id);
                                   loadExpenseItems();
-                                  showToast({ type: "success", message: "Expense item status updated" });
+                                  showToast({ type: "success", message: "Fixed expense status updated" });
                                 } catch (err) {
                                   showToast({ type: "error", message: err.response?.data?.message || "Failed to update item status" });
                                 }
                               }}
-                              aria-label="Toggle expense item status"
+                              aria-label="Toggle fixed expense status"
                             >
                               <Power size={14} />
                             </button>
@@ -429,7 +586,9 @@ export default function SettingsPage() {
       <ExpenseItemFormModal
         isOpen={expenseItemModal.isOpen}
         initialData={expenseItemModal.data}
-        onClose={() => setExpenseItemModal({ isOpen: false, data: null })}
+        variant={expenseItemModal.variant}
+        generalItemOptions={generalItemOptions}
+        onClose={() => setExpenseItemModal({ isOpen: false, data: null, variant: "general" })}
         onSave={async (action, payload) => {
           try {
             if (action === "add") {
