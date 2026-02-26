@@ -23,6 +23,8 @@ const Users = lazy(() => import("./pages/Users"));
 const Sessions = lazy(() => import("./pages/Sessions"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Subscriptions = lazy(() => import("./pages/Subscriptions"));
+const Plans = lazy(() => import("./pages/Plans"));
+const Payments = lazy(() => import("./pages/Payments"));
 const SalarySlips = lazy(() => import("./pages/SalarySlips"));
 const KeyboardShortcuts = lazy(() => import("./pages/KeyboardShortcuts"));
 const StaffPayments = lazy(() => import("./pages/StaffPayments"));
@@ -69,6 +71,18 @@ export default function App() {
               <Route path="/subscriptions" element={
                 <ProtectedRoute>
                   <Layout><Subscriptions /></Layout>
+                </ProtectedRoute>
+              } />
+
+              <Route path="/plans" element={
+                <ProtectedRoute>
+                  <Layout><Plans /></Layout>
+                </ProtectedRoute>
+              } />
+
+              <Route path="/payments" element={
+                <ProtectedRoute>
+                  <Layout><Payments /></Layout>
                 </ProtectedRoute>
               } />
 

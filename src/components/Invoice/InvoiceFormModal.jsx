@@ -26,7 +26,7 @@ function readFileAsDataUrl(file) {
   });
 }
 
-export default function InvoiceFormModal({ isOpen, onClose, onAction }) {
+export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadInvoiceImage = false }) {
   const [orderGroups, setOrderGroups] = useState([]);
   const [loadingGroups, setLoadingGroups] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -60,6 +60,10 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction }) {
   };
 
   const handlePickImage = async (e) => {
+    if (!canUploadInvoiceImage) {
+      setError("Premium plan required for invoice image upload.");
+      return;
+    }
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -87,6 +91,12 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction }) {
     resetForm();
     loadGroups();
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!canUploadInvoiceImage && invoiceImageData) {
+      setInvoiceImageData("");
+    }
+  }, [canUploadInvoiceImage, invoiceImageData]);
 
   const selectedSummary = useMemo(() => {
     if (!selectedCustomerId || selectedOrderIds.length === 0) {
@@ -163,7 +173,7 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction }) {
         order_ids: selectedOrderIds,
         invoice_date: invoiceDate || undefined,
         note,
-        image_data: invoiceImageData || "",
+        image_data: canUploadInvoiceImage ? (invoiceImageData || "") : "",
       });
       onClose();
     } catch (err) {
@@ -289,8 +299,12 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction }) {
                 type="file"
                 accept="image/*"
                 onChange={handlePickImage}
+                disabled={!canUploadInvoiceImage}
                 className="block w-full text-sm text-gray-700 file:mr-3 file:px-3 file:py-1.5 file:rounded-xl file:border file:border-gray-300 file:bg-gray-50 file:cursor-pointer"
               />
+              {!canUploadInvoiceImage && (
+                <p className="mt-1 text-xs text-amber-700">Premium plan required to upload invoice image.</p>
+              )}
             </div>
             {invoiceImageData ? (
               <div className="rounded-xl border border-gray-300 bg-white p-2">

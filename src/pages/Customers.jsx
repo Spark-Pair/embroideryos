@@ -278,7 +278,7 @@ export default function Customers() {
               </thead>
 
               {loading ? (
-                <TableSkeleton rows={30} />
+                <TableSkeleton rows={30} columns={7} />
               ) : (
                 <tbody className="divide-y divide-gray-200">
                   {customers.map((item, index) => (

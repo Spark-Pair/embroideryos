@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Eye, MoreVertical, Plus } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Eye, MoreVertical, Plus, Receipt, Wallet, Hash, Sigma } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import TableToolbar from "../components/table/TableToolbar";
 import TableSkeleton from "../components/table/TableLoader";
@@ -9,10 +9,12 @@ import { useToast } from "../context/ToastContext";
 import { formatDate, formatNumbers } from "../utils";
 import { createInvoice, fetchInvoice, fetchInvoices } from "../api/invoice";
 import { fetchMyInvoiceBanner } from "../api/business";
+import { fetchMySubscription } from "../api/subscription";
 import InvoiceFormModal from "../components/Invoice/InvoiceFormModal";
 import InvoicePreviewModal from "../components/Invoice/InvoicePreviewModal";
 import Button from "../components/Button";
 import useAuth from "../hooks/useAuth";
+import StatCard from "../components/StatCard";
 
 export default function Invoices() {
   const { showToast } = useToast();
@@ -25,6 +27,7 @@ export default function Invoices() {
   const [previewModal, setPreviewModal] = useState({ isOpen: false, data: null });
   const [previewLoading, setPreviewLoading] = useState(false);
   const [invoiceBanner, setInvoiceBanner] = useState("");
+  const [subscription, setSubscription] = useState(null);
   const [activeMenu, setActiveMenu] = useState(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [filters, setFilters] = useState({
@@ -67,8 +70,17 @@ export default function Invoices() {
         setInvoiceBanner("");
       }
     };
+    const loadSubscription = async () => {
+      try {
+        const res = await fetchMySubscription();
+        setSubscription(res?.data || null);
+      } catch {
+        setSubscription(null);
+      }
+    };
 
     loadBanner();
+    loadSubscription();
   }, []);
 
   useEffect(() => {
@@ -136,6 +148,18 @@ export default function Invoices() {
     }
   };
 
+  const stats = useMemo(() => {
+    const totalAmountCurrentPage = invoices.reduce((sum, item) => sum + Number(item?.total_amount || 0), 0);
+    const avgInvoiceAmount = invoices.length > 0 ? totalAmountCurrentPage / invoices.length : 0;
+
+    return {
+      totalInvoices: pagination.totalItems || 0,
+      currentPageInvoices: invoices.length,
+      totalAmountCurrentPage,
+      avgInvoiceAmount,
+    };
+  }, [invoices, pagination.totalItems]);
+
   return (
     <>
       <div className="relative z-10 max-w-7xl mx-auto h-full flex flex-col">
@@ -146,6 +170,13 @@ export default function Invoices() {
           actionIcon={Plus}
           onAction={() => setFormModal({ isOpen: true })}
         />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+          <StatCard label="Total Invoices" value={formatNumbers(stats.totalInvoices, 0)} icon={Receipt} />
+          <StatCard label="This Page Invoices" value={formatNumbers(stats.currentPageInvoices, 0)} icon={Hash} variant="warning" />
+          <StatCard label="This Page Amount" value={formatNumbers(stats.totalAmountCurrentPage, 2)} icon={Wallet} variant="success" />
+          <StatCard label="Avg Invoice (Page)" value={formatNumbers(stats.avgInvoiceAmount, 2)} icon={Sigma} variant="normal" />
+        </div>
 
         <div className="rounded-3xl bg-white border border-gray-300 overflow-hidden flex-1 flex flex-col">
           <TableToolbar
@@ -223,6 +254,7 @@ export default function Invoices() {
         isOpen={formModal.isOpen}
         onClose={() => setFormModal({ isOpen: false })}
         onAction={handleInvoiceFormAction}
+        canUploadInvoiceImage={Boolean(subscription?.plan_details?.features?.invoice_image_upload)}
       />
 
       <InvoicePreviewModal

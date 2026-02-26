@@ -278,7 +278,7 @@ export default function Staffs() {
               </thead>
 
               {loading ? (
-                <TableSkeleton rows={30} />
+                <TableSkeleton rows={30} columns={7} />
               ) : (
                 <tbody className="divide-y divide-gray-200">
                   {staffs.map((item, index) => (

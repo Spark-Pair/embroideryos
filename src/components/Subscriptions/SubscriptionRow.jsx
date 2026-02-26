@@ -3,7 +3,7 @@ import { useState } from "react";
 import ContextMenu from "../ContextMenu";
 import { formatDate, formatNumbers } from "../../utils";
 
-export default function SubscriptionRow({ item, index, startIndex, onView, onEdit }) {
+export default function SubscriptionRow({ item, index, startIndex, onView, onEdit, onRenew }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const statusTone =
@@ -71,6 +71,21 @@ export default function SubscriptionRow({ item, index, startIndex, onView, onEdi
           >
             Update Plan
           </button>
+          {(item.status === "expired" || item.status === "past_due" || item.active === false) && (
+            <>
+              <div className="h-[1px] bg-gray-200 my-1.5" />
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRenew(item);
+                  setMenuOpen(false);
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl text-emerald-700 hover:bg-emerald-50 cursor-pointer"
+              >
+                Renew Subscription
+              </button>
+            </>
+          )}
         </ContextMenu>
       </td>
     </tr>

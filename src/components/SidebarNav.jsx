@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LayoutGrid, Users, FileText, DollarSign, CreditCard, Users2, Settings, LogOut, Building2, Banknote, Repeat, ChevronDown, History, Keyboard } from 'lucide-react';
+import { LayoutGrid, Users, FileText, DollarSign, CreditCard, Users2, Settings, LogOut, Building2, Banknote, Repeat, ChevronDown, History, Keyboard, Crown } from 'lucide-react';
 import SidebarNavItem from './SidebarNavItem';
 import useAuth from '../hooks/useAuth';
 import { motion, AnimatePresence } from "framer-motion";
@@ -10,6 +10,7 @@ const developerNav = [
   { id: 'businesses', icon: <Building2 className="w-4.5 h-4.5" />, label: 'Businesses', path: '/businesses' },
   { id: 'users', icon: <Users2 className="w-4.5 h-4.5" />, label: 'Users', path: '/users' },
   { id: 'subscriptions', icon: <Repeat className="w-4.5 h-4.5" />, label: 'Subscriptions', path: '/subscriptions' },
+  { id: 'plans', icon: <Crown className="w-4.5 h-4.5" />, label: 'Plans', path: '/plans' },
   { id: 'payments', icon: <Banknote className="w-4.5 h-4.5" />, label: 'Payments', path: '/payments' },
 ];
 

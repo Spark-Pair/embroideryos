@@ -1,44 +1,46 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Plus, Trash2, CheckCircle2, AlertCircle } from "lucide-react";
 import Modal from "./Modal";
 import Button from "./Button";
-import Input from "./Input";
+import { SectionHeader } from "./SectionHeader";
 import { formatNumbers } from "../utils";
 import { fetchProductionConfig } from "../api/productionConfig";
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
 const DEFAULT_CONFIG = {
-  stitch_rate: 0.001,
-  applique_rate: 1.111,
-  on_target_pct: 30,
+  stitch_rate:      0.001,
+  applique_rate:    1.111,
+  on_target_pct:    30,
   after_target_pct: 34,
-  pcs_per_round: 12,
-  stitch_cap: 5000,
+  pcs_per_round:    12,
+  stitch_cap:       5000,
+  target_amount:    900,
 };
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 const todayInput = () => new Date().toISOString().slice(0, 10);
-const emptyRow = () => ({ _key: crypto.randomUUID(), d_stitch: "", applique: "", pcs: "", rounds: "" });
+const emptyRow   = () => ({ _key: crypto.randomUUID(), d_stitch: "", applique: "", pcs: "", rounds: "" });
 
 function calcRow(row, cfg) {
   const stitchRaw = parseFloat(row.d_stitch) || 0;
-  const pcs = parseFloat(row.pcs) || 0;
-  const rounds = parseFloat(row.rounds) || 0;
-  const applique = parseFloat(row.applique) || 0;
+  const pcs       = parseFloat(row.pcs)      || 0;
+  const rounds    = parseFloat(row.rounds)   || 0;
+  const applique  = parseFloat(row.applique) || 0;
 
-  const stitch =
-    stitchRaw > 0 && stitchRaw <= (cfg.stitch_cap ?? DEFAULT_CONFIG.stitch_cap)
-      ? (cfg.stitch_cap ?? DEFAULT_CONFIG.stitch_cap)
-      : stitchRaw;
-
-  const stitch_rate = cfg.stitch_rate ?? DEFAULT_CONFIG.stitch_rate;
-  const applique_rate = cfg.applique_rate ?? DEFAULT_CONFIG.applique_rate;
-  const on_target_pct = cfg.on_target_pct ?? DEFAULT_CONFIG.on_target_pct;
+  const stitch_cap      = cfg.stitch_cap      ?? DEFAULT_CONFIG.stitch_cap;
+  const stitch          = stitchRaw > 0 && stitchRaw <= stitch_cap ? stitch_cap : stitchRaw;
+  const stitch_rate     = cfg.stitch_rate      ?? DEFAULT_CONFIG.stitch_rate;
+  const applique_rate   = cfg.applique_rate    ?? DEFAULT_CONFIG.applique_rate;
+  const on_target_pct   = cfg.on_target_pct    ?? DEFAULT_CONFIG.on_target_pct;
   const after_target_pct = cfg.after_target_pct ?? DEFAULT_CONFIG.after_target_pct;
 
-  const total_stitch = stitchRaw * rounds;
-  const stitch_base = (stitch * stitch_rate * pcs) / 100;
-  const applique_base = (applique_rate * applique * pcs) / 100;
-  const combined = stitch_base + applique_base;
-  const on_target_amt = combined * on_target_pct;
+  const total_stitch     = stitchRaw * rounds;
+  const stitch_base      = (stitch * stitch_rate * pcs) / 100;
+  const applique_base    = (applique_rate * applique * pcs) / 100;
+  const combined         = stitch_base + applique_base;
+  const on_target_amt    = combined * on_target_pct;
   const after_target_amt = combined * after_target_pct;
 
   return { total_stitch, on_target_amt, after_target_amt };
@@ -46,30 +48,111 @@ function calcRow(row, cfg) {
 
 function syncPcsRounds(field, value, pcsPerRound) {
   const num = parseFloat(value);
-  if (!value || Number.isNaN(num) || num <= 0) {
-    return {
-      pcs: field === "pcs" ? value : "",
-      rounds: field === "rounds" ? value : "",
-    };
-  }
-
-  if (field === "pcs") {
+  if (!value || isNaN(num) || num <= 0)
+    return { pcs: field === "pcs" ? value : "", rounds: field === "rounds" ? value : "" };
+  if (field === "pcs")
     return { pcs: value, rounds: String(Math.ceil(num / pcsPerRound)) };
-  }
-
   return { pcs: String(num * pcsPerRound), rounds: value };
 }
 
-export default function TargetCalculatorModal({ onClose }) {
-  const [cfgDate, setCfgDate] = useState(todayInput());
-  const [cfg, setCfg] = useState(DEFAULT_CONFIG);
-  const [cfgLoading, setCfgLoading] = useState(false);
-  const [rows, setRows] = useState([emptyRow()]);
+function calcTotals(rows, cfg) {
+  return rows.reduce(
+    (acc, row) => {
+      const { total_stitch, on_target_amt, after_target_amt } = calcRow(row, cfg);
+      return {
+        pcs:              acc.pcs    + (parseFloat(row.pcs)    || 0),
+        rounds:           acc.rounds + (parseFloat(row.rounds) || 0),
+        total_stitch:     acc.total_stitch     + total_stitch,
+        on_target_amt:    acc.on_target_amt    + on_target_amt,
+        after_target_amt: acc.after_target_amt + after_target_amt,
+      };
+    },
+    { pcs: 0, rounds: 0, total_stitch: 0, on_target_amt: 0, after_target_amt: 0 }
+  );
+}
 
+// ─── Production Row ───────────────────────────────────────────────────────────
+
+function ProductionRow({ row, index, cfg, onChange, onRemove, canRemove, onAddRow, isLast }) {
+  const { total_stitch, on_target_amt, after_target_amt } = calcRow(row, cfg);
+
+  const handleFocus = (e) => e.target.select();
+
+  const handle = (field) => (e) => {
+    const val = e.target.value;
+    if (field === "pcs" || field === "rounds")
+      onChange(row._key, { ...row, ...syncPcsRounds(field, val, cfg.pcs_per_round ?? DEFAULT_CONFIG.pcs_per_round) });
+    else
+      onChange(row._key, { ...row, [field]: val });
+  };
+
+  const handleKeyDown = (field) => (e) => {
+    if (!isLast) return;
+    if (field !== "pcs" && field !== "rounds") return;
+    if (e.key === "Enter") { e.preventDefault(); onAddRow(); }
+  };
+
+  const ci = "w-full border border-gray-400/85 px-2.5 py-1.5 rounded-lg text-sm focus:ring-2 focus:ring-emerald-300 focus:outline-none bg-gray-50 transition";
+
+  return (
+    <tr className="group border-b border-gray-300 hover:bg-emerald-50/30 transition-colors">
+      <td className="px-1.5 py-2 text-center text-xs font-medium text-gray-400 w-8">{index + 1}</td>
+      <td className="px-1.5 py-2">
+        <input type="number" value={row.d_stitch} onChange={handle("d_stitch")} onFocus={handleFocus} placeholder="0" className={ci} />
+      </td>
+      <td className="px-1.5 py-2">
+        <input type="number" value={row.applique} onChange={handle("applique")} onFocus={handleFocus} placeholder="0" className={ci} />
+      </td>
+      <td className="px-1.5 py-2">
+        <input type="number" value={row.rounds} onChange={handle("rounds")} onFocus={handleFocus} onKeyDown={handleKeyDown("rounds")} placeholder="0" className={ci} />
+      </td>
+      <td className="px-1.5 py-2">
+        <input type="number" value={row.pcs} onChange={handle("pcs")} onFocus={handleFocus} onKeyDown={handleKeyDown("pcs")} placeholder="0" className={ci} />
+      </td>
+      <td className="px-3 py-2 text-right text-sm text-gray-600 tabular-nums">{formatNumbers(total_stitch, 0)}</td>
+      <td className="px-3 py-2 text-right text-sm font-medium text-rose-700 tabular-nums">{formatNumbers(on_target_amt, 2)}</td>
+      <td className="px-3 py-2 text-right text-sm font-medium text-emerald-700 tabular-nums">{formatNumbers(after_target_amt, 2)}</td>
+      <td className="px-3 py-2 text-center w-8">
+        <button
+          type="button"
+          onClick={() => onRemove(row._key)}
+          className={`${canRemove ? "opacity-70 pointer-events-auto group-hover:opacity-100" : "opacity-0 pointer-events-none"} transition-opacity rounded-lg p-1 text-gray-300 hover:text-red-500 cursor-pointer`}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+function TotalsRow({ totals }) {
+  return (
+    <tr className="border-t border-gray-300 bg-gray-50/80 font-semibold text-sm">
+      <td className="px-3.5 py-2.5 text-xs text-gray-500 uppercase tracking-wider" colSpan={3}>Totals</td>
+      <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{formatNumbers(totals.rounds, 0)}</td>
+      <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{formatNumbers(totals.pcs, 0)}</td>
+      <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{formatNumbers(totals.total_stitch, 0)}</td>
+      <td className="px-3 py-2.5 text-right tabular-nums text-rose-700">{formatNumbers(totals.on_target_amt, 2)}</td>
+      <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700">{formatNumbers(totals.after_target_amt, 2)}</td>
+      <td />
+    </tr>
+  );
+}
+
+
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+export default function TargetCalculatorModal({ onClose }) {
+  const [cfgDate,    setCfgDate]    = useState(todayInput());
+  const [cfg,        setCfg]        = useState(DEFAULT_CONFIG);
+  const [cfgLoading, setCfgLoading] = useState(false);
+  const [rows,       setRows]       = useState([emptyRow()]);
+
+  // ── Load config on date change ──
   useEffect(() => {
     if (!cfgDate) return;
-
-    const loadConfig = async () => {
+    const load = async () => {
       setCfgLoading(true);
       try {
         const res = await fetchProductionConfig(cfgDate);
@@ -80,46 +163,28 @@ export default function TargetCalculatorModal({ onClose }) {
         setCfgLoading(false);
       }
     };
-
-    loadConfig();
+    load();
   }, [cfgDate]);
 
-  const totals = useMemo(() => {
-    return rows.reduce(
-      (acc, row) => {
-        const result = calcRow(row, cfg);
-        acc.total_pcs += parseFloat(row.pcs) || 0;
-        acc.total_rounds += parseFloat(row.rounds) || 0;
-        acc.total_stitch += result.total_stitch;
-        acc.total_on_target += result.on_target_amt;
-        acc.total_after_target += result.after_target_amt;
-        return acc;
-      },
-      {
-        total_pcs: 0,
-        total_rounds: 0,
-        total_stitch: 0,
-        total_on_target: 0,
-        total_after_target: 0,
-      }
-    );
-  }, [rows, cfg]);
+  const totals = useMemo(() => calcTotals(rows, cfg), [rows, cfg]);
 
-  const updateRow = (rowKey, patch) => {
-    setRows((prev) => prev.map((r) => (r._key === rowKey ? { ...r, ...patch } : r)));
-  };
+  const targetAmount = cfg.target_amount ?? DEFAULT_CONFIG.target_amount;
+  const targetMet    = totals.on_target_amt >= targetAmount;
 
-  const handleValue = (row, field, value) => {
-    if (field === "pcs" || field === "rounds") {
-      updateRow(row._key, syncPcsRounds(field, value, cfg.pcs_per_round ?? DEFAULT_CONFIG.pcs_per_round));
-      return;
-    }
-    updateRow(row._key, { [field]: value });
-  };
+  // ── Row handlers ──
+  const handleRowChange = (key, updated) =>
+    setRows((p) => p.map((r) => (r._key === key ? updated : r)));
 
-  const addRow = () => setRows((prev) => [...prev, emptyRow()]);
-  const removeRow = (rowKey) => {
-    setRows((prev) => (prev.length <= 1 ? prev : prev.filter((r) => r._key !== rowKey)));
+  const handleRowRemove = (key) =>
+    setRows((p) => (p.length <= 1 ? p : p.filter((r) => r._key !== key)));
+
+  const handleAddRow = () => {
+    setRows((p) => [...p, emptyRow()]);
+    setTimeout(() => {
+      const inputs = document.querySelectorAll('input[placeholder="0"]');
+      // focus d_stitch of last row — find last group of 4 inputs
+      if (inputs.length) inputs[inputs.length - 4]?.focus();
+    }, 30);
   };
 
   return (
@@ -128,132 +193,167 @@ export default function TargetCalculatorModal({ onClose }) {
       onClose={onClose}
       title="Target Calculator"
       subtitle="Uses same production calculation as staff record configuration for selected date."
-      maxWidth="max-w-6xl"
+      maxWidth="max-w-4xl"
       footer={
-        <div className="w-full flex items-center justify-between gap-3">
-          <div className="text-xs text-gray-500">
-            {cfgLoading ? "Loading configuration..." : `Config: ${cfgDate || "-"}`}
+        <div className="flex items-center justify-between">
+          <div className="text-xs text-gray-400">
+            {cfgLoading
+              ? <span className="flex items-center gap-1.5"><Loader2 className="h-3 w-3 animate-spin" /> Loading config…</span>
+              : `Config loaded for ${cfgDate || "—"}`
+            }
           </div>
           <div className="flex items-center gap-2">
             <Button variant="secondary" outline onClick={onClose}>Close</Button>
-            <Button icon={Plus} onClick={addRow}>Add Row</Button>
+            <Button icon={Plus} onClick={handleAddRow}>Add Row</Button>
           </div>
         </div>
       }
     >
-      <div className="p-0.5 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 rounded-2xl border border-gray-300 bg-white p-4">
-          <Input
-            label="Config Date"
-            type="date"
-            value={cfgDate}
-            onChange={(e) => setCfgDate(e.target.value)}
+      <div className="h-full overflow-scroll p-0.5 grid gap-3">
+
+        {/* ── Step 1: Config Date + Stats ── */}
+        <div className="flex flex-col">
+          <SectionHeader
+            step="1"
+            title="Configuration"
+            subtitle="Pick a date to load the production rates for that day"
+          />
+          <div className="grid grid-cols-5 gap-3">
+
+            {/* Date — styled as a plain field, no Input component wrapper needed */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-500">Config Date</label>
+              <div className="relative">
+                <input
+                  type="date"
+                  value={cfgDate}
+                  onChange={(e) => setCfgDate(e.target.value)}
+                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300 transition"
+                />
+                {cfgLoading && (
+                  <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-gray-400" />
+                )}
+              </div>
+            </div>
+
+            {/* Read-only config stats — same as Staff Record subtitle info, but as blocks */}
+            {[
+              { label: "Stitch Rate",    value: formatNumbers(cfg.stitch_rate, 3) },
+              { label: "Applique Rate",  value: formatNumbers(cfg.applique_rate, 3) },
+              { label: "On Target",      value: `${formatNumbers(cfg.on_target_pct, 0)}%` },
+              { label: "After Target",   value: `${formatNumbers(cfg.after_target_pct, 0)}%` },
+            ].map(({ label, value }) => (
+              <div key={label} className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-500">{label}</label>
+                <div className="border border-gray-300 rounded-xl px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-50 tabular-nums select-none">
+                  {cfgLoading ? <span className="text-gray-300">—</span> : value}
+                </div>
+              </div>
+            ))}
+
+          </div>
+        </div>
+
+        {/* ── Step 2: Production Table ── */}
+        <div className="flex flex-col">
+          <SectionHeader
+            step="2"
+            title="Production Entry"
+            subtitle={`${cfg.pcs_per_round ?? DEFAULT_CONFIG.pcs_per_round} PCs/Round · Stitch Cap: ${formatNumbers(cfg.stitch_cap ?? DEFAULT_CONFIG.stitch_cap, 0)}`}
+            right={
+              <Button size="sm" variant="primary" outline icon={Plus} onClick={handleAddRow}>
+                Add Row
+              </Button>
+            }
           />
 
-          <div className="rounded-xl border border-gray-300 bg-gray-50 px-3 py-2.5">
-            <p className="text-[11px] uppercase tracking-wider text-gray-500">Stitch Rate</p>
-            <p className="text-sm font-semibold text-gray-800 mt-0.5">{formatNumbers(cfg.stitch_rate, 3)}</p>
-          </div>
-          <div className="rounded-xl border border-gray-300 bg-gray-50 px-3 py-2.5">
-            <p className="text-[11px] uppercase tracking-wider text-gray-500">Applique Rate</p>
-            <p className="text-sm font-semibold text-gray-800 mt-0.5">{formatNumbers(cfg.applique_rate, 3)}</p>
-          </div>
-          <div className="rounded-xl border border-gray-300 bg-gray-50 px-3 py-2.5">
-            <p className="text-[11px] uppercase tracking-wider text-gray-500">On Target %</p>
-            <p className="text-sm font-semibold text-gray-800 mt-0.5">{formatNumbers(cfg.on_target_pct, 0)}%</p>
-          </div>
-          <div className="rounded-xl border border-gray-300 bg-gray-50 px-3 py-2.5">
-            <p className="text-[11px] uppercase tracking-wider text-gray-500">After Target %</p>
-            <p className="text-sm font-semibold text-gray-800 mt-0.5">{formatNumbers(cfg.after_target_pct, 0)}%</p>
-          </div>
-        </div>
-
-        {cfgLoading ? (
-          <div className="rounded-2xl border border-gray-300 bg-white py-16 flex items-center justify-center gap-2 text-sm text-gray-500">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Loading production configuration...
-          </div>
-        ) : (
-          <div className="rounded-2xl border border-gray-300 bg-white overflow-hidden">
-            <div className="overflow-auto max-h-[48vh]">
-              <table className="w-full text-left border-collapse">
-                <thead className="sticky top-0 z-10 bg-gray-100" style={{ boxShadow: "0 1px 0 0 rgba(209,213,219,1)" }}>
-                  <tr className="text-xs uppercase tracking-wider text-gray-500">
-                    <th className="px-3 py-3 font-medium">#</th>
-                    <th className="px-3 py-3 font-medium">D-Stitch</th>
-                    <th className="px-3 py-3 font-medium">Applique</th>
-                    <th className="px-3 py-3 font-medium">Rounds</th>
-                    <th className="px-3 py-3 font-medium">Pcs</th>
-                    <th className="px-3 py-3 font-medium text-right">Total Stitch</th>
-                    <th className="px-3 py-3 font-medium text-right">On Target</th>
-                    <th className="px-3 py-3 font-medium text-right">After Target</th>
-                    <th className="px-3 py-3 font-medium text-right">Action</th>
+          {cfgLoading ? (
+            <div className="rounded-xl border border-gray-300 bg-white py-10 flex items-center justify-center gap-2 text-sm text-gray-400">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading production configuration…
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-gray-300">
+              <table className="w-full min-w-[680px] border-collapse text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-300 text-xs font-semibold text-gray-500">
+                    <th className="px-1.5 py-2.5 text-center w-8">#</th>
+                    <th className="px-1.5 py-2.5 text-left">D. Stitch</th>
+                    <th className="px-1.5 py-2.5 text-left">Applique</th>
+                    <th className="px-1.5 py-2.5 text-left">Rounds</th>
+                    <th className="px-1.5 py-2.5 text-left">PCs</th>
+                    <th className="px-3 py-2.5 text-right text-nowrap">Total Stitch</th>
+                    <th className="px-3 py-2.5 text-right text-nowrap text-rose-600">On Target ({cfg.on_target_pct}%)</th>
+                    <th className="px-3 py-2.5 text-right text-nowrap text-emerald-600">After Target ({cfg.after_target_pct}%)</th>
+                    <th className="px-2 py-2.5 w-8" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {rows.map((row, idx) => {
-                    const result = calcRow(row, cfg);
-                    return (
-                      <tr key={row._key} className="hover:bg-gray-50/80">
-                        <td className="px-3 py-2 text-sm text-gray-500">{idx + 1}</td>
-                        <td className="px-3 py-2">
-                          <Input value={row.d_stitch} onChange={(e) => handleValue(row, "d_stitch", e.target.value)} type="number" placeholder="0" />
-                        </td>
-                        <td className="px-3 py-2">
-                          <Input value={row.applique} onChange={(e) => handleValue(row, "applique", e.target.value)} type="number" placeholder="0" />
-                        </td>
-                        <td className="px-3 py-2">
-                          <Input value={row.rounds} onChange={(e) => handleValue(row, "rounds", e.target.value)} type="number" placeholder="0" />
-                        </td>
-                        <td className="px-3 py-2">
-                          <Input value={row.pcs} onChange={(e) => handleValue(row, "pcs", e.target.value)} type="number" placeholder="0" />
-                        </td>
-                        <td className="px-3 py-2 text-right text-sm text-gray-700 tabular-nums">{formatNumbers(result.total_stitch, 0)}</td>
-                        <td className="px-3 py-2 text-right text-sm text-rose-700 font-semibold tabular-nums">{formatNumbers(result.on_target_amt, 2)}</td>
-                        <td className="px-3 py-2 text-right text-sm text-emerald-700 font-semibold tabular-nums">{formatNumbers(result.after_target_amt, 2)}</td>
-                        <td className="px-3 py-2 text-right">
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            outline
-                            icon={Trash2}
-                            onClick={() => removeRow(row._key)}
-                            disabled={rows.length <= 1}
-                          >
-                            Remove
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                <tbody>
+                  {rows.map((row, idx) => (
+                    <ProductionRow
+                      key={row._key}
+                      row={row}
+                      index={idx}
+                      cfg={cfg}
+                      onChange={handleRowChange}
+                      onRemove={handleRowRemove}
+                      onAddRow={handleAddRow}
+                      isLast={idx === rows.length - 1}
+                      canRemove={rows.length > 1}
+                    />
+                  ))}
                 </tbody>
+                <tfoot>
+                  <TotalsRow totals={totals} />
+                </tfoot>
               </table>
             </div>
-          </div>
-        )}
+          )}
 
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-          <div className="rounded-2xl border border-gray-300 bg-white p-4">
-            <p className="text-[11px] uppercase tracking-wider text-gray-500">Total Pcs</p>
-            <p className="text-xl font-semibold text-gray-900 mt-1 tabular-nums">{formatNumbers(totals.total_pcs, 0)}</p>
-          </div>
-          <div className="rounded-2xl border border-gray-300 bg-white p-4">
-            <p className="text-[11px] uppercase tracking-wider text-gray-500">Total Rounds</p>
-            <p className="text-xl font-semibold text-gray-900 mt-1 tabular-nums">{formatNumbers(totals.total_rounds, 0)}</p>
-          </div>
-          <div className="rounded-2xl border border-gray-300 bg-white p-4">
-            <p className="text-[11px] uppercase tracking-wider text-gray-500">Total Stitch</p>
-            <p className="text-xl font-semibold text-gray-900 mt-1 tabular-nums">{formatNumbers(totals.total_stitch, 0)}</p>
-          </div>
-          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
-            <p className="text-[11px] uppercase tracking-wider text-rose-600">Total On Target</p>
-            <p className="text-xl font-semibold text-rose-700 mt-1 tabular-nums">{formatNumbers(totals.total_on_target, 2)}</p>
-          </div>
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-            <p className="text-[11px] uppercase tracking-wider text-emerald-600">Total After Target</p>
-            <p className="text-xl font-semibold text-emerald-700 mt-1 tabular-nums">{formatNumbers(totals.total_after_target, 2)}</p>
-          </div>
+          {/* ── Target Status Bar ── */}
+          {totals.on_target_amt > 0 && (
+            <div className={`flex items-center mt-2 gap-3 rounded-xl px-4 py-2.5 text-xs
+              ${targetMet ? "bg-emerald-50 border border-emerald-200" : "bg-amber-50 border border-amber-200"}`}>
+              {targetMet
+                ? <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                : <AlertCircle  className="h-4 w-4 text-amber-500 shrink-0" />
+              }
+              {targetMet ? (
+                <span className="text-emerald-700">
+                  <span className="font-semibold">Target Met</span>
+                  {" "}— Effective amount (After Target):{" "}
+                  <span className="font-bold">{formatNumbers(totals.after_target_amt, 2)}</span>
+                </span>
+              ) : (
+                <span className="text-amber-700">
+                  <span className="font-semibold">
+                    {formatNumbers(targetAmount - totals.on_target_amt, 2)} short
+                  </span>
+                  {" "}of target · Current:{" "}
+                  <span className="font-semibold">{formatNumbers(totals.on_target_amt, 2)}</span>
+                  {" "}· Target: {formatNumbers(targetAmount, 2)}
+                </span>
+              )}
+            </div>
+          )}
         </div>
+
+        {/* ── Summary ── */}
+        <div className="grid grid-cols-5 gap-3">
+          {[
+            { label: "Total Pcs",    value: formatNumbers(totals.pcs, 0),              color: "text-gray-800" },
+            { label: "Total Rounds", value: formatNumbers(totals.rounds, 0),            color: "text-gray-800" },
+            { label: "Total Stitch", value: formatNumbers(totals.total_stitch, 0),      color: "text-gray-800" },
+            { label: "On Target",    value: formatNumbers(totals.on_target_amt, 2),     color: "text-rose-700",    bg: "bg-rose-50",    border: "border-rose-200" },
+            { label: "After Target", value: formatNumbers(totals.after_target_amt, 2),  color: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200" },
+          ].map(({ label, value, color, bg = "bg-white", border = "border-gray-200" }) => (
+            <div key={label} className={`rounded-2xl border ${border} ${bg} px-4 py-3.5`}>
+              <p className="text-[10px] uppercase tracking-wider font-medium text-gray-400 mb-1">{label}</p>
+              <p className={`text-lg font-semibold tabular-nums ${color}`}>{value}</p>
+            </div>
+          ))}
+        </div>
+
       </div>
     </Modal>
   );

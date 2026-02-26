@@ -30,6 +30,8 @@ import { formatDate, formatNumbers } from "../utils";
 import { fetchBusinessStats, fetchBusinesses } from "../api/business";
 import { fetchUserStats, fetchUsers } from "../api/user";
 import { fetchDashboardSummary, fetchDashboardTrend } from "../api/dashboard";
+import { fetchSubscriptionPaymentStats, fetchSubscriptionPayments } from "../api/subscriptionPayment";
+import { fetchSubscriptions } from "../api/subscription.admin";
 
 function formatYmdLocal(date) {
   const d = new Date(date);
@@ -177,8 +179,14 @@ export default function Dashboard() {
     businessesActive: 0,
     usersTotal: 0,
     usersActive: 0,
+    activeSubscriptions: 0,
+    expiringSoon: 0,
+    monthReceived: 0,
+    monthPending: 0,
     recentBusinesses: [],
     recentUsers: [],
+    recentSubscriptions: [],
+    recentPayments: [],
   });
 
   const isDeveloper = user?.role === "developer";
@@ -220,11 +228,14 @@ export default function Dashboard() {
     setLoading(true);
     try {
       if (isDeveloper) {
-        const [bsRes, usRes, bRes, uRes] = await Promise.all([
+        const [bsRes, usRes, bRes, uRes, subRes, spStatsRes, spRes] = await Promise.all([
           fetchBusinessStats(),
           fetchUserStats(),
           fetchBusinesses({ page: 1, limit: 5 }),
           fetchUsers({ page: 1, limit: 5 }),
+          fetchSubscriptions({ page: 1, limit: 5 }),
+          fetchSubscriptionPaymentStats({ month: selectedMonth }),
+          fetchSubscriptionPayments({ page: 1, limit: 5 }),
         ]);
 
         setDev({
@@ -232,8 +243,14 @@ export default function Dashboard() {
           businessesActive: Number(bsRes?.data?.active || 0),
           usersTotal: Number(usRes?.data?.total || 0),
           usersActive: Number(usRes?.data?.active || 0),
+          activeSubscriptions: Number(spStatsRes?.data?.active_subscriptions || 0),
+          expiringSoon: Number(spStatsRes?.data?.expiring_7_days || 0),
+          monthReceived: Number(spStatsRes?.data?.month_received || 0),
+          monthPending: Number(spStatsRes?.data?.month_pending || 0),
           recentBusinesses: bRes?.data || [],
           recentUsers: uRes?.data || [],
+          recentSubscriptions: subRes?.data || [],
+          recentPayments: spRes?.data || [],
         });
       } else {
         const [summaryRes] = await Promise.all([
@@ -390,14 +407,14 @@ export default function Dashboard() {
             <p className="text-gray-400 text-sm">Welcome back, {user?.name?.split(" ")[0] || "User"}.</p>
           </div>
           <div className="flex items-center gap-2.5">
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 outline-none focus:border-teal-400 cursor-pointer"
+            />
             {!isDeveloper && (
               <>
-                <input
-                  type="month"
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 outline-none focus:border-teal-400 cursor-pointer"
-                />
                 <Button size="sm" variant="secondary" outline icon={CreditCard} onClick={() => setOpenTarget(true)}>
                   Target
                 </Button>
@@ -411,11 +428,83 @@ export default function Dashboard() {
           <div className="p-10 text-sm text-center">Loading dashboard...</div>
         ) : isDeveloper ? (
           <div className="space-y-6 pb-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
               <StatCard label="Total Businesses" value={dev.businessesTotal} icon={Building2} />
               <StatCard label="Active Businesses" value={dev.businessesActive} icon={Activity} variant="success" />
               <StatCard label="Total Users" value={dev.usersTotal} icon={Users2} />
               <StatCard label="Active Users" value={dev.usersActive} icon={Users} variant="warning" />
+              <StatCard label={`Collected (${selectedMonth})`} value={formatNumbers(dev.monthReceived, 2)} icon={Banknote} variant="success" />
+              <StatCard label={`Pending (${selectedMonth})`} value={formatNumbers(dev.monthPending, 2)} icon={CreditCard} variant="danger" />
+              <StatCard label="Active Subscriptions" value={dev.activeSubscriptions} icon={Receipt} />
+              <StatCard label="Expire in 7 Days" value={dev.expiringSoon} icon={Activity} variant="warning" />
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+              <div className="rounded-3xl border border-gray-300 bg-white overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-300 bg-gray-100">
+                  <p className="font-medium text-gray-800">Recent SaaS Payments</p>
+                  <button onClick={() => navigate("/payments")} className="text-xs font-medium text-teal-600 cursor-pointer">View all</button>
+                </div>
+                <div className="divide-y divide-gray-200">
+                  {dev.recentPayments.length === 0 ? (
+                    <p className="py-8 text-center text-sm text-gray-400">No recent payments.</p>
+                  ) : (
+                    dev.recentPayments.map((r) => (
+                      <div key={r._id} className="flex items-center justify-between px-6 py-3.5">
+                        <div>
+                          <p className="text-sm font-medium text-gray-800">{r.business_name || "-"}</p>
+                          <p className="text-xs text-gray-400">{formatDate(r.payment_date, "DD MMM yyyy")} · {r.plan}</p>
+                        </div>
+                        <p className="text-sm font-semibold tabular-nums text-emerald-700">{formatNumbers(r.amount, 2)}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-gray-300 bg-white overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-300 bg-gray-100">
+                  <p className="font-medium text-gray-800">Recent Subscriptions</p>
+                  <button onClick={() => navigate("/subscriptions")} className="text-xs font-medium text-teal-600 cursor-pointer">View all</button>
+                </div>
+                <div className="divide-y divide-gray-200">
+                  {(dev.recentSubscriptions || []).length === 0 ? (
+                    <p className="py-8 text-center text-sm text-gray-400">No recent records.</p>
+                  ) : (
+                    (dev.recentSubscriptions || []).map((r) => (
+                      <div key={r._id} className="flex items-center justify-between px-6 py-3.5">
+                        <div>
+                          <p className="text-sm font-medium text-gray-800">{r.business_name || "-"}</p>
+                          <p className="text-xs text-gray-400 capitalize">{r.plan || "-"}</p>
+                        </div>
+                        <p className="text-xs font-semibold tabular-nums text-gray-600 capitalize">{r.status || "-"}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-gray-300 bg-white overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-300 bg-gray-100">
+                  <p className="font-medium text-gray-800">Recent Businesses</p>
+                  <button onClick={() => navigate("/businesses")} className="text-xs font-medium text-teal-600 cursor-pointer">View all</button>
+                </div>
+                <div className="divide-y divide-gray-200">
+                  {(dev.recentBusinesses || []).length === 0 ? (
+                    <p className="py-8 text-center text-sm text-gray-400">No recent businesses.</p>
+                  ) : (
+                    (dev.recentBusinesses || []).map((r) => (
+                      <div key={r._id} className="flex items-center justify-between px-6 py-3.5">
+                        <div>
+                          <p className="text-sm font-medium text-gray-800">{r.name || "-"}</p>
+                          <p className="text-xs text-gray-400">{formatDate(r.registration_date, "DD MMM yyyy")}</p>
+                        </div>
+                        <p className="text-xs font-semibold tabular-nums text-gray-600">{r.isActive ? "Active" : "Inactive"}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         ) : (
@@ -436,19 +525,20 @@ export default function Dashboard() {
                 <div className="flex items-center justify-between px-5 py-4 border-b border-gray-300 bg-gray-100">
                   <div>
                     <p className="text-sm font-medium text-gray-800">7-Day Trend</p>
-                    <p className="text-xs text-gray-500">Default view shows last 7 days</p>
                   </div>
-                  <Button size="sm" variant="secondary" outline icon={Expand} onClick={openTrendModal}>Open Chart</Button>
+                  <button onClick={openTrendModal} className="text-xs font-medium text-teal-600 cursor-pointer">Open Chart</button>
                 </div>
-                <div className="px-3 py-2">
-                  <TrendLegend />
-                </div>
-                <div className="px-3 py-0">
-                  {cardTrend.loading ? (
-                    <div className="h-[130px] flex items-center justify-center text-sm text-gray-400">Loading chart...</div>
-                  ) : (
-                    <TrendChart data={cardTrend.data} idPrefix="card-trend" />
-                  )}
+                <div className="flex-1 flex flex-col justify-between">
+                  <div className="px-3 py-2">
+                    <TrendLegend />
+                  </div>
+                  <div className="px-3">
+                    {cardTrend.loading ? (
+                      <div className="h-[130px] flex items-center justify-center text-sm text-gray-400">Loading chart...</div>
+                    ) : (
+                      <TrendChart data={cardTrend.data} idPrefix="card-trend" />
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -501,7 +591,7 @@ export default function Dashboard() {
               <div className="rounded-3xl border border-gray-300 bg-white overflow-hidden">
                 <div className="flex items-center justify-between px-5 py-4 border-b border-gray-300 bg-gray-100">
                   <p className="font-medium text-gray-800">Recent Orders</p>
-                  <button onClick={() => navigate("/orders")} className="text-xs font-medium text-teal-600">View all</button>
+                  <button onClick={() => navigate("/orders")} className="text-xs font-medium text-teal-600 cursor-pointer">View all</button>
                 </div>
                 <div className="divide-y divide-gray-200">
                   {ops.recentOrders.length === 0 ? (
@@ -523,7 +613,7 @@ export default function Dashboard() {
               <div className="rounded-3xl border border-gray-300 bg-white overflow-hidden">
                 <div className="flex items-center justify-between px-5 py-4 border-b border-gray-300 bg-gray-100">
                   <p className="font-medium text-gray-800">Recent Invoices</p>
-                  <button onClick={() => navigate("/invoices")} className="text-xs font-medium text-teal-600">View all</button>
+                  <button onClick={() => navigate("/invoices")} className="text-xs font-medium text-teal-600 cursor-pointer">View all</button>
                 </div>
                 <div className="divide-y divide-gray-200">
                   {ops.recentInvoices.length === 0 ? (
@@ -545,7 +635,7 @@ export default function Dashboard() {
               <div className="rounded-3xl border border-gray-300 bg-white overflow-hidden">
                 <div className="flex items-center justify-between px-5 py-4 border-b border-gray-300 bg-gray-100">
                   <p className="font-medium text-gray-800">Recent Expenses</p>
-                  <button onClick={() => navigate("/expenses")} className="text-xs font-medium text-teal-600">View all</button>
+                  <button onClick={() => navigate("/expenses")} className="text-xs font-medium text-teal-600 cursor-pointer">View all</button>
                 </div>
                 <div className="divide-y divide-gray-200">
                   {ops.recentExpenses.length === 0 ? (
@@ -570,4 +660,3 @@ export default function Dashboard() {
     </>
   );
 }
-

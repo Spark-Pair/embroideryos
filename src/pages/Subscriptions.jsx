@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Repeat, Crown, ShieldCheck, Clock3, AlertTriangle } from "lucide-react";
+import { Repeat, Crown, ShieldCheck, Clock3, AlertTriangle, Plus } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import StatCard from "../components/StatCard";
 import TableToolbar from "../components/table/TableToolbar";
@@ -8,25 +8,39 @@ import TableSkeleton from "../components/table/TableLoader";
 import SubscriptionRow from "../components/Subscriptions/SubscriptionRow";
 import SubscriptionDetailsModal from "../components/Subscriptions/SubscriptionDetailsModal";
 import SubscriptionFormModal from "../components/Subscriptions/SubscriptionFormModal";
+import Modal from "../components/Modal";
+import Select from "../components/Select";
+import Button from "../components/Button";
 import { fetchPlans } from "../api/subscription";
-import { fetchSubscriptions, updateSubscription } from "../api/subscription.admin";
+import { fetchBusinesses } from "../api/business";
+import {
+  createSubscription,
+  fetchSubscriptions,
+  renewSubscription,
+  updateSubscription,
+} from "../api/subscription.admin";
 import { useToast } from "../context/ToastContext";
+
+const DEFAULT_PAGINATION = {
+  currentPage: 1,
+  totalPages: 1,
+  totalItems: 0,
+  itemsPerPage: 30,
+};
 
 export default function Subscriptions() {
   const { showToast } = useToast();
   const [plans, setPlans] = useState([]);
+  const [businesses, setBusinesses] = useState([]);
   const [subscriptions, setSubscriptions] = useState([]);
-  const [pagination, setPagination] = useState({
-    currentPage: 1,
-    totalPages: 1,
-    totalItems: 0,
-    itemsPerPage: 30,
-  });
+  const [pagination, setPagination] = useState(DEFAULT_PAGINATION);
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState({ plan: "", status: "", name: "" });
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [detailsModal, setDetailsModal] = useState({ isOpen: false, data: null });
   const [formModal, setFormModal] = useState({ isOpen: false, data: null });
+  const [createModal, setCreateModal] = useState({ isOpen: false, businessId: "", plan: "trial" });
+  const [renewModal, setRenewModal] = useState({ isOpen: false, id: "", plan: "trial" });
 
   const tableScrollRef = useRef(null);
 
@@ -56,23 +70,31 @@ export default function Subscriptions() {
         : raw;
 
       setSubscriptions(filtered);
-      setPagination(res.pagination || {
-        currentPage: 1,
-        totalPages: 1,
-        totalItems: raw.length,
-        itemsPerPage: 30,
-      });
+      setPagination(res.pagination || DEFAULT_PAGINATION);
     } catch (err) {
       showToast({ type: "error", message: err.response?.data?.message || "Failed to load subscriptions" });
     } finally {
       setLoading(false);
     }
-  }, [filters, pagination, showToast]);
+  }, [filters, showToast]);
+
+  const loadBusinesses = useCallback(async () => {
+    try {
+      const res = await fetchBusinesses({ page: 1, limit: 5000 });
+      setBusinesses(res?.data || []);
+    } catch {
+      setBusinesses([]);
+    }
+  }, []);
 
   useEffect(() => {
     loadPlans();
-    loadSubscriptions();
-  }, []);
+    loadBusinesses();
+  }, [loadPlans, loadBusinesses]);
+
+  useEffect(() => {
+    loadSubscriptions(1, filters);
+  }, [loadSubscriptions, filters]);
 
   useEffect(() => {
     if (tableScrollRef.current) {
@@ -139,7 +161,13 @@ export default function Subscriptions() {
   return (
     <>
       <div className="relative z-10 max-w-7xl mx-auto h-full flex flex-col">
-        <PageHeader title="Subscriptions" subtitle="Manage plans, billing status, and upgrades." />
+        <PageHeader
+          title="Subscriptions"
+          subtitle="Manage plans, billing status, and upgrades."
+          actionLabel="Add Subscription"
+          actionIcon={Plus}
+          onAction={() => setCreateModal({ isOpen: true, businessId: "", plan: plans?.[0]?.id || "trial" })}
+        />
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
           <StatCard label="Total" value={stats.total} icon={Repeat} />
@@ -181,6 +209,7 @@ export default function Subscriptions() {
                       startIndex={(pagination.currentPage - 1) * pagination.itemsPerPage}
                       onView={(data) => setDetailsModal({ isOpen: true, data })}
                       onEdit={(data) => setFormModal({ isOpen: true, data })}
+                      onRenew={(data) => setRenewModal({ isOpen: true, id: data._id, plan: data.plan || "trial" })}
                     />
                   ))}
                   {subscriptions.length === 0 && (
@@ -246,6 +275,106 @@ export default function Subscriptions() {
         onApply={handleApplyFilters}
         onReset={handleResetFilters}
       />
+
+      <Modal
+        isOpen={createModal.isOpen}
+        onClose={() => setCreateModal({ isOpen: false, businessId: "", plan: plans?.[0]?.id || "trial" })}
+        maxWidth="max-w-xl"
+        title="Add Subscription"
+        subtitle="Assign plan and create or replace current business subscription."
+        footer={
+          <div className="flex gap-3">
+            <Button
+              outline
+              variant="secondary"
+              className="w-1/3"
+              onClick={() => setCreateModal({ isOpen: false, businessId: "", plan: plans?.[0]?.id || "trial" })}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="grow"
+              onClick={async () => {
+                try {
+                  await createSubscription({
+                    businessId: createModal.businessId,
+                    plan: createModal.plan,
+                    status: "active",
+                    active: true,
+                  });
+                  showToast({ type: "success", message: "Subscription added" });
+                  setCreateModal({ isOpen: false, businessId: "", plan: plans?.[0]?.id || "trial" });
+                  loadSubscriptions(1, filters);
+                } catch (err) {
+                  showToast({ type: "error", message: err.response?.data?.message || "Failed to add subscription" });
+                }
+              }}
+            >
+              Save
+            </Button>
+          </div>
+        }
+      >
+        <div className="grid grid-cols-1 gap-4">
+          <Select
+            label="Business"
+            value={createModal.businessId}
+            onChange={(value) => setCreateModal((p) => ({ ...p, businessId: value }))}
+            options={(businesses || []).map((b) => ({ label: b.name, value: b._id }))}
+            placeholder="Select business"
+          />
+          <Select
+            label="Plan"
+            value={createModal.plan}
+            onChange={(value) => setCreateModal((p) => ({ ...p, plan: value }))}
+            options={(plans || []).map((p) => ({ label: p.name, value: p.id }))}
+          />
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={renewModal.isOpen}
+        onClose={() => setRenewModal({ isOpen: false, id: "", plan: plans?.[0]?.id || "trial" })}
+        maxWidth="max-w-xl"
+        title="Renew Subscription"
+        subtitle="Renew expired or due subscription and extend expiry."
+        footer={
+          <div className="flex gap-3">
+            <Button
+              outline
+              variant="secondary"
+              className="w-1/3"
+              onClick={() => setRenewModal({ isOpen: false, id: "", plan: plans?.[0]?.id || "trial" })}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="grow"
+              onClick={async () => {
+                try {
+                  await renewSubscription(renewModal.id, { plan: renewModal.plan });
+                  showToast({ type: "success", message: "Subscription renewed" });
+                  setRenewModal({ isOpen: false, id: "", plan: plans?.[0]?.id || "trial" });
+                  loadSubscriptions(pagination.currentPage, filters);
+                } catch (err) {
+                  showToast({ type: "error", message: err.response?.data?.message || "Failed to renew subscription" });
+                }
+              }}
+            >
+              Renew
+            </Button>
+          </div>
+        }
+      >
+        <div className="grid grid-cols-1 gap-4">
+          <Select
+            label="Plan"
+            value={renewModal.plan}
+            onChange={(value) => setRenewModal((p) => ({ ...p, plan: value }))}
+            options={(plans || []).map((p) => ({ label: p.name, value: p.id }))}
+          />
+        </div>
+      </Modal>
     </>
   );
 }
