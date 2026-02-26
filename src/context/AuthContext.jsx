@@ -24,6 +24,7 @@ export default function AuthProvider({ children }) {
       try {
         const userData = await getMe();
         setUser(userData);
+        localStorage.setItem("cachedUser", JSON.stringify(userData));
       } catch (error) {
         console.error('Auth init error:', error);
         storage.clearAuth();
@@ -43,6 +44,7 @@ export default function AuthProvider({ children }) {
       // Auth data already stored by loginUser in auth.api.js
       const userData = await getMe();
       setUser(userData);
+      localStorage.setItem("cachedUser", JSON.stringify(userData));
       
       showToast({
         type: "success",
@@ -79,6 +81,7 @@ export default function AuthProvider({ children }) {
     } finally {
       setUser(null);
       setLoading(false);
+      localStorage.removeItem("cachedUser");
     }
   }, [showToast]);
 
@@ -87,6 +90,7 @@ export default function AuthProvider({ children }) {
     try {
       const userData = await getMe();
       setUser(userData);
+      localStorage.setItem("cachedUser", JSON.stringify(userData));
       return userData;
     } catch (error) {
       console.error('Refresh user error:', error);

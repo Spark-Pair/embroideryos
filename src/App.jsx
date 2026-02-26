@@ -22,6 +22,7 @@ const StaffRecords = lazy(() => import("./pages/StaffRecords"));
 const Users = lazy(() => import("./pages/Users"));
 const Sessions = lazy(() => import("./pages/Sessions"));
 const Settings = lazy(() => import("./pages/Settings"));
+const Subscriptions = lazy(() => import("./pages/Subscriptions"));
 const SalarySlips = lazy(() => import("./pages/SalarySlips"));
 const KeyboardShortcuts = lazy(() => import("./pages/KeyboardShortcuts"));
 const StaffPayments = lazy(() => import("./pages/StaffPayments"));
@@ -62,6 +63,12 @@ export default function App() {
               <Route path="/users" element={
                 <ProtectedRoute>
                   <Layout><Users /></Layout>
+                </ProtectedRoute>
+              } />
+
+              <Route path="/subscriptions" element={
+                <ProtectedRoute>
+                  <Layout><Subscriptions /></Layout>
                 </ProtectedRoute>
               } />
 

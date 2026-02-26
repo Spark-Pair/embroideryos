@@ -1,5 +1,5 @@
 // api/customer.js
-import { apiClient } from './apiClient';
+import { apiClient } from "./apiClient";
 
 const CUSTOMER_URL = "/customers";
 
@@ -10,7 +10,7 @@ export const fetchCustomers = async (params = {}) => {
     ...(params.name && { name: params.name }),
     ...(params.status && { status: params.status })
   });
-  
+
   const res = await apiClient.get(`${CUSTOMER_URL}?${queryParams}`);
   return res.data;
 };

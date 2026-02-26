@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { fetchProductionConfig, createProductionConfig } from "../api/productionConfig";
 import { fetchMyInvoiceBanner, updateMyInvoiceBanner } from "../api/business";
+import { fetchMySubscription } from "../api/subscription";
 import {
   createExpenseItem,
   fetchExpenseItems,
@@ -289,6 +290,7 @@ export default function SettingsPage() {
   const [formModal, setFormModal] = useState(false);
   const [invoiceBanner, setInvoiceBanner] = useState("");
   const [bannerModalOpen, setBannerModalOpen] = useState(false);
+  const [subscription, setSubscription] = useState(null);
   const [expenseItems, setExpenseItems] = useState([]);
   const [expenseItemModal, setExpenseItemModal] = useState({ isOpen: false, data: null, variant: "general" });
 
@@ -327,8 +329,18 @@ export default function SettingsPage() {
       }
     };
 
+    const loadSubscription = async () => {
+      try {
+        const res = await fetchMySubscription();
+        setSubscription(res?.data || null);
+      } catch {
+        setSubscription(null);
+      }
+    };
+
     loadInvoiceBanner();
     loadExpenseItems();
+    loadSubscription();
   }, [loadExpenseItems]);
 
   const handleSave = async (payload) => {
@@ -373,6 +385,9 @@ export default function SettingsPage() {
     () => groupedExpenseItems.general.map((item) => ({ label: item.name, value: item.name })),
     [groupedExpenseItems.general]
   );
+
+  const planDetails = subscription?.plan_details;
+  const hasInvoiceBanner = Boolean(planDetails?.features?.invoice_banner);
 
   return (
     <>
@@ -554,14 +569,32 @@ export default function SettingsPage() {
             icon={ImageUp}
             action={
               <button
-                onClick={() => setBannerModalOpen(true)}
-                className="flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 transition-colors"
+                onClick={() => {
+                  if (!hasInvoiceBanner) {
+                    showToast({ type: "error", message: "Premium plan required for invoice banner" });
+                    return;
+                  }
+                  setBannerModalOpen(true);
+                }}
+                className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+                  hasInvoiceBanner ? "bg-gray-900 text-white hover:bg-gray-700" : "bg-gray-200 text-gray-500 cursor-not-allowed"
+                }`}
               >
                 <ImageUp size={15} />
                 Manage Banner
               </button>
             }
           >
+            {planDetails?.name && (
+              <div className="mb-3 text-xs text-gray-500">
+                Current plan: <span className="font-semibold text-gray-700">{planDetails.name}</span>
+              </div>
+            )}
+            {!hasInvoiceBanner && (
+              <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                Premium plan required to upload an invoice banner.
+              </div>
+            )}
             {invoiceBanner ? (
               <div className="rounded-2xl border border-gray-200 overflow-hidden bg-white">
                 <img src={invoiceBanner} alt="Current invoice banner" className="w-full max-h-72 object-cover" />

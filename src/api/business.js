@@ -1,5 +1,5 @@
 // api/business.js
-import { apiClient } from './apiClient';
+import { apiClient } from "./apiClient";
 
 const BUSINESS_URL = "/businesses";
 

@@ -44,6 +44,16 @@ self.addEventListener("activate", (event) => {
 
 // Fetch Handler
 self.addEventListener("fetch", (event) => {
+  const url = new URL(event.request.url);
+
+  if (url.origin !== self.location.origin && event.request.destination !== "image") {
+    return;
+  }
+
+  if (url.origin === self.location.origin && url.pathname.startsWith("/api/")) {
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       // Return cached response if available

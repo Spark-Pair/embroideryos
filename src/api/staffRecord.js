@@ -1,4 +1,4 @@
-import { apiClient } from './apiClient';
+import { apiClient } from "./apiClient";
 
 const STAFF_RECORDS_URL = "/staff-records";
 

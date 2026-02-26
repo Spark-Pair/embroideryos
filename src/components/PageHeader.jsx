@@ -39,15 +39,17 @@ export default function PageHeader({
         {subtitle && <p className="text-gray-400 text-sm">{subtitle}</p>}
       </div>
 
-      {actionLabel && onAction && (
-        <Button
-          icon={actionIcon}
-          onClick={onAction}
-          title={`Shortcut: ${formatComboDisplay(primaryActionShortcut)}`}
-        >
-          {actionLabel}
-        </Button>
-      )}
+      <div className="flex items-center gap-3">
+        {actionLabel && onAction && (
+          <Button
+            icon={actionIcon}
+            onClick={onAction}
+            title={`Shortcut: ${formatComboDisplay(primaryActionShortcut)}`}
+          >
+            {actionLabel}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
