@@ -275,21 +275,29 @@ export default function Users() {
                 <TableSkeleton rows={30} />
               ) : (
                 <tbody className="divide-y divide-gray-200">
-                  {users.map((item, index) => (
-                    <UserRow
-                      key={item._id}
-                      item={item}
-                      index={index}
-                      startIndex={
-                        (pagination.currentPage - 1) * pagination.itemsPerPage
-                      }
-                      onResetPassword={(data) => setPasswordResetModal({ isOpen: true, userData: data })}
-                      onView={(data) => setDetailsModal({ isOpen: true, data })}
-                      onToggleStatus={(data) =>
-                        handleUserDetailsActions("toggleStatus", data)
-                      }
-                    />
-                  ))}
+                  {users.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-7 py-16 text-center text-sm text-gray-400">
+                        No users found.
+                      </td>
+                    </tr>
+                  ) : (
+                    users.map((item, index) => (
+                      <UserRow
+                        key={item._id}
+                        item={item}
+                        index={index}
+                        startIndex={
+                          (pagination.currentPage - 1) * pagination.itemsPerPage
+                        }
+                        onResetPassword={(data) => setPasswordResetModal({ isOpen: true, userData: data })}
+                        onView={(data) => setDetailsModal({ isOpen: true, data })}
+                        onToggleStatus={(data) =>
+                          handleUserDetailsActions("toggleStatus", data)
+                        }
+                      />
+                    ))
+                  )}
                 </tbody>
               )}
             </table>

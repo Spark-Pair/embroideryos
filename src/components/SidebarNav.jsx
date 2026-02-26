@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { LayoutGrid, Users, FileText, DollarSign, CreditCard, Users2, Settings, LogOut, Building2, Banknote, Repeat, ChevronDown, History, Keyboard, Crown } from 'lucide-react';
 import SidebarNavItem from './SidebarNavItem';
 import useAuth from '../hooks/useAuth';
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 
 const developerNav = [
   { id: 'dashboard', icon: <LayoutGrid className="w-4.5 h-4.5" />, label: 'Dashboard', path: '/dashboard' },
@@ -65,6 +65,7 @@ const SidebarNav = ({ currentPath, handleLogout }) => {
   if (user.role === 'developer') navItems = developerNav;
   if (user.role === 'admin') navItems = adminNav;
   if (user.role === 'staff') navItems = staffNav;
+  const canManagePersonalSettings = user.role !== "developer";
 
   const isActive = (path) => {
     if (!path) return false;
@@ -88,12 +89,7 @@ const SidebarNav = ({ currentPath, handleLogout }) => {
   };
 
   return (
-    <motion.aside
-      className="w-78 p-6 no-default-transition"
-      initial={{ x: -20, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      transition={{ duration: 0.25, ease: "easeOut" }}
-    >
+    <aside className="w-78 p-6 no-default-transition">
       <div className="bg-white p-4 flex flex-col gap-4 h-full border border-gray-300 rounded-3xl">
         {/* Top */}
         <div className="flex items-center gap-1.5 ps-3 pt-2.5 pb-5 border-b border-gray-300">
@@ -162,21 +158,25 @@ const SidebarNav = ({ currentPath, handleLogout }) => {
                               border border-gray-300 rounded-2xl shadow-lg overflow-hidden no-default-transition"
                   >
                     <div className="p-2">
-                      <button
-                        onClick={() => handleDropdownAction(() => navigate('/settings'))}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-200/60 text-left rounded-xl cursor-pointer"
-                      >
-                        <Settings className="w-4 h-4 text-gray-600" />
-                        <span className="text-sm text-gray-700">Settings</span>
-                      </button>
-                      
-                      <button
-                        onClick={() => handleDropdownAction(() => navigate('/keyboard-shortcuts'))}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-200/60 text-left rounded-xl cursor-pointer"
-                      >
-                        <Keyboard className="w-4 h-4 text-gray-600" />
-                        <span className="text-sm text-gray-700">Keyboard Shortcuts</span>
-                      </button>
+                      {canManagePersonalSettings && (
+                        <>
+                          <button
+                            onClick={() => handleDropdownAction(() => navigate('/settings'))}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-200/60 text-left rounded-xl cursor-pointer"
+                          >
+                            <Settings className="w-4 h-4 text-gray-600" />
+                            <span className="text-sm text-gray-700">Settings</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleDropdownAction(() => navigate('/keyboard-shortcuts'))}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-200/60 text-left rounded-xl cursor-pointer"
+                          >
+                            <Keyboard className="w-4 h-4 text-gray-600" />
+                            <span className="text-sm text-gray-700">Keyboard Shortcuts</span>
+                          </button>
+                        </>
+                      )}
 
                       <button
                         onClick={() => handleDropdownAction(() => navigate('/sessions'))}
@@ -203,7 +203,7 @@ const SidebarNav = ({ currentPath, handleLogout }) => {
           </div>
         </div>
       </div>
-    </motion.aside>
+    </aside>
   );
 };
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ImageUp, Save, Trash2, X } from "lucide-react";
 import Modal from "../Modal";
 import Button from "../Button";
+import { useToast } from "../../context/ToastContext";
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -18,6 +19,7 @@ export default function InvoiceBannerModal({
   initialBanner = "",
   onSave,
 }) {
+  const { showToast } = useToast();
   const [bannerData, setBannerData] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -33,11 +35,15 @@ export default function InvoiceBannerModal({
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      setError("Please select an image file.");
+      const message = "Please select an image file.";
+      setError(message);
+      showToast({ type: "warning", message });
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      setError("Banner size should be less than 5MB.");
+      const message = "Banner size should be less than 5MB.";
+      setError(message);
+      showToast({ type: "warning", message });
       return;
     }
 
@@ -46,7 +52,9 @@ export default function InvoiceBannerModal({
       setBannerData(data);
       setError("");
     } catch {
-      setError("Failed to read selected file.");
+      const message = "Failed to read selected file.";
+      setError(message);
+      showToast({ type: "error", message });
     }
   };
 
@@ -57,7 +65,9 @@ export default function InvoiceBannerModal({
       await onSave(bannerData);
       onClose();
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to save banner");
+      const message = err.response?.data?.message || "Failed to save banner";
+      setError(message);
+      showToast({ type: "error", message });
     } finally {
       setSaving(false);
     }

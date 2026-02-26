@@ -231,16 +231,22 @@ export default function Subscriptions() {
             <h3 className="text-sm font-semibold text-gray-800">Plans</h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {plans.map((plan) => (
-              <div key={plan.id} className="rounded-2xl border border-gray-200 p-4 bg-gray-50">
-                <p className="text-sm font-semibold text-gray-800">{plan.name}</p>
-                <p className="text-xs text-gray-500 mt-1">PKR {plan.price} / {plan.durationDays} days</p>
-                <ul className="mt-3 text-xs text-gray-600 space-y-1">
-                  <li>Invoice Banner: {plan.features?.invoice_banner ? "Yes" : "No"}</li>
-                  <li>Users Limit: {plan.limits?.users ?? "-"}</li>
-                </ul>
+            {plans.length === 0 ? (
+              <div className="col-span-full rounded-2xl border border-gray-200 bg-gray-50 p-8 text-center text-sm text-gray-400">
+                No plans data found.
               </div>
-            ))}
+            ) : (
+              plans.map((plan) => (
+                <div key={plan.id} className="rounded-2xl border border-gray-200 p-4 bg-gray-50">
+                  <p className="text-sm font-semibold text-gray-800">{plan.name}</p>
+                  <p className="text-xs text-gray-500 mt-1">PKR {plan.price} / {plan.durationDays} days</p>
+                  <ul className="mt-3 text-xs text-gray-600 space-y-1">
+                    <li>Invoice Banner: {plan.features?.invoice_banner ? "Yes" : "No"}</li>
+                    <li>Users Limit: {plan.limits?.users ?? "-"}</li>
+                  </ul>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

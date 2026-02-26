@@ -48,7 +48,7 @@ export default function CustomerDetailsModal({
             { label: "Customer Name", value: initialData?.name },
             { label: "Contact Person", value: initialData?.person },
             { label: "Rate", value: initialData?.rate },
-            { label: "Opening Balance", value: formatNumbers(initialData?.opening_balance, 1) },
+            { label: "Current Balance", value: formatNumbers(initialData?.current_balance ?? initialData?.opening_balance, 1) },
           ]}
         />
       }

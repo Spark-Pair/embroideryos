@@ -10,6 +10,7 @@ import { useFormKeyboard } from "../../hooks/useFormKeyboard";
 import { useShortcut } from "../../hooks/useShortcuts";
 import { formatComboDisplay, isEventMatchingShortcut } from "../../utils/shortcuts";
 import { fetchCustomers } from "../../api/customer";
+import { useToast } from "../../context/ToastContext";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -162,6 +163,7 @@ export default function OrderFormModal({
   forceAdd    = false,
   onAction,
 }) {
+  const { showToast } = useToast();
   const isEdit = !!initialData && !forceAdd;
 
   // ── Refs ──
@@ -204,7 +206,10 @@ export default function OrderFormModal({
       try {
         const res = await fetchCustomers({ status: "active" });
         setCustomers(res.data || []);
-      } catch { setCustomers([]); }
+      } catch {
+        setCustomers([]);
+        showToast({ type: "error", message: "Failed to load customers" });
+      }
       finally {
         setCustomersLoading(false);
         if (!isEdit) setTimeout(() => customerRef.current?.focus(), 50);

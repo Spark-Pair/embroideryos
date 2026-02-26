@@ -273,21 +273,29 @@ export default function Businesses() {
                 <TableSkeleton rows={30} />
               ) : (
                 <tbody className="divide-y divide-gray-200">
-                  {businesses.map((item, index) => (
-                    <BusinessRow
-                      key={item._id}
-                      item={item}
-                      index={index}
-                      startIndex={
-                        (pagination.currentPage - 1) * pagination.itemsPerPage
-                      }
-                      onView={(data) => setDetailsModal({ isOpen: true, data })}
-                      onEdit={(data) => setFormModal({ isOpen: true, data })}
-                      onToggleStatus={(data) =>
-                        handleBusinessDetailsActions("toggleStatus", data)
-                      }
-                    />
-                  ))}
+                  {businesses.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-7 py-16 text-center text-sm text-gray-400">
+                        No businesses found.
+                      </td>
+                    </tr>
+                  ) : (
+                    businesses.map((item, index) => (
+                      <BusinessRow
+                        key={item._id}
+                        item={item}
+                        index={index}
+                        startIndex={
+                          (pagination.currentPage - 1) * pagination.itemsPerPage
+                        }
+                        onView={(data) => setDetailsModal({ isOpen: true, data })}
+                        onEdit={(data) => setFormModal({ isOpen: true, data })}
+                        onToggleStatus={(data) =>
+                          handleBusinessDetailsActions("toggleStatus", data)
+                        }
+                      />
+                    ))
+                  )}
                 </tbody>
               )}
             </table>

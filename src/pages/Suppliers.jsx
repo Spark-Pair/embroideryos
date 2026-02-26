@@ -240,7 +240,7 @@ export default function Suppliers() {
                 <tr className="text-sm tracking-wider text-gray-500">
                   <th className="px-7 py-3.5 font-medium">Id</th>
                   <th className="px-7 py-3.5 font-medium">Supplier Name</th>
-                  <th className="px-7 py-3.5 font-medium">Opening Balance</th>
+                  <th className="px-7 py-3.5 font-medium">Current Balance</th>
                   <th className="px-7 py-3.5 font-medium">Status</th>
                   <th className="px-7 py-3.5 font-medium text-right">Actions</th>
                 </tr>

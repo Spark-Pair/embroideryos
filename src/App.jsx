@@ -1,7 +1,8 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import AuthProvider from './context/AuthContext';
 import ProtectedRoute from './routes/ProtectedRoute';
+import RoleRoute from './routes/RoleRoute';
 import Layout from './layouts/layout';
 import { ToastProvider } from './context/ToastContext';
 
@@ -30,6 +31,55 @@ const KeyboardShortcuts = lazy(() => import("./pages/KeyboardShortcuts"));
 const StaffPayments = lazy(() => import("./pages/StaffPayments"));
 
 export default function App() {
+  useEffect(() => {
+    let rafId = 0;
+
+    const NEGATIVE_NUMBER_REGEX = /^\(?\s*(?:PKR|RS\.?)?\s*-\s*\d[\d,]*(?:\.\d+)?\s*\)?$/i;
+
+    const applyNegativeClass = () => {
+      const root = document.getElementById("root");
+      if (!root) return;
+
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode();
+
+      while (node) {
+        const parent = node.parentElement;
+        if (parent) {
+          const tag = parent.tagName;
+          if (tag !== "INPUT" && tag !== "TEXTAREA" && tag !== "OPTION") {
+            const text = (node.nodeValue || "").trim().replace(/\s+/g, " ");
+            const isNegative = NEGATIVE_NUMBER_REGEX.test(text);
+            parent.classList.toggle("is-negative-number", isNegative);
+          }
+        }
+        node = walker.nextNode();
+      }
+    };
+
+    const scheduleApply = () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(applyNegativeClass);
+    };
+
+    scheduleApply();
+
+    const root = document.getElementById("root");
+    if (!root) return undefined;
+
+    const observer = new MutationObserver(scheduleApply);
+    observer.observe(root, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      observer.disconnect();
+    };
+  }, []);
+
   const routeFallback = (
     <div className="min-h-screen flex items-center justify-center text-sm text-gray-500">
       Loading...
@@ -43,132 +93,49 @@ export default function App() {
           <Suspense fallback={routeFallback}>
             <Routes>
               <Route path="/login" element={<Login />} />
-
-              <Route path="/" element={
-                <ProtectedRoute>
-                  <Layout><Dashboard /></Layout>
-                </ProtectedRoute>
-              } />
-
-              <Route path="/dashboard" element={
-                <ProtectedRoute>
-                  <Layout><Dashboard /></Layout>
-                </ProtectedRoute>
-              } />
-
-              <Route path="/businesses" element={
-                <ProtectedRoute>
-                  <Layout><Businesses /></Layout>
-                </ProtectedRoute>
-              } />
-
-              <Route path="/users" element={
-                <ProtectedRoute>
-                  <Layout><Users /></Layout>
-                </ProtectedRoute>
-              } />
-
-              <Route path="/subscriptions" element={
-                <ProtectedRoute>
-                  <Layout><Subscriptions /></Layout>
-                </ProtectedRoute>
-              } />
-
-              <Route path="/plans" element={
-                <ProtectedRoute>
-                  <Layout><Plans /></Layout>
-                </ProtectedRoute>
-              } />
-
-              <Route path="/payments" element={
-                <ProtectedRoute>
-                  <Layout><Payments /></Layout>
-                </ProtectedRoute>
-              } />
-
-              <Route path="/sessions" element={
-                <ProtectedRoute>
-                  <Layout><Sessions /></Layout>
-                </ProtectedRoute>
-              } />
-
-              <Route path="/settings" element={
-                <ProtectedRoute>
-                  <Layout><Settings /></Layout>
-                </ProtectedRoute>
-              } />
-
-              <Route path="/staff" element={
-                <ProtectedRoute>
-                  <Layout><Staff /></Layout>
-                </ProtectedRoute>
-              } />
-
-              <Route path="/customers" element={
-                <ProtectedRoute>
-                  <Layout><Customers /></Layout>
-                </ProtectedRoute>
-              } />
-
-              <Route path="/suppliers" element={
-                <ProtectedRoute>
-                  <Layout><Suppliers /></Layout>
-                </ProtectedRoute>
-              } />
-
-              <Route path="/expenses" element={
-                <ProtectedRoute>
-                  <Layout><Expenses /></Layout>
-                </ProtectedRoute>
-              } />
-
-              <Route path="/orders" element={
-                <ProtectedRoute>
-                  <Layout><Orders /></Layout>
-                </ProtectedRoute>
-              } />
-
-              <Route path="/invoices" element={
-                <ProtectedRoute>
-                  <Layout><Invoices /></Layout>
-                </ProtectedRoute>
-              } />
-
-              <Route path="/customer_payments" element={
-                <ProtectedRoute>
-                  <Layout><CustomerPayments /></Layout>
-                </ProtectedRoute>
-              } />
-
-              <Route path="/supplier_payments" element={
-                <ProtectedRoute>
-                  <Layout><SupplierPayments /></Layout>
-                </ProtectedRoute>
-              } />
-
-              <Route path="/staff-records" element={
-                <ProtectedRoute>
-                  <Layout><StaffRecords /></Layout>
-                </ProtectedRoute>
-              } />
-
-              <Route path="/salary-slips" element={
-                <ProtectedRoute>
-                  <Layout><SalarySlips /></Layout>
-                </ProtectedRoute>
-              } />
-
-              <Route path="/staff-payments" element={
-                <ProtectedRoute>
-                  <Layout><StaffPayments /></Layout>
-                </ProtectedRoute>
-              } />
-
-              <Route path="/keyboard-shortcuts" element={
-                <ProtectedRoute>
-                  <Layout><KeyboardShortcuts /></Layout>
-                </ProtectedRoute>
-              } />
+              <Route
+                element={
+                  <ProtectedRoute>
+                    <Layout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/businesses" element={<Businesses />} />
+                <Route path="/users" element={<Users />} />
+                <Route path="/subscriptions" element={<Subscriptions />} />
+                <Route path="/plans" element={<Plans />} />
+                <Route path="/payments" element={<Payments />} />
+                <Route path="/sessions" element={<Sessions />} />
+                <Route
+                  path="/settings"
+                  element={
+                    <RoleRoute allow={["admin", "staff"]}>
+                      <Settings />
+                    </RoleRoute>
+                  }
+                />
+                <Route path="/staff" element={<Staff />} />
+                <Route path="/customers" element={<Customers />} />
+                <Route path="/suppliers" element={<Suppliers />} />
+                <Route path="/expenses" element={<Expenses />} />
+                <Route path="/orders" element={<Orders />} />
+                <Route path="/invoices" element={<Invoices />} />
+                <Route path="/customer_payments" element={<CustomerPayments />} />
+                <Route path="/supplier_payments" element={<SupplierPayments />} />
+                <Route path="/staff-records" element={<StaffRecords />} />
+                <Route path="/salary-slips" element={<SalarySlips />} />
+                <Route path="/staff-payments" element={<StaffPayments />} />
+                <Route
+                  path="/keyboard-shortcuts"
+                  element={
+                    <RoleRoute allow={["admin", "staff"]}>
+                      <KeyboardShortcuts />
+                    </RoleRoute>
+                  }
+                />
+              </Route>
 
               <Route path="*" element={<Login />} />
             </Routes>

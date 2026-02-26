@@ -13,6 +13,7 @@ import { formatNumbers } from "../../utils";
 import { useFormKeyboard } from "../../hooks/useFormKeyboard";
 import { useShortcut } from "../../hooks/useShortcuts";
 import { isEventMatchingShortcut } from "../../utils/shortcuts";
+import { useToast } from "../../context/ToastContext";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -204,6 +205,7 @@ export default function StaffRecordFormModal({
   lastUsed,
   setLastUsed,
 }) {
+  const { showToast } = useToast();
   const isEdit = !!initialData;
 
   // ── Refs for auto-focus flow ──
@@ -241,6 +243,7 @@ export default function StaffRecordFormModal({
         setCfg(data ? { ...DEFAULT_CONFIG, ...data } : DEFAULT_CONFIG);
       } catch {
         setCfg(DEFAULT_CONFIG);
+        showToast({ type: "error", message: "Failed to load production config" });
       } finally {
         setCfgLoading(false);
       }
@@ -279,6 +282,7 @@ export default function StaffRecordFormModal({
         }
       } catch {
         setStaffList([]);
+        showToast({ type: "error", message: "Failed to load staff list" });
       } finally {
         setStaffLoading(false);
       }
@@ -367,6 +371,7 @@ export default function StaffRecordFormModal({
       setLastUsed((prev) => ({ ...prev, staffId }));
     } catch {
       setDate(resolveDate(staff?.joining_date, null));
+      showToast({ type: "error", message: "Failed to load last staff record date" });
     } finally {
       setDateLoading(false);
     }

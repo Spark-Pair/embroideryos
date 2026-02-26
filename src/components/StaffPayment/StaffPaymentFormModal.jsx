@@ -6,6 +6,7 @@ import Input from "../Input";
 import Select from "../Select";
 import { fetchStaffNames } from "../../api/staff";
 import { useFormKeyboard } from "../../hooks/useFormKeyboard";
+import { useToast } from "../../context/ToastContext";
 
 const TYPE_OPTIONS = [
   { label: "Advance", value: "advance" },
@@ -17,6 +18,7 @@ const todayInput = () => new Date().toISOString().slice(0, 10);
 const monthInput = () => new Date().toISOString().slice(0, 7);
 
 export default function StaffPaymentFormModal({ isOpen, onClose, onAction }) {
+  const { showToast } = useToast();
   const staffRef = useRef(null);
   const dateRef = useRef(null);
   const monthRef = useRef(null);
@@ -43,6 +45,7 @@ export default function StaffPaymentFormModal({ isOpen, onClose, onAction }) {
 
   const handleSubmit = async () => {
     if (!formData.staff_id || !formData.date || !formData.month || !formData.type || !formData.amount) {
+      showToast({ type: "warning", message: "Please fill all required fields" });
       return;
     }
 
@@ -83,6 +86,7 @@ export default function StaffPaymentFormModal({ isOpen, onClose, onAction }) {
         setStaffList(res.data || []);
       } catch {
         setStaffList([]);
+        showToast({ type: "error", message: "Failed to load staff list" });
       } finally {
         setStaffLoading(false);
         setTimeout(() => staffRef.current?.focus(), 120);

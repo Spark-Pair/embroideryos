@@ -4,6 +4,11 @@
   @apply transition-all duration-300;
 }
 
+.no-default-transition,
+.no-default-transition * {
+  transition: none !important;
+}
+
 @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
 @keyframes slideUp { from { transform: translateY(20px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
 
@@ -38,4 +43,8 @@ input[type=number] {
 /* Internet Explorer */
 * {
   -ms-overflow-style: none;
+}
+
+.is-negative-number {
+  color: rgb(225 29 72) !important;
 }

@@ -103,6 +103,10 @@ export default function Plans() {
             <div className="col-span-full rounded-3xl border border-gray-300 bg-white p-10 text-center text-sm text-gray-400">
               Loading plans...
             </div>
+          ) : plans.length === 0 ? (
+            <div className="col-span-full rounded-3xl border border-gray-300 bg-white p-10 text-center text-sm text-gray-400">
+              No plans data found.
+            </div>
           ) : (
             plans.map((plan) => (
               <div key={plan.id} className="rounded-3xl border border-gray-300 bg-white p-5">

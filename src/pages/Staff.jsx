@@ -269,7 +269,7 @@ export default function Staffs() {
                   <th className="px-7 py-3.5 font-medium">Staff Name</th>
                   <th className="px-7 py-3.5 font-medium">Joining Date</th>
                   <th className="px-7 py-3.5 font-medium">Salary</th>
-                  <th className="px-7 py-3.5 font-medium">Opening Balance</th>
+                  <th className="px-7 py-3.5 font-medium">Current Balance</th>
                   <th className="px-7 py-3.5 font-medium">Status</th>
                   <th className="px-7 py-3.5 font-medium text-right">
                     Actions
@@ -281,21 +281,29 @@ export default function Staffs() {
                 <TableSkeleton rows={30} columns={7} />
               ) : (
                 <tbody className="divide-y divide-gray-200">
-                  {staffs.map((item, index) => (
-                    <StaffRow
-                      key={item._id}
-                      item={item}
-                      index={index}
-                      startIndex={
-                        (pagination.currentPage - 1) * pagination.itemsPerPage
-                      }
-                      onView={(data) => setDetailsModal({ isOpen: true, data })}
-                      onEdit={(data) => setFormModal({ isOpen: true, data })}
-                      onToggleStatus={(data) =>
-                        handleStaffDetailsActions("toggleStatus", data)
-                      }
-                    />
-                  ))}
+                  {staffs.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-7 py-16 text-center text-sm text-gray-400">
+                        No staff found.
+                      </td>
+                    </tr>
+                  ) : (
+                    staffs.map((item, index) => (
+                      <StaffRow
+                        key={item._id}
+                        item={item}
+                        index={index}
+                        startIndex={
+                          (pagination.currentPage - 1) * pagination.itemsPerPage
+                        }
+                        onView={(data) => setDetailsModal({ isOpen: true, data })}
+                        onEdit={(data) => setFormModal({ isOpen: true, data })}
+                        onToggleStatus={(data) =>
+                          handleStaffDetailsActions("toggleStatus", data)
+                        }
+                      />
+                    ))
+                  )}
                 </tbody>
               )}
             </table>

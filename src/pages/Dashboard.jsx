@@ -115,6 +115,134 @@ function TrendLegend() {
   );
 }
 
+function SkeletonBox({ className = "" }) {
+  return <div className={`animate-pulse rounded-xl bg-gray-200/80 ${className}`} />;
+}
+
+function DashboardLoadingSkeleton({ isDeveloper }) {
+  if (isDeveloper) {
+    return (
+      <div className="space-y-6 pb-6">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, idx) => (
+            <div key={idx} className="rounded-3xl border border-gray-300 bg-white p-4">
+              <div className="flex items-center gap-4">
+                <SkeletonBox className="h-12 w-12 rounded-xl" />
+                <div className="flex-1 space-y-2">
+                  <SkeletonBox className="h-3 w-24" />
+                  <SkeletonBox className="h-6 w-20" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, idx) => (
+            <div key={idx} className="rounded-3xl border border-gray-300 bg-white overflow-hidden">
+              <div className="border-b border-gray-300 bg-gray-100 px-5 py-4">
+                <SkeletonBox className="h-4 w-36" />
+              </div>
+              <div className="space-y-3 p-5">
+                {Array.from({ length: 5 }).map((__, rIdx) => (
+                  <div key={rIdx} className="flex items-center justify-between">
+                    <SkeletonBox className="h-3 w-28" />
+                    <SkeletonBox className="h-3 w-16" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 pb-6">
+      <div>
+        <SkeletonBox className="mb-3 h-3 w-44" />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-5">
+          {Array.from({ length: 5 }).map((_, idx) => (
+            <div key={idx} className="rounded-3xl border border-gray-300 bg-white p-4">
+              <div className="flex items-center gap-4">
+                <SkeletonBox className="h-12 w-12 rounded-xl" />
+                <div className="flex-1 space-y-2">
+                  <SkeletonBox className="h-3 w-20" />
+                  <SkeletonBox className="h-6 w-12" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+        <div className="rounded-3xl border border-gray-300 bg-white xl:col-span-6 overflow-hidden">
+          <div className="border-b border-gray-300 bg-gray-100 px-5 py-4">
+            <SkeletonBox className="h-4 w-28" />
+          </div>
+          <div className="p-4">
+            <SkeletonBox className="h-[130px] w-full rounded-2xl" />
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-gray-300 bg-white xl:col-span-3 overflow-hidden">
+          <div className="border-b border-gray-300 bg-gray-100 px-5 py-4">
+            <SkeletonBox className="h-4 w-40" />
+          </div>
+          <div className="space-y-3 p-5">
+            {Array.from({ length: 5 }).map((_, idx) => (
+              <div key={idx} className="flex items-center justify-between">
+                <SkeletonBox className="h-3 w-24" />
+                <SkeletonBox className="h-3 w-20" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-gray-300 bg-white xl:col-span-3 overflow-hidden">
+          <div className="border-b border-gray-300 bg-gray-100 px-5 py-4">
+            <SkeletonBox className="h-4 w-28" />
+          </div>
+          <div className="space-y-4 p-5">
+            {Array.from({ length: 3 }).map((_, idx) => (
+              <div key={idx} className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <SkeletonBox className="h-10 w-10 rounded-xl" />
+                  <SkeletonBox className="h-3 w-20" />
+                </div>
+                <SkeletonBox className="h-5 w-8" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, idx) => (
+          <div key={idx} className="rounded-3xl border border-gray-300 bg-white overflow-hidden">
+            <div className="border-b border-gray-300 bg-gray-100 px-5 py-4">
+              <SkeletonBox className="h-4 w-32" />
+            </div>
+            <div className="space-y-3 p-5">
+              {Array.from({ length: 5 }).map((__, rIdx) => (
+                <div key={rIdx} className="flex items-center justify-between">
+                  <div className="space-y-1.5">
+                    <SkeletonBox className="h-3 w-24" />
+                    <SkeletonBox className="h-3 w-20" />
+                  </div>
+                  <SkeletonBox className="h-3 w-16" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const { showToast } = useToast();
@@ -393,6 +521,8 @@ export default function Dashboard() {
 
             {modalTrendLoading ? (
               <div className="h-[360px] flex items-center justify-center text-sm text-gray-400">Loading chart...</div>
+            ) : (modalTrend.data || []).length === 0 ? (
+              <div className="h-[360px] flex items-center justify-center text-sm text-gray-400">No trend data found for selected range.</div>
             ) : (
               <TrendChart data={modalTrend.data} height={360} idPrefix="modal-trend" />
             )}
@@ -425,7 +555,7 @@ export default function Dashboard() {
         </div>
 
         {loading ? (
-          <div className="p-10 text-sm text-center">Loading dashboard...</div>
+          <DashboardLoadingSkeleton isDeveloper={isDeveloper} />
         ) : isDeveloper ? (
           <div className="space-y-6 pb-6">
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
@@ -535,6 +665,8 @@ export default function Dashboard() {
                   <div className="px-3">
                     {cardTrend.loading ? (
                       <div className="h-[130px] flex items-center justify-center text-sm text-gray-400">Loading chart...</div>
+                    ) : (cardTrend.data || []).length === 0 ? (
+                      <div className="h-[130px] flex items-center justify-center text-sm text-gray-400">No trend data found.</div>
                     ) : (
                       <TrendChart data={cardTrend.data} idPrefix="card-trend" />
                     )}
@@ -544,15 +676,15 @@ export default function Dashboard() {
 
               <div className="rounded-3xl border border-gray-300 bg-white overflow-hidden xl:col-span-3">
                 <div className="px-5 py-4 border-b border-gray-300 bg-gray-100">
-                  <p className="text-sm font-medium text-gray-800">Today Snapshot</p>
+                  <p className="text-sm font-medium text-gray-800">Selected Month Snapshot</p>
                 </div>
                 <div className="divide-y divide-gray-200">
                   {[
-                    { label: "Orders", count: ops.todayOrdersCount, amount: ops.todayOrderAmount, countCls: "text-gray-900" },
-                    { label: "Invoices", count: ops.todayInvoicesCount, amount: ops.todayInvoiceAmount, countCls: "text-gray-900" },
-                    { label: "Expenses", count: ops.todayExpenseCount, amount: ops.todayExpenseAmount, countCls: "text-rose-500" },
-                    { label: "Payment In", count: ops.todayPaymentInCount, amount: ops.todayPaymentInAmount, countCls: "text-emerald-600" },
-                    { label: "Payment Out", count: ops.todayPaymentOutCount, amount: ops.todayPaymentOutAmount, countCls: "text-amber-600" },
+                    { label: "Orders", count: ops.monthOrdersCount, amount: ops.monthOrderAmount, countCls: "text-gray-900" },
+                    { label: "Invoices", count: ops.monthInvoicesCount, amount: ops.monthInvoiceAmount, countCls: "text-gray-900" },
+                    { label: "Expenses", count: ops.monthExpenseCount, amount: ops.monthExpenseAmount, countCls: "text-rose-500" },
+                    { label: "Payment In", count: ops.monthPaymentInCount, amount: ops.monthPaymentInAmount, countCls: "text-emerald-600" },
+                    { label: "Payment Out", count: ops.monthPaymentOutCount, amount: ops.monthPaymentOutAmount, countCls: "text-amber-600" },
                   ].map((item) => (
                     <div key={item.label} className="flex items-center justify-between px-5 py-3">
                       <p className="text-xs text-gray-500">{item.label}</p>

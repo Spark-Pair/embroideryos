@@ -6,6 +6,7 @@ import Input from "../Input";
 import Select from "../Select";
 import { fetchCustomers } from "../../api/customer";
 import { useFormKeyboard } from "../../hooks/useFormKeyboard";
+import { useToast } from "../../context/ToastContext";
 
 const METHOD_OPTIONS = [
   { label: "Cash", value: "cash" },
@@ -26,7 +27,8 @@ const needsBank = (method) => method === "online" || method === "cheque";
 const needsParty = (method) => method === "slip";
 const needsChequeDates = (method) => method === "cheque" || method === "slip";
 
-export default function CustomerPaymentFormModal({ isOpen, onClose, onAction }) {
+export default function CustomerPaymentFormModal({ isOpen, onClose, onAction, initialData }) {
+  const { showToast } = useToast();
   const customerRef = useRef(null);
   const dateRef = useRef(null);
   const methodRef = useRef(null);
@@ -37,6 +39,7 @@ export default function CustomerPaymentFormModal({ isOpen, onClose, onAction }) 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [formData, setFormData] = useState({
+    id: "",
     customer_id: "",
     date: todayInput(),
     method: "",
@@ -48,6 +51,7 @@ export default function CustomerPaymentFormModal({ isOpen, onClose, onAction }) 
     clear_date: "",
     remarks: "",
   });
+  const mode = formData.id ? "edit" : "add";
 
   const customerOptions = useMemo(
     () => customerList.map((c) => ({ label: `${c.name}${c.person ? ` (${c.person})` : ""}`, value: c._id })),
@@ -74,6 +78,7 @@ export default function CustomerPaymentFormModal({ isOpen, onClose, onAction }) 
 
   const resetForm = () => {
     setFormData({
+      id: "",
       customer_id: "",
       date: todayInput(),
       method: "",
@@ -109,18 +114,23 @@ export default function CustomerPaymentFormModal({ isOpen, onClose, onAction }) 
     setError("");
 
     if (!isValid) {
-      setError("Please fill all required fields for selected method.");
+      const message = "Please fill all required fields for selected method.";
+      setError(message);
+      showToast({ type: "warning", message });
       return;
     }
 
     if (needsChequeDates(formData.method) && new Date(formData.clear_date) < new Date(formData.cheque_date)) {
-      setError("Clear date must be greater than or equal to cheque/slip date.");
+      const message = "Clear date must be greater than or equal to cheque/slip date.";
+      setError(message);
+      showToast({ type: "warning", message });
       return;
     }
 
     setSubmitting(true);
     try {
-      await onAction("add", {
+      await onAction(mode, {
+        id: formData.id || undefined,
         customer_id: formData.customer_id,
         date: formData.date,
         month: monthFromDate(formData.date),
@@ -147,7 +157,26 @@ export default function CustomerPaymentFormModal({ isOpen, onClose, onAction }) 
   useEffect(() => {
     if (!isOpen) return;
 
-    resetForm();
+    const toInputDate = (value) => (value ? new Date(value).toISOString().slice(0, 10) : "");
+
+    if (initialData?._id) {
+      setFormData({
+        id: initialData._id,
+        customer_id: initialData.customer_id?._id || initialData.customer_id || "",
+        date: toInputDate(initialData.date) || todayInput(),
+        method: initialData.method || "",
+        amount: initialData.amount ?? "",
+        reference_no: initialData.reference_no || "",
+        bank_name: initialData.bank_name || "",
+        party_name: initialData.party_name || "",
+        cheque_date: toInputDate(initialData.cheque_date),
+        clear_date: toInputDate(initialData.clear_date),
+        remarks: initialData.remarks || "",
+      });
+      setError("");
+    } else {
+      resetForm();
+    }
 
     const loadCustomers = async () => {
       setCustomerLoading(true);
@@ -156,6 +185,7 @@ export default function CustomerPaymentFormModal({ isOpen, onClose, onAction }) 
         setCustomerList(res?.data || []);
       } catch {
         setCustomerList([]);
+        showToast({ type: "error", message: "Failed to load customers" });
       } finally {
         setCustomerLoading(false);
         setTimeout(() => customerRef.current?.focus(), 120);
@@ -163,14 +193,14 @@ export default function CustomerPaymentFormModal({ isOpen, onClose, onAction }) 
     };
 
     loadCustomers();
-  }, [isOpen]);
+  }, [isOpen, initialData]);
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       maxWidth="max-w-2xl"
-      title="Receive Customer Payment"
+      title={mode === "edit" ? "Edit Customer Payment" : "Receive Customer Payment"}
       subtitle="Select customer, date, method and required payment details."
       footer={
         <div className="flex items-center justify-between gap-3">
@@ -180,7 +210,7 @@ export default function CustomerPaymentFormModal({ isOpen, onClose, onAction }) 
               Cancel
             </Button>
             <Button onClick={handleSubmit} loading={submitting} disabled={!isValid}>
-              Save Payment
+              {mode === "edit" ? "Update Payment" : "Save Payment"}
             </Button>
           </div>
         </div>

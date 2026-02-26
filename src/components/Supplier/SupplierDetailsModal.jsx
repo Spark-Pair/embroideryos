@@ -45,7 +45,7 @@ export default function SupplierDetailsModal({
       <ModalDetails
         data={[
           { label: "Supplier Name", value: initialData?.name },
-          { label: "Opening Balance", value: formatNumbers(initialData?.opening_balance, 1) },
+          { label: "Current Balance", value: formatNumbers(initialData?.current_balance ?? initialData?.opening_balance, 1) },
         ]}
       />
     </Modal>

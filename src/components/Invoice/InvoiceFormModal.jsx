@@ -5,6 +5,7 @@ import Button from "../Button";
 import Input from "../Input";
 import { fetchInvoiceOrderGroups } from "../../api/invoice";
 import { formatDate, formatNumbers } from "../../utils";
+import { useToast } from "../../context/ToastContext";
 
 const MAX_INVOICE_ORDERS = 7;
 
@@ -27,6 +28,7 @@ function readFileAsDataUrl(file) {
 }
 
 export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadInvoiceImage = false }) {
+  const { showToast } = useToast();
   const [orderGroups, setOrderGroups] = useState([]);
   const [loadingGroups, setLoadingGroups] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -44,7 +46,9 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
       const res = await fetchInvoiceOrderGroups();
       setOrderGroups(res?.data || []);
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to load grouped orders");
+      const message = err.response?.data?.message || "Failed to load grouped orders";
+      setError(message);
+      showToast({ type: "error", message });
     } finally {
       setLoadingGroups(false);
     }
@@ -61,19 +65,25 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
 
   const handlePickImage = async (e) => {
     if (!canUploadInvoiceImage) {
-      setError("Premium plan required for invoice image upload.");
+      const message = "Premium plan required for invoice image upload.";
+      setError(message);
+      showToast({ type: "warning", message });
       return;
     }
     const file = e.target.files?.[0];
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      setError("Please select an image file.");
+      const message = "Please select an image file.";
+      setError(message);
+      showToast({ type: "warning", message });
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      setError("Invoice image size should be less than 5MB.");
+      const message = "Invoice image size should be less than 5MB.";
+      setError(message);
+      showToast({ type: "warning", message });
       return;
     }
 
@@ -82,7 +92,9 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
       setInvoiceImageData(data);
       setError("");
     } catch {
-      setError("Failed to read selected image.");
+      const message = "Failed to read selected image.";
+      setError(message);
+      showToast({ type: "error", message });
     }
   };
 
@@ -157,11 +169,15 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
 
   const handleSave = async () => {
     if (!selectedCustomerId || selectedOrderIds.length === 0) {
-      setError("Select at least one order first.");
+      const message = "Select at least one order first.";
+      setError(message);
+      showToast({ type: "warning", message });
       return;
     }
     if (selectedOrderIds.length > MAX_INVOICE_ORDERS) {
-      setError(`Maximum ${MAX_INVOICE_ORDERS} orders allowed in one invoice.`);
+      const message = `Maximum ${MAX_INVOICE_ORDERS} orders allowed in one invoice.`;
+      setError(message);
+      showToast({ type: "warning", message });
       return;
     }
 
@@ -177,7 +193,9 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
       });
       onClose();
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to save invoice");
+      const message = err.response?.data?.message || "Failed to save invoice";
+      setError(message);
+      showToast({ type: "error", message });
     } finally {
       setSubmitting(false);
     }

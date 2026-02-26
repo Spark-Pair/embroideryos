@@ -13,3 +13,6 @@ export const fetchCustomerPaymentMonths = () =>
 
 export const createCustomerPayment = (data) =>
   apiClient.post(CUSTOMER_PAYMENTS_URL, data).then((r) => r.data);
+
+export const updateCustomerPayment = (id, data) =>
+  apiClient.put(`${CUSTOMER_PAYMENTS_URL}/${id}`, data).then((r) => r.data);

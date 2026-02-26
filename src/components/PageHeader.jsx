@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import Button from "./Button";
 import { useShortcut } from "../hooks/useShortcuts";
+import useAuth from "../hooks/useAuth";
 import {
   formatComboDisplay,
   isEventMatchingShortcut,
@@ -14,9 +15,12 @@ export default function PageHeader({
   onAction,
   actionIcon,
 }) {
+  const { user } = useAuth();
+  const isReadOnly = Boolean(user?.subscription?.readOnly);
   const primaryActionShortcut = useShortcut("page_header_primary_action");
 
   useEffect(() => {
+    if (isReadOnly) return;
     if (!actionLabel || !onAction || !primaryActionShortcut) return;
 
     const onKeyDown = (e) => {
@@ -30,7 +34,7 @@ export default function PageHeader({
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [actionLabel, onAction, primaryActionShortcut]);
+  }, [actionLabel, onAction, primaryActionShortcut, isReadOnly]);
 
   return (
     <div className="flex justify-between items-start mb-5">
@@ -44,7 +48,8 @@ export default function PageHeader({
           <Button
             icon={actionIcon}
             onClick={onAction}
-            title={`Shortcut: ${formatComboDisplay(primaryActionShortcut)}`}
+            disabled={isReadOnly}
+            title={isReadOnly ? "Read-only mode: renew subscription to enable actions" : `Shortcut: ${formatComboDisplay(primaryActionShortcut)}`}
           >
             {actionLabel}
           </Button>

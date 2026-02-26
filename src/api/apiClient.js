@@ -2,6 +2,7 @@
 import axios from "axios";
 
 const API = import.meta.env.VITE_API_URL;
+const READ_ONLY_BYPASS_PATHS = new Set(["/auth/logout", "/auth/logout-all", "/auth/refresh"]);
 
 export const apiClient = axios.create({
   baseURL: API,
@@ -36,9 +37,46 @@ export const storage = {
   }
 };
 
+const getCachedUser = () => {
+  try {
+    const raw = localStorage.getItem("cachedUser");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+const isReadOnlyBlockedRequest = (config) => {
+  const method = String(config?.method || "get").toUpperCase();
+  if (method === "GET" || method === "HEAD" || method === "OPTIONS") return false;
+
+  const cachedUser = getCachedUser();
+  const isReadOnly = Boolean(cachedUser?.subscription?.readOnly);
+  if (!isReadOnly) return false;
+
+  const urlPath = String(config?.url || "");
+  if (READ_ONLY_BYPASS_PATHS.has(urlPath)) return false;
+  return true;
+};
+
 // Request interceptor
 apiClient.interceptors.request.use(
   (config) => {
+    if (isReadOnlyBlockedRequest(config)) {
+      return Promise.reject({
+        config,
+        isAxiosError: true,
+        response: {
+          status: 402,
+          data: {
+            message: "Subscription expired. Account is in read-only mode.",
+            code: "SUBSCRIPTION_EXPIRED_READ_ONLY",
+            readOnly: true,
+          },
+        },
+      });
+    }
+
     const { accessToken, sessionId } = storage.getAuth();
     
     if (accessToken) {
