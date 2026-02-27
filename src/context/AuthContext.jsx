@@ -6,20 +6,7 @@ import { useToast } from "./ToastContext";
 import { clearOfflineData, initOfflineForUser, offlineAccess } from "../offline/idb";
 import { logDataSource } from "../offline/logger";
 import {
-  seedCustomersCache,
-  seedSuppliersCache,
-  seedStaffsCache,
-  seedStaffRecordsCache,
-  seedStaffPaymentsCache,
-  seedProductionConfigsCache,
-  seedCustomerPaymentsCache,
-  seedSupplierPaymentsCache,
-  seedExpensesCache,
-  seedOrdersCache,
-  seedInvoicesCache,
-  seedExpenseItemsCache,
-  seedInvoiceBannerCache,
-  seedSubscriptionCache,
+  runFullBootstrapSeed,
 } from "../offline/bootstrapSeed";
 
 export const AuthContext = createContext();
@@ -31,8 +18,39 @@ export default function AuthProvider({ children }) {
   const lastReadOnlyToastKeyRef = useRef("");
   const authBootstrappedRef = useRef(false);
 
+  const isSubscriptionExpired = useCallback((subscription) => {
+    const expiresAt = subscription?.expiresAt;
+    if (!expiresAt) return false;
+    const ts = new Date(expiresAt).getTime();
+    if (!Number.isFinite(ts)) return false;
+    return Date.now() >= ts;
+  }, []);
+
+  const applySubscriptionGuard = useCallback((userData) => {
+    if (!userData) return userData;
+    const subscription = userData?.subscription || {};
+    const expiredByTime = isSubscriptionExpired(subscription);
+    const readOnly = Boolean(subscription?.readOnly || expiredByTime);
+    return {
+      ...userData,
+      subscription: {
+        ...subscription,
+        readOnly,
+      },
+    };
+  }, [isSubscriptionExpired]);
+
+  const triggerBootstrapSync = useCallback((forceRefresh = true) => {
+    runFullBootstrapSeed({ forceRefresh }).catch((error) => {
+      logDataSource("IDB", "seed.bootstrap.failed", {
+        message: error?.response?.data?.message || error?.message || "bootstrap failed",
+      });
+    });
+  }, []);
+
   const maybeShowReadOnlyToast = useCallback((userData) => {
-    const readOnly = Boolean(userData?.subscription?.readOnly);
+    const normalized = applySubscriptionGuard(userData);
+    const readOnly = Boolean(normalized?.subscription?.readOnly);
     const key = readOnly ? String(userData?.subscription?.expiresAt || "expired") : "";
 
     if (!readOnly) {
@@ -52,7 +70,7 @@ export default function AuthProvider({ children }) {
     });
 
     lastReadOnlyToastKeyRef.current = key;
-  }, [showToast]);
+  }, [applySubscriptionGuard, showToast]);
 
   // Check auth on app load
   useEffect(() => {
@@ -72,26 +90,15 @@ export default function AuthProvider({ children }) {
       const isOffline = typeof navigator !== "undefined" && navigator.onLine === false;
 
       if (canUseOfflineSession) {
-        setUser(cachedUser);
+        const guardedCached = applySubscriptionGuard(cachedUser);
+        setUser(guardedCached);
+        localStorage.setItem("cachedUser", JSON.stringify(guardedCached));
         logDataSource("IDB", "auth.init.cached_session");
         setLoading(false);
 
         // Keep startup instant. No blocking /auth/me during boot when cached session exists.
         // If you want, we can later add a manual "Refresh Session" action.
-        seedCustomersCache().catch(() => null);
-        seedSuppliersCache().catch(() => null);
-        seedStaffsCache().catch(() => null);
-        seedStaffRecordsCache().catch(() => null);
-        seedStaffPaymentsCache().catch(() => null);
-        seedProductionConfigsCache().catch(() => null);
-        seedCustomerPaymentsCache().catch(() => null);
-        seedSupplierPaymentsCache().catch(() => null);
-        seedExpensesCache().catch(() => null);
-        seedOrdersCache().catch(() => null);
-        seedInvoicesCache().catch(() => null);
-        seedExpenseItemsCache().catch(() => null);
-        seedInvoiceBannerCache().catch(() => null);
-        seedSubscriptionCache().catch(() => null);
+        triggerBootstrapSync(true);
         return;
       }
 
@@ -107,35 +114,25 @@ export default function AuthProvider({ children }) {
 
       try {
         const userData = await getMe();
-        setUser(userData);
-        localStorage.setItem("cachedUser", JSON.stringify(userData));
+        const guardedUser = applySubscriptionGuard(userData);
+        setUser(guardedUser);
+        localStorage.setItem("cachedUser", JSON.stringify(guardedUser));
         offlineAccess.unlock();
         await initOfflineForUser({
           userId: userData?._id || userData?.id,
           businessId: userData?.businessId?._id || userData?.businessId,
         });
-        maybeShowReadOnlyToast(userData);
-        seedCustomersCache().catch(() => null);
-        seedSuppliersCache().catch(() => null);
-        seedStaffsCache().catch(() => null);
-        seedStaffRecordsCache().catch(() => null);
-        seedStaffPaymentsCache().catch(() => null);
-        seedProductionConfigsCache().catch(() => null);
-        seedCustomerPaymentsCache().catch(() => null);
-        seedSupplierPaymentsCache().catch(() => null);
-        seedExpensesCache().catch(() => null);
-        seedOrdersCache().catch(() => null);
-        seedInvoicesCache().catch(() => null);
-        seedExpenseItemsCache().catch(() => null);
-        seedInvoiceBannerCache().catch(() => null);
-        seedSubscriptionCache().catch(() => null);
+        maybeShowReadOnlyToast(guardedUser);
+        triggerBootstrapSync(true);
       } catch (error) {
         console.error('Auth init error:', error);
         const status = Number(error?.response?.status || 0);
         const canFallbackToOffline = canUseOfflineSession && (!navigator.onLine || status >= 500 || !status);
 
         if (canFallbackToOffline) {
-          setUser(cachedUser);
+          const guardedCached = applySubscriptionGuard(cachedUser);
+          setUser(guardedCached);
+          localStorage.setItem("cachedUser", JSON.stringify(guardedCached));
           logDataSource("IDB", "auth.init.fallback_cached_user", { status });
           showToast({
             type: "warning",
@@ -151,7 +148,7 @@ export default function AuthProvider({ children }) {
     };
 
     initAuth();
-  }, [maybeShowReadOnlyToast]);
+  }, [applySubscriptionGuard, maybeShowReadOnlyToast, triggerBootstrapSync]);
 
   // Login function
   const login = useCallback(async (_authData) => {
@@ -160,32 +157,20 @@ export default function AuthProvider({ children }) {
 
       // Auth data already stored by loginUser in auth.api.js
       const userData = await getMe();
-      setUser(userData);
-      localStorage.setItem("cachedUser", JSON.stringify(userData));
+      const guardedUser = applySubscriptionGuard(userData);
+      setUser(guardedUser);
+      localStorage.setItem("cachedUser", JSON.stringify(guardedUser));
       offlineAccess.unlock();
       await initOfflineForUser({
         userId: userData?._id || userData?.id,
         businessId: userData?.businessId?._id || userData?.businessId,
       });
-      seedCustomersCache().catch(() => null);
-      seedSuppliersCache().catch(() => null);
-      seedStaffsCache().catch(() => null);
-      seedStaffRecordsCache().catch(() => null);
-      seedStaffPaymentsCache().catch(() => null);
-      seedProductionConfigsCache().catch(() => null);
-      seedCustomerPaymentsCache().catch(() => null);
-      seedSupplierPaymentsCache().catch(() => null);
-      seedExpensesCache().catch(() => null);
-      seedOrdersCache().catch(() => null);
-      seedInvoicesCache().catch(() => null);
-      seedExpenseItemsCache().catch(() => null);
-      seedInvoiceBannerCache().catch(() => null);
-      seedSubscriptionCache().catch(() => null);
-      maybeShowReadOnlyToast(userData);
+      triggerBootstrapSync(true);
+      maybeShowReadOnlyToast(guardedUser);
 
       showToast({
         type: "success",
-        message: `Welcome back, ${userData.name || userData.username}!`,
+        message: `Welcome back, ${guardedUser.name || guardedUser.username}!`,
       });
 
       return { success: true };
@@ -203,7 +188,7 @@ export default function AuthProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  }, [maybeShowReadOnlyToast, showToast]);
+  }, [applySubscriptionGuard, maybeShowReadOnlyToast, showToast, triggerBootstrapSync]);
 
   // Logout function
   const logout = useCallback(async () => {
@@ -231,15 +216,33 @@ export default function AuthProvider({ children }) {
   const refreshUser = useCallback(async () => {
     try {
       const userData = await getMe();
-      setUser(userData);
-      localStorage.setItem("cachedUser", JSON.stringify(userData));
-      maybeShowReadOnlyToast(userData);
-      return userData;
+      const guardedUser = applySubscriptionGuard(userData);
+      setUser(guardedUser);
+      localStorage.setItem("cachedUser", JSON.stringify(guardedUser));
+      maybeShowReadOnlyToast(guardedUser);
+      return guardedUser;
     } catch (error) {
       console.error('Refresh user error:', error);
       throw error;
     }
-  }, [maybeShowReadOnlyToast]);
+  }, [applySubscriptionGuard, maybeShowReadOnlyToast]);
+
+  useEffect(() => {
+    if (!user?.subscription?.expiresAt) return;
+    const interval = setInterval(() => {
+      setUser((prev) => {
+        if (!prev) return prev;
+        const next = applySubscriptionGuard(prev);
+        if (Boolean(prev?.subscription?.readOnly) === Boolean(next?.subscription?.readOnly)) {
+          return prev;
+        }
+        localStorage.setItem("cachedUser", JSON.stringify(next));
+        maybeShowReadOnlyToast(next);
+        return next;
+      });
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [applySubscriptionGuard, maybeShowReadOnlyToast, user?.subscription?.expiresAt]);
 
   return (
     <AuthContext.Provider value={{

@@ -20,6 +20,7 @@ const Invoices = lazy(() => import("./pages/Invoices"));
 const CustomerPayments = lazy(() => import("./pages/CustomerPayments"));
 const SupplierPayments = lazy(() => import("./pages/SupplierPayments"));
 const StaffRecords = lazy(() => import("./pages/StaffRecords"));
+const CrpStaffRecords = lazy(() => import("./pages/CrpStaffRecords"));
 const Users = lazy(() => import("./pages/Users"));
 const Sessions = lazy(() => import("./pages/Sessions"));
 const Settings = lazy(() => import("./pages/Settings"));
@@ -125,6 +126,7 @@ export default function App() {
                 <Route path="/customer_payments" element={<CustomerPayments />} />
                 <Route path="/supplier_payments" element={<SupplierPayments />} />
                 <Route path="/staff-records" element={<StaffRecords />} />
+                <Route path="/crp-staff-records" element={<CrpStaffRecords />} />
                 <Route path="/salary-slips" element={<SalarySlips />} />
                 <Route path="/staff-payments" element={<StaffPayments />} />
                 <Route

@@ -9,6 +9,7 @@ import {
   Wallet,
   Edit3,
   Power,
+  Scissors,
 } from "lucide-react";
 import { fetchProductionConfig, createProductionConfig } from "../api/productionConfig";
 import { fetchMyInvoiceBanner, updateMyInvoiceBanner } from "../api/business";
@@ -19,6 +20,12 @@ import {
   toggleExpenseItemStatus,
   updateExpenseItem,
 } from "../api/expenseItem";
+import {
+  createCrpRateConfig,
+  fetchCrpRateConfigs,
+  toggleCrpRateConfigStatus,
+  updateCrpRateConfig,
+} from "../api/crpRateConfig";
 import { fetchSuppliers } from "../api/supplier";
 import PageHeader from "../components/PageHeader";
 import ProductionConfigFormModal from "../components/StaffRecord/ProductionConfigFormModal";
@@ -357,6 +364,79 @@ function ExpenseItemFormModal({
   );
 }
 
+function CrpRateFormModal({ isOpen, onClose, initialData, onSave }) {
+  const mode = initialData ? "edit" : "add";
+  const [formData, setFormData] = useState({
+    id: "",
+    category: "Press",
+    type_name: "",
+    rate: "",
+  });
+
+  useEffect(() => {
+    setFormData({
+      id: initialData?._id || "",
+      category: initialData?.category || "Press",
+      type_name: initialData?.type_name || "",
+      rate: initialData?.rate ?? "",
+    });
+  }, [initialData, isOpen]);
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={mode === "add" ? "Add CRP Type Rate" : "Edit CRP Type Rate"}
+      subtitle="Manage category/type wise rates for cropping records"
+      maxWidth="max-w-lg"
+      footer={
+        <div className="flex gap-3">
+          <Button outline variant="secondary" onClick={onClose} className="w-1/3">
+            Discard
+          </Button>
+          <Button
+            className="grow"
+            onClick={async () => {
+              await onSave(mode === "add" ? "add" : "edit", {
+                ...formData,
+                rate: Number(formData.rate || 0),
+              });
+              onClose();
+            }}
+          >
+            {mode === "add" ? "Create" : "Save Changes"}
+          </Button>
+        </div>
+      }
+    >
+      <div className="grid grid-cols-1 gap-3 p-0.5">
+        <Select
+          label="Category"
+          value={formData.category}
+          onChange={(value) => setFormData((p) => ({ ...p, category: value }))}
+          options={[
+            { label: "Press", value: "Press" },
+            { label: "Cropping", value: "Cropping" },
+            { label: "Other", value: "Other" },
+          ]}
+        />
+        <Input
+          label="Type"
+          value={formData.type_name}
+          onChange={(e) => setFormData((p) => ({ ...p, type_name: e.target.value }))}
+          capitalize
+        />
+        <Input
+          label="Rate"
+          type="number"
+          value={formData.rate}
+          onChange={(e) => setFormData((p) => ({ ...p, rate: e.target.value }))}
+        />
+      </div>
+    </Modal>
+  );
+}
+
 // ── SettingsPage ─────────────────────────────────────────────────────────────
 export default function SettingsPage() {
   const { showToast } = useToast();
@@ -368,11 +448,13 @@ export default function SettingsPage() {
   const [bannerModalOpen, setBannerModalOpen] = useState(false);
   const [subscription, setSubscription] = useState(null);
   const [expenseItems, setExpenseItems] = useState([]);
+  const [crpRateConfigs, setCrpRateConfigs] = useState([]);
   const [expenseItemModal, setExpenseItemModal] = useState({
     isOpen: false,
     data: null,
     variant: "general",
   });
+  const [crpRateModal, setCrpRateModal] = useState({ isOpen: false, data: null });
 
   const loadConfigs = useCallback(async () => {
     try {
@@ -394,6 +476,15 @@ export default function SettingsPage() {
       setExpenseItems(res?.data || []);
     } catch {
       showToast({ type: "error", message: "Failed to load expense items" });
+    }
+  }, [showToast]);
+
+  const loadCrpRateConfigs = useCallback(async () => {
+    try {
+      const res = await fetchCrpRateConfigs();
+      setCrpRateConfigs(res?.data || []);
+    } catch {
+      showToast({ type: "error", message: "Failed to load CRP type rates" });
     }
   }, [showToast]);
 
@@ -422,8 +513,9 @@ export default function SettingsPage() {
 
     loadInvoiceBanner();
     loadExpenseItems();
+    loadCrpRateConfigs();
     loadSubscription();
-  }, [loadExpenseItems]);
+  }, [loadExpenseItems, loadCrpRateConfigs]);
 
   const handleSave = async (payload) => {
     try {
@@ -479,6 +571,15 @@ export default function SettingsPage() {
   const generalItemOptions = useMemo(
     () => groupedExpenseItems.general.map((item) => ({ label: item.name, value: item.name })),
     [groupedExpenseItems.general]
+  );
+
+  const groupedCrpRates = useMemo(
+    () => ({
+      Press: crpRateConfigs.filter((i) => i.category === "Press"),
+      Cropping: crpRateConfigs.filter((i) => i.category === "Cropping"),
+      Other: crpRateConfigs.filter((i) => i.category === "Other"),
+    }),
+    [crpRateConfigs]
   );
 
   const planDetails = subscription?.plan_details;
@@ -538,6 +639,58 @@ export default function SettingsPage() {
                 await toggleExpenseItemStatus(item._id);
                 loadExpenseItems();
                 showToast({ type: "success", message: "Status updated" });
+              } catch (err) {
+                showToast({
+                  type: "error",
+                  message: err.response?.data?.message || "Failed to update status",
+                });
+              }
+            }}
+            aria-label="Toggle status"
+          >
+            <Power size={14} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderCrpRateRow = (item) => (
+    <div key={item._id} className="px-5 py-3.5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-gray-800">{item.type_name}</p>
+          <p className="text-xs text-gray-500 mt-0.5">Rate: {fmt(item.rate)}</p>
+          <span
+            className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-[10px] font-medium ${
+              item.isActive
+                ? "bg-emerald-100 text-emerald-700"
+                : "bg-rose-100 text-rose-700"
+            }`}
+          >
+            {item.isActive ? "Active" : "Inactive"}
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <button
+            className="p-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 transition-colors"
+            onClick={() => setCrpRateModal({ isOpen: true, data: item })}
+            aria-label="Edit CRP rate"
+          >
+            <Edit3 size={14} />
+          </button>
+          <button
+            className={`p-2 rounded-lg border transition-colors ${
+              item.isActive
+                ? "border-rose-300 text-rose-600 hover:bg-rose-50"
+                : "border-emerald-300 text-emerald-600 hover:bg-emerald-50"
+            }`}
+            onClick={async () => {
+              try {
+                await toggleCrpRateConfigStatus(item._id);
+                loadCrpRateConfigs();
+                showToast({ type: "success", message: "CRP type rate status updated" });
               } catch (err) {
                 showToast({
                   type: "error",
@@ -665,6 +818,35 @@ export default function SettingsPage() {
             </div>
           </SettingsSection>
 
+          {/* ── CRP Type Rates ── */}
+          <SettingsSection
+            title="CRP Type Rates"
+            description="Business-wise category/type rates for cropping records."
+            icon={Scissors}
+            action={
+              <AddButton onClick={() => setCrpRateModal({ isOpen: true, data: null })}>
+                Add CRP Type Rate
+              </AddButton>
+            }
+          >
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {["Press", "Cropping", "Other"].map((cat) => (
+                <div key={cat} className="rounded-2xl border border-gray-300 overflow-hidden">
+                  <div className="px-5 py-3.5 bg-gray-100 border-b border-gray-300">
+                    <p className="text-sm font-semibold text-gray-800">{cat}</p>
+                  </div>
+                  <div className="max-h-80 overflow-auto divide-y divide-gray-200">
+                    {groupedCrpRates[cat].length === 0 ? (
+                      <p className="px-5 py-4 text-sm text-gray-400">No type rates found.</p>
+                    ) : (
+                      groupedCrpRates[cat].map((item) => renderCrpRateRow(item))
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </SettingsSection>
+
           {/* ── Invoice Banner ── */}
           <SettingsSection
             title="Invoice Banner"
@@ -764,6 +946,30 @@ export default function SettingsPage() {
             showToast({
               type: "error",
               message: err.response?.data?.message || "Failed to save expense item",
+            });
+            throw err;
+          }
+        }}
+      />
+
+      <CrpRateFormModal
+        isOpen={crpRateModal.isOpen}
+        initialData={crpRateModal.data}
+        onClose={() => setCrpRateModal({ isOpen: false, data: null })}
+        onSave={async (action, payload) => {
+          try {
+            if (action === "add") {
+              await createCrpRateConfig(payload);
+              showToast({ type: "success", message: "CRP type rate added" });
+            } else {
+              await updateCrpRateConfig(payload.id, payload);
+              showToast({ type: "success", message: "CRP type rate updated" });
+            }
+            loadCrpRateConfigs();
+          } catch (err) {
+            showToast({
+              type: "error",
+              message: err.response?.data?.message || "Failed to save CRP type rate",
             });
             throw err;
           }

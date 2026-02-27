@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LayoutGrid, Users, FileText, DollarSign, CreditCard, Users2, Settings, LogOut, Building2, Banknote, Repeat, ChevronDown, History, Keyboard, Crown } from 'lucide-react';
+import { LayoutGrid, Users, FileText, DollarSign, CreditCard, Users2, Settings, LogOut, Building2, Banknote, Repeat, ChevronDown, History, Keyboard, Crown, Scissors } from 'lucide-react';
 import SidebarNavItem from './SidebarNavItem';
 import useAuth from '../hooks/useAuth';
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 
 const developerNav = [
   { id: 'dashboard', icon: <LayoutGrid className="w-4.5 h-4.5" />, label: 'Dashboard', path: '/dashboard' },
@@ -25,6 +25,7 @@ const adminNav = [
   { id: 'invoices', icon: <FileText className="w-4.5 h-4.5" />, label: 'Invoices', path: '/invoices' },
   { id: 'staff', icon: <Users2 className="w-4.5 h-4.5" />, label: 'Staff', path: '/staff' },
   { id: 'staff-records', icon: <FileText className="w-4.5 h-4.5" />, label: 'Staff Records', path: '/staff-records' },
+  { id: 'crp-staff-records', icon: <Scissors className="w-4.5 h-4.5" />, label: 'CRP Records', path: '/crp-staff-records' },
   { id: 'staff-payments', icon: <Banknote className="w-4.5 h-4.5" />, label: 'Staff Payments', path: '/staff-payments' },
   { id: 'salary-slips', icon: <FileText className="w-4.5 h-4.5" />, label: 'Salary Slips', path: '/salary-slips' },
 ];
@@ -40,6 +41,7 @@ const staffNav = [
   { id: 'invoices', icon: <FileText className="w-4.5 h-4.5" />, label: 'Invoices', path: '/invoices' },
   { id: 'staff', icon: <Users2 className="w-4.5 h-4.5" />, label: 'Staff', path: '/staff' },
   { id: 'staff-records', icon: <FileText className="w-4.5 h-4.5" />, label: 'Staff Records', path: '/staff-records' },
+  { id: 'crp-staff-records', icon: <Scissors className="w-4.5 h-4.5" />, label: 'CRP Records', path: '/crp-staff-records' },
   { id: 'staff-payments', icon: <Banknote className="w-4.5 h-4.5" />, label: 'Staff Payments', path: '/staff-payments' },
 ];
 
@@ -149,11 +151,7 @@ const SidebarNav = ({ currentPath, handleLogout }) => {
               {/* Dropdown Menu */}
               <AnimatePresence>
                 {isDropdownOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.98 }}
-                    transition={{ duration: 0.18 }}
+                  <div
                     className="absolute bottom-full left-0 right-0 mb-2 bg-white
                               border border-gray-300 rounded-2xl shadow-lg overflow-hidden no-default-transition"
                   >
@@ -196,7 +194,7 @@ const SidebarNav = ({ currentPath, handleLogout }) => {
                         <span className="text-sm text-red-600 font-medium">Logout</span>
                       </button>
                     </div>
-                    </motion.div>
+                    </div>
                   )}
                 </AnimatePresence>
             </div>

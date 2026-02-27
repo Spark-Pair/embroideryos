@@ -114,8 +114,28 @@ const getStaffPaymentsSnapshot = async () => {
   return Array.from(map.values());
 };
 
+const getCrpStaffRecordsSnapshot = async () => {
+  const base = await getEntitySnapshot("crpStaffRecords:all");
+  const overlay = (await getEntitySnapshot("crpStaffRecords:overlay")) || {};
+  const rows = Array.isArray(base) ? base : [];
+  const map = new Map(rows.map((row) => [normalizeId(row), row]));
+  Object.values(overlay || {}).forEach((item) => {
+    if (!item) return;
+    const id = normalizeId(item);
+    if (!id) return;
+    if (item._deleted) {
+      map.delete(id);
+      return;
+    }
+    const prev = map.get(id) || {};
+    map.set(id, { ...prev, ...item, _id: id });
+  });
+  return Array.from(map.values());
+};
+
 const attachStaffBalances = async (rows = []) => {
   const records = await getStaffRecordsSnapshot();
+  const crpRecords = await getCrpStaffRecordsSnapshot();
   const payments = await getStaffPaymentsSnapshot();
 
   const earnedMap = new Map();
@@ -123,6 +143,12 @@ const attachStaffBalances = async (rows = []) => {
     const id = String(rec?.staff_id?._id || rec?.staff_id || "");
     if (!id) return;
     earnedMap.set(id, (earnedMap.get(id) || 0) + toNum(rec?.final_amount));
+  });
+
+  crpRecords.forEach((rec) => {
+    const id = String(rec?.staff_id?._id || rec?.staff_id || "");
+    if (!id) return;
+    earnedMap.set(id, (earnedMap.get(id) || 0) + toNum(rec?.total_amount));
   });
 
   const paymentMap = new Map();
@@ -171,13 +197,15 @@ const applyFilters = (rows = [], params = {}) => {
   let data = [...rows];
   const name = String(params?.name || "").trim().toLowerCase();
   const status = String(params?.status || "").trim().toLowerCase();
+  const category = String(params?.category || "").trim();
 
   if (name) {
     data = data.filter((row) => String(row?.name || "").toLowerCase().includes(name));
   }
 
-  if (status === "active") data = data.filter((row) => Boolean(row?.isActive));
-  if (status === "inactive") data = data.filter((row) => !Boolean(row?.isActive));
+  if (status === "active") data = data.filter((row) => !!row?.isActive);
+  if (status === "inactive") data = data.filter((row) => !row?.isActive);
+  if (category) data = data.filter((row) => String(row?.category || "Embroidery") === category);
 
   return sortLatestFirst(data);
 };
@@ -228,7 +256,7 @@ const refreshAllSnapshotFromCloud = async () => {
   await upsertEntitySnapshot(
     NAMES_KEY,
     rows
-      .map((row) => ({ _id: row?._id, name: row?.name, joining_date: row?.joining_date }))
+      .map((row) => ({ _id: row?._id, name: row?.name, category: row?.category || "Embroidery", joining_date: row?.joining_date }))
       .filter((row) => row?._id && row?.name)
       .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")))
   );
@@ -349,6 +377,7 @@ export const fetchStaffsLocalFirst = async (params = {}) => {
       limit: params.limit || 30,
       ...(params.name && { name: params.name }),
       ...(params.status && { status: params.status }),
+      ...(params.category && { category: params.category }),
     }).toString();
     const res = await apiClient.get(`${STAFF_URL}?${query}`);
     return res.data;
@@ -379,13 +408,15 @@ export const fetchStaffNamesLocalFirst = async (params = {}) => {
   const base = await getAllBaseStaffs();
   const merged = withOverlayList(base, overlay);
   const status = String(params?.status || "").trim().toLowerCase();
+  const category = String(params?.category || "").trim();
   const filtered = merged.filter((row) => {
-    if (status === "active") return Boolean(row?.isActive);
-    if (status === "inactive") return !Boolean(row?.isActive);
+    if (status === "active" && !row?.isActive) return false;
+    if (status === "inactive" && row?.isActive) return false;
+    if (category && String(row?.category || "Embroidery") !== category) return false;
     return true;
   });
   const data = filtered
-    .map((row) => ({ _id: row?._id, name: row?.name, joining_date: row?.joining_date }))
+    .map((row) => ({ _id: row?._id, name: row?.name, category: row?.category || "Embroidery", joining_date: row?.joining_date }))
     .filter((row) => row?._id && row?.name)
     .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")));
 
@@ -407,8 +438,8 @@ export const fetchStaffStatsLocalFirst = async () => {
     success: true,
     data: {
       total: merged.length,
-      active: merged.filter((row) => Boolean(row?.isActive)).length,
-      inactive: merged.filter((row) => !Boolean(row?.isActive)).length,
+      active: merged.filter((row) => !!row?.isActive).length,
+      inactive: merged.filter((row) => !row?.isActive).length,
     },
   };
 
@@ -502,7 +533,7 @@ export const toggleStaffStatusLocalFirst = async (id) => {
   }
 
   const existing = await findStaffByIdLocal(id);
-  const nextActive = !Boolean(existing?.isActive);
+  const nextActive = !existing?.isActive;
 
   await patchOverlay((overlay) => {
     const prev = overlay[String(id)] || existing || {};

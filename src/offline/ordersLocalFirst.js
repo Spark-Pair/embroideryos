@@ -188,6 +188,7 @@ const computeDesignStitchFromRate = (rate, stitchRate, apqChr) => {
 
 const computeQtPcs = (qty, unit) => (unit === "Dzn" ? toNum(qty) * 12 : toNum(qty));
 const computeTotalAmount = (rate, qtPcs) => roundDown(toNum(rate) * toNum(qtPcs), 2);
+const buildClientRef = () => `order-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
 const buildOrderPayload = async (body) => {
   const {
@@ -417,13 +418,18 @@ export const fetchOrderLocalFirst = async (id) => {
 };
 
 export const createOrderLocalFirst = async (payload) => {
+  const payloadWithClientRef = {
+    ...payload,
+    client_ref: payload?.client_ref || buildClientRef(),
+  };
+
   if (!offlineAccess.isUnlocked()) {
-    const res = await apiClient.post(ORDERS_URL, payload);
+    const res = await apiClient.post(ORDERS_URL, payloadWithClientRef);
     return res.data;
   }
 
   const localId = `local-order-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const computed = await buildOrderPayload(payload);
+  const computed = await buildOrderPayload(payloadWithClientRef);
   const localOrder = {
     _id: localId,
     ...computed,
@@ -443,7 +449,7 @@ export const createOrderLocalFirst = async (payload) => {
     entity: "orders",
     method: "POST",
     url: ORDERS_URL,
-    payload,
+    payload: payloadWithClientRef,
     meta: { localId },
   });
 

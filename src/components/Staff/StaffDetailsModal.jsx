@@ -46,6 +46,7 @@ export default function StaffDetailsModal({
         <ModalDetails
           data={[
             { label: "Staff Name", value: initialData?.name },
+            { label: "Category", value: initialData?.category || "Embroidery" },
             { label: "Joining Date", value: formatDate(initialData?.joining_date, "dd-MMM-YYYY, DDD") },
             { label: "Salary", value: formatNumbers(initialData?.salary, 1) },
             { label: "Current Balance", value: formatNumbers(initialData?.current_balance ?? initialData?.opening_balance, 1) },

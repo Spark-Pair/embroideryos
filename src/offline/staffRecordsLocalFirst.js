@@ -172,6 +172,9 @@ const buildLocalRecordPayload = async (payload) => {
   const staffId = String(payload?.staff_id || payload?.staff_id?._id || "");
   const staffSnapshot = await getStaffSnapshot();
   const staffRow = staffSnapshot.find((row) => String(row?._id || "") === staffId);
+  if (staffRow && String(staffRow?.category || "Embroidery") === "Cropping") {
+    throw new Error("Cropping staff can only be recorded in CRP Records");
+  }
   const salary = Number(staffRow?.salary || 0);
 
   const configRes = await fetchProductionConfigLocalFirst(payload?.date);
@@ -264,7 +267,9 @@ const inDateRange = (value, from, to) => {
 };
 
 const applyFilters = (rows = [], params = {}) => {
-  let data = [...rows];
+  let data = [...rows].filter(
+    (row) => String(row?.staff_id?.category || "Embroidery") !== "Cropping"
+  );
   const attendance = String(params?.attendance || "").trim();
   const staffId = String(params?.staff_id || "").trim();
   const name = String(params?.name || "").trim().toLowerCase();
@@ -478,11 +483,13 @@ export const fetchStaffRecordStatsLocalFirst = async (params = {}) => {
   const overlay = await getOverlay();
   const base = await getAllBaseRecords();
   const merged = withOverlayList(base, overlay);
+  const withStaff = await attachStaffInfo(merged);
   const staffId = String(params?.staff_id || "").trim();
   const dateFrom = params?.date_from;
   const dateTo = params?.date_to;
 
-  const filtered = merged.filter((row) => {
+  const filtered = withStaff.filter((row) => {
+    if (String(row?.staff_id?.category || "Embroidery") === "Cropping") return false;
     if (staffId && String(row?.staff_id?._id || row?.staff_id || "") !== staffId) return false;
     if (dateFrom || dateTo) return inDateRange(row?.date, dateFrom, dateTo);
     return true;
@@ -533,9 +540,11 @@ export const fetchStaffRecordMonthsLocalFirst = async () => {
   const overlay = await getOverlay();
   const base = await getAllBaseRecords();
   const merged = withOverlayList(base, overlay);
+  const withStaff = await attachStaffInfo(merged);
 
   const months = Array.from(
-    merged.reduce((acc, row) => {
+    withStaff.reduce((acc, row) => {
+      if (String(row?.staff_id?.category || "Embroidery") === "Cropping") return acc;
       const dt = row?.date ? new Date(row.date) : null;
       if (!dt || Number.isNaN(dt.getTime())) return acc;
       const month = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;

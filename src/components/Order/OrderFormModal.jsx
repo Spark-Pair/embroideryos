@@ -425,6 +425,7 @@ export default function OrderFormModal({
 
   // ── Submit ──
   async function handleSubmit() {
+    if (submitting) return;
     if (!canSubmit) return;
     setSubmitting(true);
     try {

@@ -269,7 +269,7 @@ export default function StaffRecordFormModal({
     const load = async () => {
       setStaffLoading(true);
       try {
-        const r = await fetchStaffNames({ status: "active" });
+        const r = await fetchStaffNames({ status: "active", category: "Embroidery" });
         const list = r.data || [];
         setStaffList(list);
 

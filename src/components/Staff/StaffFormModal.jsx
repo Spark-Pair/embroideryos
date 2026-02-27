@@ -2,6 +2,7 @@ import { Save } from "lucide-react";
 import Button from "../Button";
 import Input from "../Input";
 import Modal from "../Modal";
+import Select from "../Select";
 import { useEffect, useState } from "react";
 import { formatDate } from "../../utils";
 
@@ -18,6 +19,7 @@ export default function StaffFormModal({
     setFormData({
       id: initialData?._id || "",
       name: initialData?.name || "",
+      category: initialData?.category || "Embroidery",
       joining_date: formatDate(initialData?.joining_date, "yyyy-mm-dd") || "",
       salary: initialData?.salary || "",
       opening_balance: initialData?.opening_balance ?? "",
@@ -65,6 +67,17 @@ export default function StaffFormModal({
               setFormData((prev) => ({ ...prev, name: e.target.value }))
             }
             capitalize={true}
+          />
+          <Select
+            label="Category"
+            value={formData.category}
+            onChange={(value) =>
+              setFormData((prev) => ({ ...prev, category: value }))
+            }
+            options={[
+              { label: "Embroidery", value: "Embroidery" },
+              { label: "Cropping", value: "Cropping" },
+            ]}
           />
           <Input
             label="Joining Date"

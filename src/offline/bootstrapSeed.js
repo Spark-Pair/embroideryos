@@ -1,6 +1,12 @@
 import { apiClient } from "../api/apiClient";
 import { getEntitySnapshot, upsertEntitySnapshot } from "./idb";
 import { logDataSource } from "./logger";
+import {
+  completeBootstrapSync,
+  failBootstrapSyncStep,
+  markBootstrapSyncStepDone,
+  startBootstrapSync,
+} from "./bootstrapSyncState";
 
 const CUSTOMERS_LIST_KEY = "customers:list:page=1&limit=30";
 const CUSTOMERS_ALL_KEY = "customers:all";
@@ -29,17 +35,24 @@ const ORDERS_ALL_KEY = "orders:all";
 const ORDERS_STATS_KEY = "orders:stats";
 const INVOICES_ALL_KEY = "invoices:all";
 const EXPENSE_ITEMS_ALL_KEY = "expenseItems:all";
+const CRP_RATE_CONFIGS_ALL_KEY = "crpRateConfigs:all";
+const CRP_STAFF_RECORDS_ALL_KEY = "crpStaffRecords:all";
+const CRP_STAFF_RECORDS_STATS_KEY = "crpStaffRecords:stats";
 const BUSINESS_INVOICE_BANNER_KEY = "business:invoice_banner";
 const SUBSCRIPTION_ME_KEY = "subscription:me";
 
+const hasExistingData = (existing) =>
+  (Array.isArray(existing) && existing.length > 0) ||
+  (!Array.isArray(existing) && Boolean(existing));
+
 let customersSeedInFlight = false;
 
-export const seedCustomersCache = async () => {
+export const seedCustomersCache = async ({ forceRefresh = false } = {}) => {
   if (customersSeedInFlight) return;
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
 
   const existingAll = await getEntitySnapshot(CUSTOMERS_ALL_KEY);
-  if (Array.isArray(existingAll) && existingAll.length > 0) {
+  if (!forceRefresh && Array.isArray(existingAll) && existingAll.length > 0) {
     logDataSource("IDB", "seed.customers.skip_existing", { count: existingAll.length });
     return;
   }
@@ -81,12 +94,12 @@ export const seedCustomersCache = async () => {
 
 let suppliersSeedInFlight = false;
 
-export const seedSuppliersCache = async () => {
+export const seedSuppliersCache = async ({ forceRefresh = false } = {}) => {
   if (suppliersSeedInFlight) return;
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
 
   const existingAll = await getEntitySnapshot(SUPPLIERS_ALL_KEY);
-  if (Array.isArray(existingAll) && existingAll.length > 0) {
+  if (!forceRefresh && Array.isArray(existingAll) && existingAll.length > 0) {
     logDataSource("IDB", "seed.suppliers.skip_existing", { count: existingAll.length });
     return;
   }
@@ -118,12 +131,12 @@ export const seedSuppliersCache = async () => {
 
 let staffsSeedInFlight = false;
 
-export const seedStaffsCache = async () => {
+export const seedStaffsCache = async ({ forceRefresh = false } = {}) => {
   if (staffsSeedInFlight) return;
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
 
   const existingAll = await getEntitySnapshot(STAFFS_ALL_KEY);
-  if (Array.isArray(existingAll) && existingAll.length > 0) {
+  if (!forceRefresh && Array.isArray(existingAll) && existingAll.length > 0) {
     logDataSource("IDB", "seed.staffs.skip_existing", { count: existingAll.length });
     return;
   }
@@ -162,12 +175,12 @@ export const seedStaffsCache = async () => {
 
 let staffRecordsSeedInFlight = false;
 
-export const seedStaffRecordsCache = async () => {
+export const seedStaffRecordsCache = async ({ forceRefresh = false } = {}) => {
   if (staffRecordsSeedInFlight) return;
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
 
   const existingAll = await getEntitySnapshot(STAFF_RECORDS_ALL_KEY);
-  if (Array.isArray(existingAll) && existingAll.length > 0) {
+  if (!forceRefresh && Array.isArray(existingAll) && existingAll.length > 0) {
     logDataSource("IDB", "seed.staffRecords.skip_existing", { count: existingAll.length });
     return;
   }
@@ -201,12 +214,12 @@ export const seedStaffRecordsCache = async () => {
 
 let staffPaymentsSeedInFlight = false;
 
-export const seedStaffPaymentsCache = async () => {
+export const seedStaffPaymentsCache = async ({ forceRefresh = false } = {}) => {
   if (staffPaymentsSeedInFlight) return;
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
 
   const existingAll = await getEntitySnapshot(STAFF_PAYMENTS_ALL_KEY);
-  if (Array.isArray(existingAll) && existingAll.length > 0) {
+  if (!forceRefresh && Array.isArray(existingAll) && existingAll.length > 0) {
     logDataSource("IDB", "seed.staffPayments.skip_existing", { count: existingAll.length });
     return;
   }
@@ -240,12 +253,12 @@ export const seedStaffPaymentsCache = async () => {
 
 let productionConfigsSeedInFlight = false;
 
-export const seedProductionConfigsCache = async () => {
+export const seedProductionConfigsCache = async ({ forceRefresh = false } = {}) => {
   if (productionConfigsSeedInFlight) return;
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
 
   const existingAll = await getEntitySnapshot(PRODUCTION_CONFIGS_ALL_KEY);
-  if (Array.isArray(existingAll) && existingAll.length > 0) {
+  if (!forceRefresh && Array.isArray(existingAll) && existingAll.length > 0) {
     logDataSource("IDB", "seed.productionConfigs.skip_existing", { count: existingAll.length });
     return;
   }
@@ -271,12 +284,12 @@ export const seedProductionConfigsCache = async () => {
 
 let customerPaymentsSeedInFlight = false;
 
-export const seedCustomerPaymentsCache = async () => {
+export const seedCustomerPaymentsCache = async ({ forceRefresh = false } = {}) => {
   if (customerPaymentsSeedInFlight) return;
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
 
   const existingAll = await getEntitySnapshot(CUSTOMER_PAYMENTS_ALL_KEY);
-  if (Array.isArray(existingAll) && existingAll.length > 0) {
+  if (!forceRefresh && Array.isArray(existingAll) && existingAll.length > 0) {
     logDataSource("IDB", "seed.customerPayments.skip_existing", { count: existingAll.length });
     return;
   }
@@ -310,12 +323,12 @@ export const seedCustomerPaymentsCache = async () => {
 
 let supplierPaymentsSeedInFlight = false;
 
-export const seedSupplierPaymentsCache = async () => {
+export const seedSupplierPaymentsCache = async ({ forceRefresh = false } = {}) => {
   if (supplierPaymentsSeedInFlight) return;
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
 
   const existingAll = await getEntitySnapshot(SUPPLIER_PAYMENTS_ALL_KEY);
-  if (Array.isArray(existingAll) && existingAll.length > 0) {
+  if (!forceRefresh && Array.isArray(existingAll) && existingAll.length > 0) {
     logDataSource("IDB", "seed.supplierPayments.skip_existing", { count: existingAll.length });
     return;
   }
@@ -349,12 +362,12 @@ export const seedSupplierPaymentsCache = async () => {
 
 let expensesSeedInFlight = false;
 
-export const seedExpensesCache = async () => {
+export const seedExpensesCache = async ({ forceRefresh = false } = {}) => {
   if (expensesSeedInFlight) return;
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
 
   const existingAll = await getEntitySnapshot(EXPENSES_ALL_KEY);
-  if (Array.isArray(existingAll) && existingAll.length > 0) {
+  if (!forceRefresh && Array.isArray(existingAll) && existingAll.length > 0) {
     logDataSource("IDB", "seed.expenses.skip_existing", { count: existingAll.length });
     return;
   }
@@ -386,12 +399,12 @@ export const seedExpensesCache = async () => {
 
 let ordersSeedInFlight = false;
 
-export const seedOrdersCache = async () => {
+export const seedOrdersCache = async ({ forceRefresh = false } = {}) => {
   if (ordersSeedInFlight) return;
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
 
   const existingAll = await getEntitySnapshot(ORDERS_ALL_KEY);
-  if (Array.isArray(existingAll) && existingAll.length > 0) {
+  if (!forceRefresh && Array.isArray(existingAll) && existingAll.length > 0) {
     logDataSource("IDB", "seed.orders.skip_existing", { count: existingAll.length });
     return;
   }
@@ -423,12 +436,12 @@ export const seedOrdersCache = async () => {
 
 let invoicesSeedInFlight = false;
 
-export const seedInvoicesCache = async () => {
+export const seedInvoicesCache = async ({ forceRefresh = false } = {}) => {
   if (invoicesSeedInFlight) return;
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
 
   const existingAll = await getEntitySnapshot(INVOICES_ALL_KEY);
-  if (Array.isArray(existingAll) && existingAll.length > 0) {
+  if (!forceRefresh && Array.isArray(existingAll) && existingAll.length > 0) {
     logDataSource("IDB", "seed.invoices.skip_existing", { count: existingAll.length });
     return;
   }
@@ -453,12 +466,12 @@ export const seedInvoicesCache = async () => {
 
 let expenseItemsSeedInFlight = false;
 
-export const seedExpenseItemsCache = async () => {
+export const seedExpenseItemsCache = async ({ forceRefresh = false } = {}) => {
   if (expenseItemsSeedInFlight) return;
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
 
   const existingAll = await getEntitySnapshot(EXPENSE_ITEMS_ALL_KEY);
-  if (Array.isArray(existingAll) && existingAll.length > 0) {
+  if (!forceRefresh && Array.isArray(existingAll) && existingAll.length > 0) {
     logDataSource("IDB", "seed.expenseItems.skip_existing", { count: existingAll.length });
     return;
   }
@@ -483,12 +496,12 @@ export const seedExpenseItemsCache = async () => {
 
 let invoiceBannerSeedInFlight = false;
 
-export const seedInvoiceBannerCache = async () => {
+export const seedInvoiceBannerCache = async ({ forceRefresh = false } = {}) => {
   if (invoiceBannerSeedInFlight) return;
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
 
   const existing = await getEntitySnapshot(BUSINESS_INVOICE_BANNER_KEY);
-  if (existing) {
+  if (!forceRefresh && existing) {
     logDataSource("IDB", "seed.invoiceBanner.skip_existing", { hasBanner: Boolean(existing) });
     return;
   }
@@ -510,12 +523,12 @@ export const seedInvoiceBannerCache = async () => {
 
 let subscriptionSeedInFlight = false;
 
-export const seedSubscriptionCache = async () => {
+export const seedSubscriptionCache = async ({ forceRefresh = false } = {}) => {
   if (subscriptionSeedInFlight) return;
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
 
   const existing = await getEntitySnapshot(SUBSCRIPTION_ME_KEY);
-  if (existing) {
+  if (!forceRefresh && existing) {
     logDataSource("IDB", "seed.subscription.skip_existing", { hasData: true });
     return;
   }
@@ -532,4 +545,107 @@ export const seedSubscriptionCache = async () => {
   } finally {
     subscriptionSeedInFlight = false;
   }
+};
+
+let crpRateConfigsSeedInFlight = false;
+
+export const seedCrpRateConfigsCache = async ({ forceRefresh = false } = {}) => {
+  if (crpRateConfigsSeedInFlight) return;
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+
+  const existingAll = await getEntitySnapshot(CRP_RATE_CONFIGS_ALL_KEY);
+  if (!forceRefresh && hasExistingData(existingAll)) {
+    logDataSource("IDB", "seed.crpRateConfigs.skip_existing", { count: existingAll.length });
+    return;
+  }
+
+  crpRateConfigsSeedInFlight = true;
+  try {
+    const res = await apiClient.get("/crp-rate-configs");
+    const rows = Array.isArray(res?.data?.data) ? res.data.data : [];
+    await upsertEntitySnapshot(CRP_RATE_CONFIGS_ALL_KEY, rows);
+    logDataSource("IDB", "seed.crpRateConfigs.done", { listCount: Number(rows.length || 0) });
+  } catch (error) {
+    logDataSource("IDB", "seed.crpRateConfigs.failed", {
+      message: error?.response?.data?.message || error?.message || "seed failed",
+    });
+  } finally {
+    crpRateConfigsSeedInFlight = false;
+  }
+};
+
+let crpStaffRecordsSeedInFlight = false;
+
+export const seedCrpStaffRecordsCache = async ({ forceRefresh = false } = {}) => {
+  if (crpStaffRecordsSeedInFlight) return;
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+
+  const existingAll = await getEntitySnapshot(CRP_STAFF_RECORDS_ALL_KEY);
+  if (!forceRefresh && hasExistingData(existingAll)) {
+    logDataSource("IDB", "seed.crpStaffRecords.skip_existing", { count: existingAll.length });
+    return;
+  }
+
+  crpStaffRecordsSeedInFlight = true;
+  try {
+    const [listRes, statsRes] = await Promise.all([
+      apiClient.get("/crp-staff-records?page=1&limit=5000"),
+      apiClient.get("/crp-staff-records/stats"),
+    ]);
+
+    const rows = Array.isArray(listRes?.data?.data) ? listRes.data.data : [];
+    await Promise.all([
+      upsertEntitySnapshot(CRP_STAFF_RECORDS_ALL_KEY, rows),
+      upsertEntitySnapshot(CRP_STAFF_RECORDS_STATS_KEY, statsRes?.data || null),
+    ]);
+
+    logDataSource("IDB", "seed.crpStaffRecords.done", {
+      listCount: Number(rows.length || 0),
+    });
+  } catch (error) {
+    logDataSource("IDB", "seed.crpStaffRecords.failed", {
+      message: error?.response?.data?.message || error?.message || "seed failed",
+    });
+  } finally {
+    crpStaffRecordsSeedInFlight = false;
+  }
+};
+
+export const runFullBootstrapSeed = async ({ forceRefresh = true } = {}) => {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+
+  const steps = [
+    { id: "customers", label: "Customers", run: () => seedCustomersCache({ forceRefresh }) },
+    { id: "suppliers", label: "Suppliers", run: () => seedSuppliersCache({ forceRefresh }) },
+    { id: "staffs", label: "Staff", run: () => seedStaffsCache({ forceRefresh }) },
+    { id: "staffRecords", label: "Staff Records", run: () => seedStaffRecordsCache({ forceRefresh }) },
+    { id: "staffPayments", label: "Staff Payments", run: () => seedStaffPaymentsCache({ forceRefresh }) },
+    { id: "productionConfigs", label: "Production Configs", run: () => seedProductionConfigsCache({ forceRefresh }) },
+    { id: "customerPayments", label: "Customer Payments", run: () => seedCustomerPaymentsCache({ forceRefresh }) },
+    { id: "supplierPayments", label: "Supplier Payments", run: () => seedSupplierPaymentsCache({ forceRefresh }) },
+    { id: "expenses", label: "Expenses", run: () => seedExpensesCache({ forceRefresh }) },
+    { id: "orders", label: "Orders", run: () => seedOrdersCache({ forceRefresh }) },
+    { id: "invoices", label: "Invoices", run: () => seedInvoicesCache({ forceRefresh }) },
+    { id: "expenseItems", label: "Expense Items", run: () => seedExpenseItemsCache({ forceRefresh }) },
+    { id: "crpRateConfigs", label: "CRP Rate Configs", run: () => seedCrpRateConfigsCache({ forceRefresh }) },
+    { id: "crpStaffRecords", label: "CRP Records", run: () => seedCrpStaffRecordsCache({ forceRefresh }) },
+    { id: "invoiceBanner", label: "Invoice Banner", run: () => seedInvoiceBannerCache({ forceRefresh }) },
+    { id: "subscription", label: "Subscription", run: () => seedSubscriptionCache({ forceRefresh }) },
+  ];
+
+  startBootstrapSync(steps.length);
+  for (const step of steps) {
+    try {
+      await step.run();
+      markBootstrapSyncStepDone(step.id, step.label);
+    } catch (error) {
+      failBootstrapSyncStep(
+        step.id,
+        step.label,
+        error?.response?.data?.message || error?.message || "Sync step failed"
+      );
+      markBootstrapSyncStepDone(step.id, step.label);
+    }
+  }
+  completeBootstrapSync();
 };

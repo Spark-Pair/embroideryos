@@ -48,12 +48,22 @@ const getCachedUser = () => {
   }
 };
 
+const isSubscriptionExpired = (subscription) => {
+  const expiresAt = subscription?.expiresAt;
+  if (!expiresAt) return false;
+  const ts = new Date(expiresAt).getTime();
+  if (!Number.isFinite(ts)) return false;
+  return Date.now() >= ts;
+};
+
 const isReadOnlyBlockedRequest = (config) => {
   const method = String(config?.method || "get").toUpperCase();
   if (method === "GET" || method === "HEAD" || method === "OPTIONS") return false;
 
   const cachedUser = getCachedUser();
-  const isReadOnly = Boolean(cachedUser?.subscription?.readOnly);
+  const isReadOnly =
+    Boolean(cachedUser?.subscription?.readOnly) ||
+    isSubscriptionExpired(cachedUser?.subscription);
   if (!isReadOnly) return false;
 
   const urlPath = String(config?.url || "");

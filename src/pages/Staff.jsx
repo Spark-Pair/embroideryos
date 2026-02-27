@@ -51,6 +51,7 @@ export default function Staffs() {
   const [filters, setFilters] = useState({
     name: "",
     status: "",
+    category: "",
   });
 
   const loadStaffsStats = async () => {
@@ -115,7 +116,7 @@ export default function Staffs() {
   };
 
   const handleResetFilters = () => {
-    const resetFilters = { name: "", status: "" };
+    const resetFilters = { name: "", status: "", category: "" };
     setFilters(resetFilters);
     loadStaffs(1, resetFilters);
     setIsFilterOpen(false);
@@ -214,6 +215,17 @@ export default function Staffs() {
       ],
       onChange: (val) => setFilters(prev => ({ ...prev, status: val })) // ✅ This is correct
     },
+    {
+      label: "Category",
+      type: "select",
+      value: filters.category,
+      options: [
+        { label: "All", value: "" },
+        { label: "Embroidery", value: "Embroidery" },
+        { label: "Cropping", value: "Cropping" },
+      ],
+      onChange: (val) => setFilters((prev) => ({ ...prev, category: val })),
+    },
   ];
 
   return (
@@ -267,6 +279,7 @@ export default function Staffs() {
                 <tr className="text-sm tracking-wider text-gray-500">
                   <th className="px-7 py-3.5 font-medium">Id</th>
                   <th className="px-7 py-3.5 font-medium">Staff Name</th>
+                  <th className="px-7 py-3.5 font-medium">Category</th>
                   <th className="px-7 py-3.5 font-medium">Joining Date</th>
                   <th className="px-7 py-3.5 font-medium">Salary</th>
                   <th className="px-7 py-3.5 font-medium">Current Balance</th>
@@ -283,7 +296,7 @@ export default function Staffs() {
                 <tbody className="divide-y divide-gray-200">
                   {staffs.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-7 py-16 text-center text-sm text-gray-400">
+                      <td colSpan={8} className="px-7 py-16 text-center text-sm text-gray-400">
                         No staff found.
                       </td>
                     </tr>
