@@ -96,10 +96,8 @@ export default function AuthProvider({ children }) {
         localStorage.setItem("cachedUser", JSON.stringify(guardedCached));
         logDataSource("IDB", "auth.init.cached_session");
         setLoading(false);
-
-        // Keep startup instant. No blocking /auth/me during boot when cached session exists.
-        // If you want, we can later add a manual "Refresh Session" action.
-        triggerBootstrapSync(true);
+        // On refresh with cached session we do not pull cloud bootstrap data.
+        // Cloud bootstrap runs only on explicit login.
         return;
       }
 

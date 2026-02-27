@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Banknote, Landmark, PenLine, Plus, Smartphone, Wrench } from "lucide-react";
+import { Banknote, Landmark, Plus, Smartphone, Wrench } from "lucide-react";
 import {
   createCustomerPayment,
   fetchCustomerPaymentStats,
@@ -11,20 +11,10 @@ import TableToolbar from "../components/table/TableToolbar";
 import TableSkeleton from "../components/table/TableLoader";
 import FilterDrawer from "../components/FilterDrawer";
 import PageHeader from "../components/PageHeader";
-import Modal from "../components/Modal";
-import Button from "../components/Button";
 import CustomerPaymentFormModal from "../components/CustomerPayment/CustomerPaymentFormModal";
 import CustomerPaymentRow from "../components/CustomerPayment/CustomerPaymentRow";
+import CustomerPaymentDetailsModal from "../components/CustomerPayment/CustomerPaymentDetailsModal";
 import { useToast } from "../context/ToastContext";
-import { formatDate, formatNumbers } from "../utils";
-
-const METHOD_LABEL = {
-  cash: "Cash",
-  cheque: "Cheque",
-  slip: "Slip",
-  online: "Online",
-  adjustment: "Adjustment",
-};
 
 export default function CustomerPayments() {
   const { showToast } = useToast();
@@ -117,6 +107,13 @@ export default function CustomerPayments() {
     } catch (err) {
       showToast({ type: "error", message: err.response?.data?.message || "Failed to save customer payment" });
       throw err;
+    }
+  };
+
+  const handlePaymentDetailsActions = (action, data) => {
+    if (action === "openEdit") {
+      setDetailModal({ isOpen: false, payment: null });
+      setFormModal({ isOpen: true, data });
     }
   };
 
@@ -250,91 +247,12 @@ export default function CustomerPayments() {
         onReset={handleResetFilters}
       />
 
-      <Modal
+      <CustomerPaymentDetailsModal
         isOpen={detailModal.isOpen}
+        initialData={detailModal.payment}
         onClose={() => setDetailModal({ isOpen: false, payment: null })}
-        maxWidth="max-w-2xl"
-        title="Customer Payment Details"
-        subtitle="Complete payment information."
-        footer={
-          <div className="flex items-center justify-end">
-            <Button
-              variant="secondary"
-              outline
-              icon={PenLine}
-              onClick={() => {
-                setFormModal({ isOpen: true, data: detailModal.payment });
-                setDetailModal({ isOpen: false, payment: null });
-              }}
-            >
-              Edit Payment
-            </Button>
-          </div>
-        }
-      >
-        {detailModal.payment && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3">
-              <p className="text-xs text-gray-500">Customer</p>
-              <p className="mt-1 text-sm font-medium text-gray-900">
-                {detailModal.payment.customer_id?.name || detailModal.payment.customer_name || "-"}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3">
-              <p className="text-xs text-gray-500">Date</p>
-              <p className="mt-1 text-sm font-medium text-gray-900">
-                {formatDate(detailModal.payment.date, "dd-MMM-YYYY, DDD")}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3">
-              <p className="text-xs text-gray-500">Method</p>
-              <p className="mt-1 text-sm font-medium text-gray-900">
-                {METHOD_LABEL[detailModal.payment.method] || detailModal.payment.method || "-"}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3">
-              <p className="text-xs text-gray-500">Amount</p>
-              <p className="mt-1 text-sm font-semibold text-gray-900">
-                {formatNumbers(detailModal.payment.amount, 2)}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3">
-              <p className="text-xs text-gray-500">Reference No</p>
-              <p className="mt-1 text-sm font-medium text-gray-900">
-                {detailModal.payment.reference_no || "-"}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3">
-              <p className="text-xs text-gray-500">Bank / Party</p>
-              <p className="mt-1 text-sm font-medium text-gray-900">
-                {detailModal.payment.bank_name || detailModal.payment.party_name || "-"}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3">
-              <p className="text-xs text-gray-500">Cheque/Slip Date</p>
-              <p className="mt-1 text-sm font-medium text-gray-900">
-                {detailModal.payment.cheque_date
-                  ? formatDate(detailModal.payment.cheque_date, "dd-MMM-YYYY")
-                  : "-"}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3">
-              <p className="text-xs text-gray-500">Clear Date</p>
-              <p className="mt-1 text-sm font-medium text-gray-900">
-                {detailModal.payment.clear_date
-                  ? formatDate(detailModal.payment.clear_date, "dd-MMM-YYYY")
-                  : "-"}
-              </p>
-            </div>
-            <div className="md:col-span-2 rounded-2xl border border-gray-200 bg-gray-50 p-3">
-              <p className="text-xs text-gray-500">Remarks</p>
-              <p className="mt-1 whitespace-pre-wrap text-sm font-medium text-gray-900">
-                {detailModal.payment.remarks || "-"}
-              </p>
-            </div>
-          </div>
-        )}
-      </Modal>
+        onAction={handlePaymentDetailsActions}
+      />
     </>
   );
 }

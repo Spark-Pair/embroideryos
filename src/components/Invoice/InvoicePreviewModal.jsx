@@ -9,9 +9,9 @@ import { formatDate, formatNumbers } from "../../utils";
  * Each copy = 148.5mm wide, 5mm padding all sides
  * Content = 138.5mm × 200mm
  * After cut: all 4 sides = 5mm equal ✓
- * MAX ORDERS = 7
+ * MAX ORDERS = 8
  */
-export const MAX_INVOICE_ORDERS = 7;
+export const MAX_INVOICE_ORDERS = 8;
 
 const PRINT_STYLE = `
   @media print {
@@ -86,7 +86,7 @@ const PRINT_STYLE = `
       flex-shrink: 0 !important;
       width: 100% !important;
       line-height: 0 !important;
-      margin-bottom: 4mm !important;
+      margin-bottom: 2mm !important;
     }
 
     #invoice-print-root .invoice-banner {
@@ -113,7 +113,7 @@ const PRINT_STYLE = `
       width: 100% !important;
       height: 65mm !important;
       border: 1px solid #111111ed !important;
-      border-radius: 9px !important;
+      border-radius: 12px !important;
       background: #dcdcdc !important;
       display: flex !important;
       align-items: center !important;
@@ -175,13 +175,13 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
   return (
     <div
       className="invoice-copy bg-white"
-      style={{ fontFamily: "'Segoe UI', sans-serif", boxSizing: "border-box" }}
+      style={{ fontFamily: "'Segoe UI', sans-serif", boxSizing: "border-box", flexGrow: "1", display: "flex", flexDirection: "column", }}
     >
       {/* ── Banner ── */}
       {hasBanner && (
         <div
           className="invoice-banner-wrap"
-          style={{ width: "100%", flexShrink: 0, marginBottom: "10px", lineHeight: 0 }}
+          style={{ width: "100%", flexShrink: 0, marginBottom: "5px", lineHeight: 0 }}
         >
           <img
             src={bannerUrl}
@@ -205,9 +205,9 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
         )}
 
         {/* ── Meta ── */}
-        <div style={{ flexShrink: 0, padding: "6px 10px", background: "#dcdcdc", borderRadius: "8px", border: "1px solid #111111ed" }}>
+        <div style={{ flexShrink: 0, padding: "0px 7px 4px 7px", borderBottom: "1px solid #111111ed" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "2px" }}>
-            <span style={{ fontSize: "13px", fontWeight: 800, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "60%" }}>
+            <span style={{ fontSize: "13px", fontWeight: 700, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "60%" }}>
               {invoice.customer_name || "-"}
             </span>
             <span style={{ fontSize: "10px", fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}>
@@ -239,7 +239,7 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
             <thead>
               <tr style={{ background: "#1e293b" }}>
                 {["#", "Date", "Lot", "Description", "Qty (Pcs)", "Rate", "Amount"].map((h, i) => (
-                  <th key={h} style={{ padding: "7px 6px", fontWeight: 700, textAlign: i >= 4 ? "right" : "left", fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#fff", whiteSpace: "nowrap" }}>
+                  <th key={h} style={{ padding: "6px 7.5px", fontWeight: 700, textAlign: i >= 4 ? "right" : "left", fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#fff", whiteSpace: "nowrap" }}>
                     {h}
                   </th>
                 ))}
@@ -248,23 +248,23 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
             <tbody>
               {orders.map((order, idx) => (
                 <tr key={order._id ?? idx} style={{ background: idx % 2 === 0 ? "#fff" : "#dcdcdc", borderTop: "1px solid #111111ed" }}>
-                  <td style={{ padding: "6px", color: "#111827", fontWeight: 400 }}>{idx + 1}</td>
-                  <td style={{ padding: "6px", fontWeight: 600, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <td style={{ padding: "6px 7.5px", color: "#111827", fontWeight: 400 }}>{idx + 1}</td>
+                  <td style={{ padding: "6px 7.5px", fontWeight: 600, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {formatDate(order.date, "DD MMM yyyy")}
                   </td>
-                  <td style={{ padding: "6px", fontWeight: 400, color: "#111827", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <td style={{ padding: "6px 7.5px", fontWeight: 400, color: "#111827", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {order.lot_no || "-"}
                   </td>
-                  <td style={{ padding: "6px", fontWeight: 400, color: "#111827", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <td style={{ padding: "6px 7.5px", fontWeight: 400, color: "#111827", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {order.description || "-"}
                   </td>
-                  <td style={{ padding: "6px", textAlign: "right", fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
+                  <td style={{ padding: "6px 7.5px", textAlign: "right", fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
                     {formatNumbers(getQuantityInPcs(order), 0)} Pcs
                   </td>
-                  <td style={{ padding: "6px", textAlign: "right", fontWeight: 400, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
+                  <td style={{ padding: "6px 7.5px", textAlign: "right", fontWeight: 400, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
                     {formatNumbers(order.rate, 2)}
                   </td>
-                  <td style={{ padding: "6px", textAlign: "right", fontWeight: 800, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
+                  <td style={{ padding: "6px 7.5px", textAlign: "right", fontWeight: 700, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
                     {formatNumbers(order.total_amount, 2)}
                   </td>
                 </tr>
@@ -286,19 +286,19 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
               </div>
             )}
           </div>
-          <div style={{ border: "1px solid #111111ed", borderRadius: "10px", padding: "8px 10px", background: "#dcdcdc" }}>
+          <div>
             <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", padding: "0px 3px" }}>
                 <span style={{ fontWeight: 400, color: "#111827" }}>Outstanding</span>
                 <span style={{ fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" }}>{formatNumbers(outstandingBalance, 2)}</span>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", padding: "0px 3px" }}>
                 <span style={{ fontWeight: 400, color: "#111827" }}>Sub Total</span>
                 <span style={{ fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" }}>{formatNumbers(totalAmt, 2)}</span>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1.5px solid #111111ed", paddingTop: "5px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1.5px solid #111111ed", padding: "5px 3px 0 3px" }}>
                 <span style={{ fontWeight: 700, color: "#111827", fontSize: "11px" }}>New Balance</span>
-                <span style={{ fontWeight: 900, fontSize: "14px", fontVariantNumeric: "tabular-nums", color: "#111827" }}>
+                <span style={{ fontWeight: 700, fontSize: "14px", fontVariantNumeric: "tabular-nums", color: "#111827" }}>
                   {formatNumbers(newBalance, 2)}
                 </span>
               </div>
@@ -315,7 +315,7 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
               width: "100%",
               height: "200px",
               border: "1px solid #111111ed",
-              borderRadius: "10px",
+              borderRadius: "12px",
               background: "#dcdcdc",
               display: "flex",
               alignItems: "center",
@@ -350,6 +350,8 @@ export default function InvoicePreviewModal({
   onPrint,
 }) {
   injectPrintStyle();
+  const SCREEN_PREVIEW_WIDTH = 595; // A4 portrait at ~72dpi
+  const SCREEN_PREVIEW_HEIGHT = 842; // A4 portrait at ~72dpi
 
   const ordersCount = invoice?.orders?.length ?? 0;
   const isOverLimit = ordersCount > MAX_INVOICE_ORDERS;
@@ -364,8 +366,8 @@ export default function InvoicePreviewModal({
       isOpen={isOpen}
       onClose={onClose}
       title="Invoice Preview"
-      subtitle="2 copies · A5 each · A4 Landscape"
-      maxWidth="max-w-6xl"
+      subtitle="Preview: A4 · Print: 2 copies (A5 on A4 Landscape)"
+      maxWidth="max-w-7xl"
       footer={
         <div className="flex items-center justify-end gap-2.5 w-full">
           <Button variant="secondary" outline icon={X} onClick={onClose}>Close</Button>
@@ -391,23 +393,29 @@ export default function InvoicePreviewModal({
           <div id="invoice-print-root">
             <div
               className="screen-only"
-              style={{ display: "flex", justifyContent: "center", background: "#d1d5db", padding: "28px 16px 16px", borderRadius: "12px", position: "relative" }}
+              style={{ display: "flex", justifyContent: "center", background: "#d1d5db", padding: "28px 16px 16px", borderRadius: "12px", position: "relative", overflow: "auto" }}
             >
-              <div style={{ position: "absolute", top: 0, bottom: 0, left: "50%", transform: "translateX(-50%)", width: "1px", borderLeft: "2px dashed #9ca3af", pointerEvents: "none", zIndex: 2 }} />
-              <div style={{ position: "absolute", top: "7px", left: "50%", transform: "translateX(-50%)", fontSize: "9px", color: "#6b7280", background: "#d1d5db", padding: "1px 6px", borderRadius: "3px", whiteSpace: "nowrap", zIndex: 3, letterSpacing: "0.06em" }}>
-                ✂ cut here
-              </div>
-
-              {[1, 2].map((copyNum) => (
-                <div key={copyNum} style={{ position: "relative", margin: "0 4px" }}>
-                  <span style={{ position: "absolute", top: "-20px", left: "50%", transform: "translateX(-50%)", fontSize: "10px", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 600, whiteSpace: "nowrap" }}>
-                    Copy {copyNum}
-                  </span>
-                  <div style={{ width: "390px", height: "553px", background: "#fff", borderRadius: "10px", padding: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.13)", boxSizing: "border-box", overflow: "hidden", display: "flex", flexDirection: "column" }}>
-                    <InvoiceDocument invoice={invoice} businessName={businessName} bannerUrl={bannerUrl} />
-                  </div>
+              <div style={{ position: "relative", margin: "0 4px" }}>
+                <span style={{ position: "absolute", top: "-20px", left: "50%", transform: "translateX(-50%)", fontSize: "10px", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 600, whiteSpace: "nowrap" }}>
+                  A4 Preview
+                </span>
+                <div
+                  style={{
+                    width: `${SCREEN_PREVIEW_WIDTH}px`,
+                    height: `200mm`,
+                    background: "#fff",
+                    borderRadius: "10px",
+                    padding: "20px",
+                    boxShadow: "0 2px 12px rgba(0,0,0,0.13)",
+                    boxSizing: "border-box",
+                    overflow: "hidden",
+                    display: "flex",
+                    flexDirection: "column",
+                  }}
+                >
+                  <InvoiceDocument invoice={invoice} businessName={businessName} bannerUrl={bannerUrl} />
                 </div>
-              ))}
+              </div>
             </div>
 
             <div className="print-layout" style={{ display: "none" }}>

@@ -24,10 +24,15 @@ export default function Orders() {
     const d = new Date(value).getTime();
     return Number.isFinite(d) ? d : 0;
   };
+  const objectIdToMillis = (id) => {
+    const raw = String(id || "");
+    if (!/^[a-fA-F0-9]{24}$/.test(raw)) return 0;
+    return parseInt(raw.slice(0, 8), 16) * 1000;
+  };
   const sortLatestFirst = (rows = []) =>
     [...rows].sort((a, b) => {
-      const aTime = toMillis(a?.date) || toMillis(a?.createdAt);
-      const bTime = toMillis(b?.date) || toMillis(b?.createdAt);
+      const aTime = toMillis(a?.createdAt) || toMillis(a?.date) || objectIdToMillis(a?._id || a?.id);
+      const bTime = toMillis(b?.createdAt) || toMillis(b?.date) || objectIdToMillis(b?._id || b?.id);
       return bTime - aTime;
     });
 

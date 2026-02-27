@@ -32,8 +32,8 @@ const objectIdToMillis = (id) => {
 };
 const sortLatestFirst = (rows = []) =>
   [...rows].sort((a, b) => {
-    const aTime = toMillis(a?.date) || toMillis(a?.createdAt) || objectIdToMillis(normalizeId(a));
-    const bTime = toMillis(b?.date) || toMillis(b?.createdAt) || objectIdToMillis(normalizeId(b));
+    const aTime = toMillis(a?.createdAt) || toMillis(a?.date) || objectIdToMillis(normalizeId(a));
+    const bTime = toMillis(b?.createdAt) || toMillis(b?.date) || objectIdToMillis(normalizeId(b));
     return bTime - aTime;
   });
 

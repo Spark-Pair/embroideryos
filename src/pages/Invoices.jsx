@@ -222,7 +222,11 @@ export default function Invoices() {
                     </tr>
                   ) : (
                     invoices.map((invoice, index) => (
-                      <tr key={invoice._id} className="hover:bg-gray-50/80 transition-colors">
+                      <tr
+                        key={invoice._id}
+                        className="cursor-pointer hover:bg-gray-50/80 transition-colors"
+                        onClick={() => handleOpenPreview(invoice._id)}
+                      >
                         <td className="px-5 py-4 font-medium text-gray-500">
                           {(pagination.currentPage - 1) * pagination.itemsPerPage + index + 1}
                         </td>
@@ -232,7 +236,10 @@ export default function Invoices() {
                         <td className="px-5 py-4 text-sm font-semibold text-emerald-700">{formatNumbers(invoice.total_amount, 2)}</td>
                         <td className="px-5 py-4 text-right relative">
                           <button
-                            onClick={() => setActiveMenu(activeMenu === invoice._id ? null : invoice._id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveMenu(activeMenu === invoice._id ? null : invoice._id);
+                            }}
                             className="p-2 text-gray-400 hover:text-gray-900 rounded-lg hover:bg-gray-100"
                             aria-label="Open actions menu"
                           >
@@ -240,7 +247,8 @@ export default function Invoices() {
                           </button>
                           <ContextMenu isOpen={activeMenu === invoice._id}>
                             <button
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 handleOpenPreview(invoice._id);
                                 setActiveMenu(null);
                               }}

@@ -3,14 +3,6 @@ import { useState } from "react";
 import ContextMenu from "../ContextMenu";
 import { formatDate, formatNumbers } from "../../utils";
 
-const METHOD_BADGE_CLASS = {
-  cash: "bg-emerald-100 text-emerald-700",
-  cheque: "bg-amber-100 text-amber-700",
-  slip: "bg-sky-100 text-sky-700",
-  online: "bg-indigo-100 text-indigo-700",
-  adjustment: "bg-violet-100 text-violet-700",
-};
-
 const METHOD_LABEL = {
   cash: "Cash",
   cheque: "Cheque",
@@ -34,12 +26,10 @@ export default function CustomerPaymentRow({ item, index, startIndex, onView, on
       <td className="px-7 py-4 text-sm text-gray-500 font-light">
         {formatDate(item.date, "dd-MMM-YYYY, DDD")}
       </td>
-      <td className="px-7 py-4">
-        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${METHOD_BADGE_CLASS[item.method] || "bg-gray-100 text-gray-700"}`}>
-          {METHOD_LABEL[item.method] || item.method}
-        </span>
+      <td className="px-7 py-4 text-sm text-gray-500 font-light">
+        {METHOD_LABEL[item.method] || item.method || "-"}
       </td>
-      <td className="px-7 py-4 text-sm font-medium tracking-wider text-gray-700">
+      <td className="px-7 py-4 text-sm font-medium tracking-wider text-gray-800">
         {formatNumbers(item.amount, 2)}
       </td>
       <td className="max-w-[220px] truncate px-7 py-4 text-sm font-light text-gray-500" title={item.remarks || ""}>
