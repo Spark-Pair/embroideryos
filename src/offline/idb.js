@@ -147,6 +147,62 @@ export const failSyncAction = async (id, errorMessage = "") => {
   logDataSource("IDB", "sync_queue.retry", { id, errorMessage });
 };
 
+export const remapPendingSyncEntityId = async (entity, fromId, toId) => {
+  const sourceId = String(fromId || "").trim();
+  const targetId = String(toId || "").trim();
+  const entityName = String(entity || "").trim();
+  if (!entityName || !sourceId || !targetId || sourceId === targetId) return 0;
+
+  const db = await getDb();
+  const changed = await new Promise((resolve, reject) => {
+    const tx = db.transaction("sync_queue", "readwrite");
+    const store = tx.objectStore("sync_queue");
+    const req = store.getAll();
+    let updates = 0;
+
+    req.onsuccess = () => {
+      const rows = Array.isArray(req.result) ? req.result : [];
+      rows.forEach((item) => {
+        if (item?.status !== "pending" || item?.entity !== entityName) return;
+
+        const metaId = String(item?.meta?.id || "");
+        const url = String(item?.url || "");
+        const urlNeedsRemap =
+          url.includes(`/${sourceId}/`) || url.endsWith(`/${sourceId}`) || url.includes(sourceId);
+        const metaNeedsRemap = metaId === sourceId;
+        if (!urlNeedsRemap && !metaNeedsRemap) return;
+
+        const nextMeta = { ...(item?.meta || {}) };
+        if (metaNeedsRemap) nextMeta.id = targetId;
+
+        const nextUrl = url.replaceAll(sourceId, targetId);
+        store.put({
+          ...item,
+          url: nextUrl,
+          meta: nextMeta,
+          updatedAt: Date.now(),
+        });
+        updates += 1;
+      });
+    };
+
+    req.onerror = () => reject(req.error || new Error("Failed to remap sync queue ids"));
+    tx.oncomplete = () => resolve(updates);
+    tx.onerror = () => reject(tx.error || new Error("Failed to remap sync queue ids"));
+    tx.onabort = () => reject(tx.error || new Error("Sync queue remap aborted"));
+  });
+
+  if (changed > 0) {
+    logDataSource("IDB", "sync_queue.id_remap", {
+      entity: entityName,
+      fromId: sourceId,
+      toId: targetId,
+      count: changed,
+    });
+  }
+  return changed;
+};
+
 export const upsertEntitySnapshot = async (key, data) => {
   if (!key) return;
   await runTx("entities", "readwrite", (store) =>

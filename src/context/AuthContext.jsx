@@ -78,6 +78,7 @@ export default function AuthProvider({ children }) {
     authBootstrappedRef.current = true;
 
     const initAuth = async () => {
+      localStorage.removeItem("auth:logout_in_progress");
       const { accessToken, sessionId } = storage.getAuth();
       let cachedUser = null;
       try {
@@ -154,6 +155,7 @@ export default function AuthProvider({ children }) {
   const login = useCallback(async (_authData) => {
     try {
       setLoading(true);
+      localStorage.removeItem("auth:logout_in_progress");
 
       // Auth data already stored by loginUser in auth.api.js
       const userData = await getMe();
@@ -192,6 +194,7 @@ export default function AuthProvider({ children }) {
 
   // Logout function
   const logout = useCallback(async () => {
+    localStorage.setItem("auth:logout_in_progress", "1");
     try {
       await logoutUser();
 
@@ -209,6 +212,7 @@ export default function AuthProvider({ children }) {
       offlineAccess.lock();
       clearOfflineData().catch(() => null);
       logDataSource("IDB", "offline.locked");
+      localStorage.removeItem("auth:logout_in_progress");
     }
   }, [showToast]);
 

@@ -17,7 +17,7 @@ export default function StaffFormModal({
 
   useEffect(() => {
     setFormData({
-      id: initialData?._id || "",
+      id: initialData?._id || initialData?.id || "",
       name: initialData?.name || "",
       category: initialData?.category || "Embroidery",
       joining_date: formatDate(initialData?.joining_date, "yyyy-mm-dd") || "",

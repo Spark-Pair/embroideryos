@@ -178,7 +178,11 @@ export default function Staffs() {
           message: "Staff added successfully"
         });
       } else if (action === "edit") {
-        await updateStaff(data.id, normalizedData);
+        const targetId = data?.id || data?._id;
+        if (!targetId) {
+          throw new Error("Invalid staff id for update");
+        }
+        await updateStaff(targetId, normalizedData);
         
         showToast({
           type: 'success',

@@ -6,6 +6,7 @@ import {
   getPendingSyncActions,
   offlineAccess,
   queueSyncAction,
+  remapPendingSyncEntityId,
   upsertEntitySnapshot,
 } from "./idb";
 import { logDataSource } from "./logger";
@@ -28,6 +29,11 @@ const normalizeSupplier = (value = {}) => ({
 });
 
 const normalizeId = (row) => String(row?._id || row?.id || "");
+const resolveIdInput = (value) => {
+  if (value && typeof value === "object") return String(value?._id || value?.id || "").trim();
+  return String(value || "").trim();
+};
+const isLocalId = (value) => resolveIdInput(value).startsWith("local-");
 const toMillis = (value) => {
   if (!value) return 0;
   const d = new Date(value).getTime();
@@ -237,6 +243,7 @@ const syncCreateSuccess = async (action, serverSupplier) => {
     if (realId) overlay[realId] = { ...serverSupplier, _id: realId };
     return overlay;
   });
+  await remapPendingSyncEntityId("suppliers", localId, realId);
 };
 
 const syncUpdateSuccess = async (action, serverSupplier) => {
@@ -427,56 +434,64 @@ export const createSupplierLocalFirst = async (payload) => {
     meta: { localId },
   });
 
-  processSupplierQueue().catch(() => null);
+  if (navigator.onLine) await processSupplierQueue();
+  else processSupplierQueue().catch(() => null);
   return { supplier: localSupplier };
 };
 
 export const updateSupplierLocalFirst = async (id, payload) => {
+  const targetId = resolveIdInput(id) || resolveIdInput(payload?.id) || resolveIdInput(payload?._id);
+  if (!targetId) throw new Error("Invalid supplier id for update");
+
   if (!offlineAccess.isUnlocked()) {
-    const res = await apiClient.put(`${SUPPLIERS_URL}/${id}`, payload);
+    const res = await apiClient.put(`${SUPPLIERS_URL}/${targetId}`, payload);
     return res.data;
   }
 
-  const existing = await findSupplierByIdLocal(id);
+  const existing = await findSupplierByIdLocal(targetId);
   const next = {
     ...(existing || {}),
     ...normalizeSupplier(payload),
-    _id: String(id),
+    _id: targetId,
     __syncStatus: "pending",
     updatedAt: new Date().toISOString(),
   };
 
   await patchOverlay((overlay) => {
-    overlay[String(id)] = next;
+    overlay[targetId] = next;
     return overlay;
   });
 
   await queueSyncAction({
     entity: "suppliers",
     method: "PUT",
-    url: `${SUPPLIERS_URL}/${id}`,
+    url: `${SUPPLIERS_URL}/${targetId}`,
     payload: normalizeSupplier(payload),
-    meta: { id: String(id) },
+    meta: { id: targetId },
   });
 
-  processSupplierQueue().catch(() => null);
+  if (navigator.onLine) await processSupplierQueue();
+  else processSupplierQueue().catch(() => null);
   return next;
 };
 
 export const toggleSupplierStatusLocalFirst = async (id) => {
+  const targetId = resolveIdInput(id);
+  if (!targetId) throw new Error("Invalid supplier id for status toggle");
+
   if (!offlineAccess.isUnlocked()) {
-    const res = await apiClient.patch(`${SUPPLIERS_URL}/${id}/toggle-status`);
+    const res = await apiClient.patch(`${SUPPLIERS_URL}/${targetId}/toggle-status`);
     return res.data;
   }
 
-  const existing = await findSupplierByIdLocal(id);
+  const existing = await findSupplierByIdLocal(targetId);
   const nextActive = !Boolean(existing?.isActive);
 
   await patchOverlay((overlay) => {
-    const prev = overlay[String(id)] || existing || {};
-    overlay[String(id)] = {
+    const prev = overlay[targetId] || existing || {};
+    overlay[targetId] = {
       ...prev,
-      _id: String(id),
+      _id: targetId,
       isActive: nextActive,
       __syncStatus: "pending",
       updatedAt: new Date().toISOString(),
@@ -484,16 +499,21 @@ export const toggleSupplierStatusLocalFirst = async (id) => {
     return overlay;
   });
 
+  const method = isLocalId(targetId) ? "PUT" : "PATCH";
+  const url = isLocalId(targetId) ? `${SUPPLIERS_URL}/${targetId}` : `${SUPPLIERS_URL}/${targetId}/toggle-status`;
+  const payload = isLocalId(targetId) ? { isActive: nextActive } : null;
+
   await queueSyncAction({
     entity: "suppliers",
-    method: "PATCH",
-    url: `${SUPPLIERS_URL}/${id}/toggle-status`,
-    payload: null,
-    meta: { id: String(id) },
+    method,
+    url,
+    payload,
+    meta: { id: targetId },
   });
 
-  processSupplierQueue().catch(() => null);
-  return { id: String(id), isActive: nextActive };
+  if (navigator.onLine) await processSupplierQueue();
+  else processSupplierQueue().catch(() => null);
+  return { id: targetId, isActive: nextActive };
 };
 
 export const refreshSuppliersFromCloud = async () => {

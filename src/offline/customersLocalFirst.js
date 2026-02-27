@@ -6,6 +6,7 @@ import {
   getPendingSyncActions,
   offlineAccess,
   queueSyncAction,
+  remapPendingSyncEntityId,
   upsertEntitySnapshot,
 } from "./idb";
 import { logDataSource } from "./logger";
@@ -28,6 +29,11 @@ const normalizeCustomer = (value = {}) => ({
 });
 
 const normalizeId = (row) => String(row?._id || row?.id || "");
+const resolveIdInput = (value) => {
+  if (value && typeof value === "object") return String(value?._id || value?.id || "").trim();
+  return String(value || "").trim();
+};
+const isLocalId = (value) => resolveIdInput(value).startsWith("local-");
 const toMillis = (value) => {
   if (!value) return 0;
   const d = new Date(value).getTime();
@@ -236,6 +242,7 @@ const syncCreateSuccess = async (action, serverCustomer) => {
     if (realId) overlay[realId] = { ...serverCustomer, _id: realId };
     return overlay;
   });
+  await remapPendingSyncEntityId("customers", localId, realId);
 };
 
 const syncUpdateSuccess = async (action, serverCustomer) => {
@@ -427,56 +434,64 @@ export const createCustomerLocalFirst = async (payload) => {
     meta: { localId },
   });
 
-  processCustomerQueue().catch(() => null);
+  if (navigator.onLine) await processCustomerQueue();
+  else processCustomerQueue().catch(() => null);
   return { customer: localCustomer };
 };
 
 export const updateCustomerLocalFirst = async (id, payload) => {
+  const targetId = resolveIdInput(id) || resolveIdInput(payload?.id) || resolveIdInput(payload?._id);
+  if (!targetId) throw new Error("Invalid customer id for update");
+
   if (!offlineAccess.isUnlocked()) {
-    const res = await apiClient.put(`${CUSTOMERS_URL}/${id}`, payload);
+    const res = await apiClient.put(`${CUSTOMERS_URL}/${targetId}`, payload);
     return res.data;
   }
 
-  const existing = await findCustomerByIdLocal(id);
+  const existing = await findCustomerByIdLocal(targetId);
   const next = {
     ...(existing || {}),
     ...normalizeCustomer(payload),
-    _id: String(id),
+    _id: targetId,
     __syncStatus: "pending",
     updatedAt: new Date().toISOString(),
   };
 
   await patchOverlay((overlay) => {
-    overlay[String(id)] = next;
+    overlay[targetId] = next;
     return overlay;
   });
 
   await queueSyncAction({
     entity: "customers",
     method: "PUT",
-    url: `${CUSTOMERS_URL}/${id}`,
+    url: `${CUSTOMERS_URL}/${targetId}`,
     payload: normalizeCustomer(payload),
-    meta: { id: String(id) },
+    meta: { id: targetId },
   });
 
-  processCustomerQueue().catch(() => null);
+  if (navigator.onLine) await processCustomerQueue();
+  else processCustomerQueue().catch(() => null);
   return next;
 };
 
 export const toggleCustomerStatusLocalFirst = async (id) => {
+  const targetId = resolveIdInput(id);
+  if (!targetId) throw new Error("Invalid customer id for status toggle");
+
   if (!offlineAccess.isUnlocked()) {
-    const res = await apiClient.patch(`${CUSTOMERS_URL}/${id}/toggle-status`);
+    const res = await apiClient.patch(`${CUSTOMERS_URL}/${targetId}/toggle-status`);
     return res.data;
   }
 
-  const existing = await findCustomerByIdLocal(id);
+  const existing = await findCustomerByIdLocal(targetId);
   const nextActive = !Boolean(existing?.isActive);
 
   await patchOverlay((overlay) => {
-    const prev = overlay[String(id)] || existing || {};
-    overlay[String(id)] = {
+    const prev = overlay[targetId] || existing || {};
+    overlay[targetId] = {
       ...prev,
-      _id: String(id),
+      _id: targetId,
       isActive: nextActive,
       __syncStatus: "pending",
       updatedAt: new Date().toISOString(),
@@ -484,16 +499,21 @@ export const toggleCustomerStatusLocalFirst = async (id) => {
     return overlay;
   });
 
+  const method = isLocalId(targetId) ? "PUT" : "PATCH";
+  const url = isLocalId(targetId) ? `${CUSTOMERS_URL}/${targetId}` : `${CUSTOMERS_URL}/${targetId}/toggle-status`;
+  const payload = isLocalId(targetId) ? { isActive: nextActive } : null;
+
   await queueSyncAction({
     entity: "customers",
-    method: "PATCH",
-    url: `${CUSTOMERS_URL}/${id}/toggle-status`,
-    payload: null,
-    meta: { id: String(id) },
+    method,
+    url,
+    payload,
+    meta: { id: targetId },
   });
 
-  processCustomerQueue().catch(() => null);
-  return { id: String(id), isActive: nextActive };
+  if (navigator.onLine) await processCustomerQueue();
+  else processCustomerQueue().catch(() => null);
+  return { id: targetId, isActive: nextActive };
 };
 
 export const refreshCustomersFromCloud = async () => {

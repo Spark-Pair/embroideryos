@@ -5,6 +5,13 @@ import { offlineAccess } from "../offline/idb";
 
 const API = import.meta.env.VITE_API_URL;
 const READ_ONLY_BYPASS_PATHS = new Set(["/auth/logout", "/auth/logout-all", "/auth/refresh"]);
+const AUTH_REDIRECT_BYPASS_PATHS = new Set([
+  "/auth/logout",
+  "/auth/logout-all",
+  "/auth/refresh",
+  "/auth/me",
+  "/auth/sessions",
+]);
 
 export const apiClient = axios.create({
   baseURL: API,
@@ -74,6 +81,28 @@ const isReadOnlyBlockedRequest = (config) => {
 const isOfflineBlockedRequest = () => {
   if (typeof navigator === "undefined") return false;
   return navigator.onLine === false;
+};
+
+let authRedirectInProgress = false;
+
+const shouldBypassUnauthorizedRedirect = (config = {}) => {
+  const urlPath = String(config?.url || "");
+  if (AUTH_REDIRECT_BYPASS_PATHS.has(urlPath)) return true;
+  if (typeof window !== "undefined" && window.location.pathname === "/login") return true;
+  if (localStorage.getItem("auth:logout_in_progress") === "1") return true;
+  const { accessToken, sessionId } = storage.getAuth();
+  if (!accessToken && !sessionId) return true;
+  return false;
+};
+
+const redirectToLoginOnce = () => {
+  if (authRedirectInProgress) return;
+  authRedirectInProgress = true;
+  storage.clearAuth();
+  localStorage.removeItem("cachedUser");
+  if (typeof window !== "undefined") {
+    window.location.replace("/login");
+  }
 };
 
 // Request interceptor
@@ -190,8 +219,11 @@ apiClient.interceptors.response.use(
       const { refreshToken, sessionId } = storage.getAuth();
 
       if (!refreshToken || !sessionId) {
-        storage.clearAuth();
-        window.location.href = '/login';
+        if (!shouldBypassUnauthorizedRedirect(originalRequest)) {
+          redirectToLoginOnce();
+        } else {
+          storage.clearAuth();
+        }
         return Promise.reject(error);
       }
 
@@ -210,8 +242,11 @@ apiClient.interceptors.response.use(
         return apiClient(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
-        storage.clearAuth();
-        window.location.href = '/login';
+        if (!shouldBypassUnauthorizedRedirect(originalRequest)) {
+          redirectToLoginOnce();
+        } else {
+          storage.clearAuth();
+        }
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
@@ -222,14 +257,20 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401 && 
         (error.response?.data?.code === 'SESSION_INVALID' || 
          error.response?.data?.code === 'SESSION_MISMATCH')) {
-      storage.clearAuth();
-      window.location.href = '/login';
+      if (!shouldBypassUnauthorizedRedirect(originalRequest)) {
+        redirectToLoginOnce();
+      } else {
+        storage.clearAuth();
+      }
     }
 
     // Handle other 401 errors
     if (error.response?.status === 401) {
-      storage.clearAuth();
-      window.location.href = '/login';
+      if (!shouldBypassUnauthorizedRedirect(originalRequest)) {
+        redirectToLoginOnce();
+      } else {
+        storage.clearAuth();
+      }
     }
 
     return Promise.reject(error);

@@ -6,6 +6,7 @@ import {
   getPendingSyncActions,
   offlineAccess,
   queueSyncAction,
+  remapPendingSyncEntityId,
   upsertEntitySnapshot,
 } from "./idb";
 import { logDataSource } from "./logger";
@@ -19,6 +20,11 @@ let onlineHandlerAttached = false;
 let syncLoopAttached = false;
 
 const normalizeId = (row) => String(row?._id || row?.id || "");
+const resolveIdInput = (value) => {
+  if (value && typeof value === "object") return String(value?._id || value?.id || "").trim();
+  return String(value || "").trim();
+};
+const isLocalId = (value) => resolveIdInput(value).startsWith("local-");
 const toMillis = (value) => {
   if (!value) return 0;
   const d = new Date(value).getTime();
@@ -99,6 +105,7 @@ const syncCreateSuccess = async (action, serverItem) => {
     if (realId) overlay[realId] = { ...serverItem, _id: realId };
     return overlay;
   });
+  await remapPendingSyncEntityId("expenseItems", localId, realId);
 };
 
 const syncUpdateSuccess = async (action, serverItem) => {
@@ -247,67 +254,85 @@ export const createExpenseItemLocalFirst = async (payload) => {
     meta: { localId },
   });
 
-  processExpenseItemQueue().catch(() => null);
+  if (navigator.onLine) await processExpenseItemQueue();
+  else processExpenseItemQueue().catch(() => null);
   return { data: localItem };
 };
 
 export const updateExpenseItemLocalFirst = async (id, payload) => {
+  const targetId = resolveIdInput(id) || resolveIdInput(payload?.id) || resolveIdInput(payload?._id);
+  if (!targetId) throw new Error("Invalid expense item id for update");
+
   if (!offlineAccess.isUnlocked()) {
-    const res = await apiClient.put(`${EXPENSE_ITEMS_URL}/${id}`, payload);
+    const res = await apiClient.put(`${EXPENSE_ITEMS_URL}/${targetId}`, payload);
     return res.data;
   }
 
   const localItem = {
     ...(payload || {}),
-    _id: String(id),
+    _id: targetId,
     __syncStatus: "pending",
     updatedAt: new Date().toISOString(),
   };
 
   await patchOverlay((overlay) => {
-    overlay[String(id)] = { ...(overlay[String(id)] || {}), ...localItem };
+    overlay[targetId] = { ...(overlay[targetId] || {}), ...localItem };
     return overlay;
   });
 
   await queueSyncAction({
     entity: "expenseItems",
     method: "PUT",
-    url: `${EXPENSE_ITEMS_URL}/${id}`,
+    url: `${EXPENSE_ITEMS_URL}/${targetId}`,
     payload,
-    meta: { id: String(id) },
+    meta: { id: targetId },
   });
 
-  processExpenseItemQueue().catch(() => null);
+  if (navigator.onLine) await processExpenseItemQueue();
+  else processExpenseItemQueue().catch(() => null);
   return { data: localItem };
 };
 
 export const toggleExpenseItemStatusLocalFirst = async (id) => {
+  const targetId = resolveIdInput(id);
+  if (!targetId) throw new Error("Invalid expense item id for status toggle");
+
   if (!offlineAccess.isUnlocked()) {
-    const res = await apiClient.patch(`${EXPENSE_ITEMS_URL}/${id}/toggle-status`);
+    const res = await apiClient.patch(`${EXPENSE_ITEMS_URL}/${targetId}/toggle-status`);
     return res.data;
   }
 
   await patchOverlay((overlay) => {
-    const prev = overlay[String(id)] || {};
-    overlay[String(id)] = {
+    const prev = overlay[targetId] || {};
+    const nextActive = !Boolean(prev?.isActive);
+    overlay[targetId] = {
       ...prev,
-      _id: String(id),
-      isActive: !Boolean(prev?.isActive),
+      _id: targetId,
+      isActive: nextActive,
       __syncStatus: "pending",
       updatedAt: new Date().toISOString(),
     };
     return overlay;
   });
 
+  const current = (await getOverlay())[targetId] || {};
+  const nextActive = Boolean(current?.isActive);
+  const method = isLocalId(targetId) ? "PUT" : "PATCH";
+  const url = isLocalId(targetId)
+    ? `${EXPENSE_ITEMS_URL}/${targetId}`
+    : `${EXPENSE_ITEMS_URL}/${targetId}/toggle-status`;
+  const payload = isLocalId(targetId) ? { isActive: nextActive } : null;
+
   await queueSyncAction({
     entity: "expenseItems",
-    method: "PATCH",
-    url: `${EXPENSE_ITEMS_URL}/${id}/toggle-status`,
-    payload: null,
-    meta: { id: String(id) },
+    method,
+    url,
+    payload,
+    meta: { id: targetId },
   });
 
-  processExpenseItemQueue().catch(() => null);
+  if (navigator.onLine) await processExpenseItemQueue();
+  else processExpenseItemQueue().catch(() => null);
   return { success: true };
 };
 

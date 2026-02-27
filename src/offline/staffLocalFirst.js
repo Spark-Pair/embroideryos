@@ -6,6 +6,7 @@ import {
   getPendingSyncActions,
   offlineAccess,
   queueSyncAction,
+  remapPendingSyncEntityId,
   upsertEntitySnapshot,
 } from "./idb";
 import { logDataSource } from "./logger";
@@ -29,6 +30,13 @@ const normalizeStaff = (value = {}) => ({
 });
 
 const normalizeId = (row) => String(row?._id || row?.id || "");
+const resolveIdInput = (value) => {
+  if (value && typeof value === "object") {
+    return String(value?._id || value?.id || "").trim();
+  }
+  return String(value || "").trim();
+};
+const isLocalId = (value) => resolveIdInput(value).startsWith("local-");
 const toMillis = (value) => {
   if (!value) return 0;
   const d = new Date(value).getTime();
@@ -272,6 +280,7 @@ const syncCreateSuccess = async (action, serverStaff) => {
     if (realId) overlay[realId] = { ...serverStaff, _id: realId };
     return overlay;
   });
+  await remapPendingSyncEntityId("staffs", localId, realId);
 };
 
 const syncUpdateSuccess = async (action, serverStaff) => {
@@ -462,6 +471,23 @@ export const fetchStaffLocalFirst = async (id) => {
 };
 
 export const createStaffLocalFirst = async (payload) => {
+  if (offlineAccess.isUnlocked() && navigator.onLine) {
+    try {
+      const res = await apiClient.post(STAFF_URL, payload);
+      const serverStaff = res?.data?.staff || res?.data;
+      const realId = normalizeId(serverStaff);
+      if (realId) {
+        await patchOverlay((overlay) => {
+          overlay[realId] = { ...serverStaff, _id: realId };
+          return overlay;
+        });
+      }
+      return res.data;
+    } catch {
+      // Fall back to offline queue path below.
+    }
+  }
+
   if (!offlineAccess.isUnlocked()) {
     const res = await apiClient.post(STAFF_URL, payload);
     return res.data;
@@ -490,56 +516,110 @@ export const createStaffLocalFirst = async (payload) => {
     meta: { localId },
   });
 
-  processStaffQueue().catch(() => null);
+  if (navigator.onLine) await processStaffQueue();
+  else processStaffQueue().catch(() => null);
   return { staff: localStaff };
 };
 
 export const updateStaffLocalFirst = async (id, payload) => {
+  const targetId = resolveIdInput(id) || resolveIdInput(payload?.id) || resolveIdInput(payload?._id);
+  if (!targetId) {
+    throw new Error("Invalid staff id for update");
+  }
+
+  const cleanPayload = { ...normalizeStaff(payload) };
+  delete cleanPayload.id;
+  delete cleanPayload._id;
+
+  if (offlineAccess.isUnlocked() && navigator.onLine && !isLocalId(targetId)) {
+    try {
+      const res = await apiClient.put(`${STAFF_URL}/${targetId}`, cleanPayload);
+      const serverStaff = res?.data?.staff || res?.data;
+      const realId = normalizeId(serverStaff) || targetId;
+      await patchOverlay((overlay) => {
+        overlay[realId] = { ...serverStaff, _id: realId };
+        return overlay;
+      });
+      return res.data;
+    } catch {
+      // Fall back to offline queue path below.
+    }
+  }
+
   if (!offlineAccess.isUnlocked()) {
-    const res = await apiClient.put(`${STAFF_URL}/${id}`, payload);
+    const res = await apiClient.put(`${STAFF_URL}/${targetId}`, cleanPayload);
     return res.data;
   }
 
-  const existing = await findStaffByIdLocal(id);
+  const existing = await findStaffByIdLocal(targetId);
   const next = {
     ...(existing || {}),
-    ...normalizeStaff(payload),
-    _id: String(id),
+    ...cleanPayload,
+    _id: targetId,
     __syncStatus: "pending",
     updatedAt: new Date().toISOString(),
   };
 
   await patchOverlay((overlay) => {
-    overlay[String(id)] = next;
+    overlay[targetId] = next;
     return overlay;
   });
 
   await queueSyncAction({
     entity: "staffs",
     method: "PUT",
-    url: `${STAFF_URL}/${id}`,
-    payload: normalizeStaff(payload),
-    meta: { id: String(id) },
+    url: `${STAFF_URL}/${targetId}`,
+    payload: cleanPayload,
+    meta: { id: targetId },
   });
 
-  processStaffQueue().catch(() => null);
+  if (navigator.onLine) await processStaffQueue();
+  else processStaffQueue().catch(() => null);
   return next;
 };
 
 export const toggleStaffStatusLocalFirst = async (id) => {
+  const targetId = resolveIdInput(id);
+  if (!targetId) {
+    throw new Error("Invalid staff id for status toggle");
+  }
+
+  if (offlineAccess.isUnlocked() && navigator.onLine && !isLocalId(targetId)) {
+    try {
+      const res = await apiClient.patch(`${STAFF_URL}/${targetId}/toggle-status`);
+      const nextActive =
+        typeof res?.data?.isActive === "boolean"
+          ? Boolean(res.data.isActive)
+          : !Boolean((await findStaffByIdLocal(targetId))?.isActive);
+      await patchOverlay((overlay) => {
+        const prev = overlay[targetId] || {};
+        overlay[targetId] = {
+          ...prev,
+          _id: targetId,
+          isActive: nextActive,
+          updatedAt: new Date().toISOString(),
+        };
+        return overlay;
+      });
+      return res.data;
+    } catch {
+      // Fall back to offline queue path below.
+    }
+  }
+
   if (!offlineAccess.isUnlocked()) {
-    const res = await apiClient.patch(`${STAFF_URL}/${id}/toggle-status`);
+    const res = await apiClient.patch(`${STAFF_URL}/${targetId}/toggle-status`);
     return res.data;
   }
 
-  const existing = await findStaffByIdLocal(id);
+  const existing = await findStaffByIdLocal(targetId);
   const nextActive = !existing?.isActive;
 
   await patchOverlay((overlay) => {
-    const prev = overlay[String(id)] || existing || {};
-    overlay[String(id)] = {
+    const prev = overlay[targetId] || existing || {};
+    overlay[targetId] = {
       ...prev,
-      _id: String(id),
+      _id: targetId,
       isActive: nextActive,
       __syncStatus: "pending",
       updatedAt: new Date().toISOString(),
@@ -547,16 +627,21 @@ export const toggleStaffStatusLocalFirst = async (id) => {
     return overlay;
   });
 
+  const method = isLocalId(targetId) ? "PUT" : "PATCH";
+  const url = isLocalId(targetId) ? `${STAFF_URL}/${targetId}` : `${STAFF_URL}/${targetId}/toggle-status`;
+  const payload = isLocalId(targetId) ? { isActive: nextActive } : null;
+
   await queueSyncAction({
     entity: "staffs",
-    method: "PATCH",
-    url: `${STAFF_URL}/${id}/toggle-status`,
-    payload: null,
-    meta: { id: String(id) },
+    method,
+    url,
+    payload,
+    meta: { id: targetId },
   });
 
-  processStaffQueue().catch(() => null);
-  return { id: String(id), isActive: nextActive };
+  if (navigator.onLine) await processStaffQueue();
+  else processStaffQueue().catch(() => null);
+  return { id: targetId, isActive: nextActive };
 };
 
 export const refreshStaffsFromCloud = async () => {
