@@ -494,13 +494,13 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
       onClose={onClose}
       maxWidth="max-w-6xl"
       title="Staff Monthly Report"
-      subtitle="Month-wise salary slip with print preview."
+      subtitle="Month-wise Report with print preview."
       footer={
         <div className="flex justify-between items-center gap-3">
           <div>
             {generated && records.length > 0 && (
               <Button variant="secondary" icon={Printer} onClick={handlePrint}>
-                Print Salary Slip
+                Print Report
               </Button>
             )}
           </div>
