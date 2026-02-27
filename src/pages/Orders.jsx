@@ -19,6 +19,17 @@ import { useToast } from "../context/ToastContext";
 
 export default function Orders() {
   const { showToast } = useToast();
+  const toMillis = (value) => {
+    if (!value) return 0;
+    const d = new Date(value).getTime();
+    return Number.isFinite(d) ? d : 0;
+  };
+  const sortLatestFirst = (rows = []) =>
+    [...rows].sort((a, b) => {
+      const aTime = toMillis(a?.date) || toMillis(a?.createdAt);
+      const bTime = toMillis(b?.date) || toMillis(b?.createdAt);
+      return bTime - aTime;
+    });
 
   const [stats, setStats] = useState({
     total_orders: 0,
@@ -62,7 +73,7 @@ export default function Orders() {
     try {
       setLoading(true);
       const res = await fetchOrders({ page, limit: 30, ...filterParams });
-      setOrders(res.data || []);
+      setOrders(sortLatestFirst(res.data || []));
       if (res.pagination) setPagination(res.pagination);
       loadStats(filterParams);
     } catch {

@@ -1,15 +1,14 @@
-import { apiClient } from "./apiClient";
+import {
+  createStaffPaymentLocalFirst,
+  fetchStaffPaymentMonthsLocalFirst,
+  fetchStaffPaymentStatsLocalFirst,
+  fetchStaffPaymentsLocalFirst,
+} from "../offline/staffPaymentsLocalFirst";
 
-const STAFF_PAYMENTS_URL = "/staff-payments";
+export const fetchStaffPayments = (params) => fetchStaffPaymentsLocalFirst(params);
 
-export const fetchStaffPayments = (params) =>
-  apiClient.get(STAFF_PAYMENTS_URL, { params }).then((r) => r.data);
+export const fetchStaffPaymentStats = () => fetchStaffPaymentStatsLocalFirst();
 
-export const fetchStaffPaymentStats = () =>
-  apiClient.get(`${STAFF_PAYMENTS_URL}/stats`).then((r) => r.data);
+export const fetchStaffPaymentMonths = () => fetchStaffPaymentMonthsLocalFirst();
 
-export const fetchStaffPaymentMonths = () =>
-  apiClient.get(`${STAFF_PAYMENTS_URL}/months`).then((r) => r.data);
-
-export const createStaffPayment = (data) =>
-  apiClient.post(STAFF_PAYMENTS_URL, data).then((r) => r.data);
+export const createStaffPayment = (data) => createStaffPaymentLocalFirst(data);

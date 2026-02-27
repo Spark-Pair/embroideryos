@@ -1,9 +1,5 @@
-import { apiClient } from "./apiClient";
+import { fetchDashboardSummaryLocalFirst, fetchDashboardTrendLocalFirst } from "../offline/dashboardLocalFirst";
 
-const DASHBOARD_URL = "/dashboard";
+export const fetchDashboardSummary = (params) => fetchDashboardSummaryLocalFirst(params);
 
-export const fetchDashboardSummary = (params) =>
-  apiClient.get(`${DASHBOARD_URL}/summary`, { params }).then((r) => r.data);
-
-export const fetchDashboardTrend = (params) =>
-  apiClient.get(`${DASHBOARD_URL}/trend`, { params }).then((r) => r.data);
+export const fetchDashboardTrend = (params) => fetchDashboardTrendLocalFirst(params);

@@ -1,18 +1,17 @@
-import { apiClient } from "./apiClient";
+import {
+  createExpenseLocalFirst,
+  deleteExpenseLocalFirst,
+  fetchExpenseStatsLocalFirst,
+  fetchExpensesLocalFirst,
+  updateExpenseLocalFirst,
+} from "../offline/expensesLocalFirst";
 
-const EXPENSES_URL = "/expenses";
+export const fetchExpenses = (params) => fetchExpensesLocalFirst(params);
 
-export const fetchExpenses = (params) =>
-  apiClient.get(EXPENSES_URL, { params }).then((r) => r.data);
+export const fetchExpenseStats = () => fetchExpenseStatsLocalFirst();
 
-export const fetchExpenseStats = () =>
-  apiClient.get(`${EXPENSES_URL}/stats`).then((r) => r.data);
+export const createExpense = (data) => createExpenseLocalFirst(data);
 
-export const createExpense = (data) =>
-  apiClient.post(EXPENSES_URL, data).then((r) => r.data);
+export const updateExpense = (id, data) => updateExpenseLocalFirst(id, data);
 
-export const updateExpense = (id, data) =>
-  apiClient.put(`${EXPENSES_URL}/${id}`, data).then((r) => r.data);
-
-export const deleteExpense = (id) =>
-  apiClient.delete(`${EXPENSES_URL}/${id}`).then((r) => r.data);
+export const deleteExpense = (id) => deleteExpenseLocalFirst(id);

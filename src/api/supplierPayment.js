@@ -1,15 +1,14 @@
-import { apiClient } from "./apiClient";
+import {
+  createSupplierPaymentLocalFirst,
+  fetchSupplierPaymentMonthsLocalFirst,
+  fetchSupplierPaymentStatsLocalFirst,
+  fetchSupplierPaymentsLocalFirst,
+} from "../offline/supplierPaymentsLocalFirst";
 
-const SUPPLIER_PAYMENTS_URL = "/supplier-payments";
+export const fetchSupplierPayments = (params) => fetchSupplierPaymentsLocalFirst(params);
 
-export const fetchSupplierPayments = (params) =>
-  apiClient.get(SUPPLIER_PAYMENTS_URL, { params }).then((r) => r.data);
+export const fetchSupplierPaymentStats = () => fetchSupplierPaymentStatsLocalFirst();
 
-export const fetchSupplierPaymentStats = () =>
-  apiClient.get(`${SUPPLIER_PAYMENTS_URL}/stats`).then((r) => r.data);
+export const fetchSupplierPaymentMonths = () => fetchSupplierPaymentMonthsLocalFirst();
 
-export const fetchSupplierPaymentMonths = () =>
-  apiClient.get(`${SUPPLIER_PAYMENTS_URL}/months`).then((r) => r.data);
-
-export const createSupplierPayment = (data) =>
-  apiClient.post(SUPPLIER_PAYMENTS_URL, data).then((r) => r.data);
+export const createSupplierPayment = (data) => createSupplierPaymentLocalFirst(data);

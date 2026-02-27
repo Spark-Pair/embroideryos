@@ -356,6 +356,17 @@ function ExpenseEntryModal({ isOpen, onClose, onAction }) {
 
 export default function Expenses() {
   const { showToast } = useToast();
+  const toMillis = (value) => {
+    if (!value) return 0;
+    const d = new Date(value).getTime();
+    return Number.isFinite(d) ? d : 0;
+  };
+  const sortLatestFirst = (rows = []) =>
+    [...rows].sort((a, b) => {
+      const aTime = toMillis(a?.date) || toMillis(a?.createdAt);
+      const bTime = toMillis(b?.date) || toMillis(b?.createdAt);
+      return bTime - aTime;
+    });
 
   const [stats, setStats] = useState({ total: 0, total_amount: 0, cash_count: 0, supplier_count: 0, fixed_count: 0 });
   const [expenses, setExpenses] = useState([]);
@@ -382,7 +393,7 @@ export default function Expenses() {
     try {
       setLoading(true);
       const res = await fetchExpenses({ page, limit: 30, ...filterParams });
-      setExpenses(res.data || []);
+      setExpenses(sortLatestFirst(res.data || []));
       if (res.pagination) setPagination(res.pagination);
       loadStats();
     } catch {

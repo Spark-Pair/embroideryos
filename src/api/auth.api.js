@@ -1,5 +1,6 @@
 // src/api/auth.api.js
 import { apiClient, storage } from "./apiClient";
+import { updateShortcutsLocalFirst } from "../offline/shortcutsLocalFirst";
 
 export const loginUser = async (data) => {
   try {
@@ -89,6 +90,5 @@ export const refreshAccessToken = async () => {
 };
 
 export const updateMyShortcuts = async (shortcuts) => {
-  const res = await apiClient.patch("/auth/shortcuts", { shortcuts });
-  return res.data;
+  return updateShortcutsLocalFirst(shortcuts);
 };

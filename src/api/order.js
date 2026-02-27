@@ -1,18 +1,17 @@
-import { apiClient } from "./apiClient";
+import {
+  createOrderLocalFirst,
+  fetchOrderLocalFirst,
+  fetchOrderStatsLocalFirst,
+  fetchOrdersLocalFirst,
+  updateOrderLocalFirst,
+} from "../offline/ordersLocalFirst";
 
-const ORDERS_URL = "/orders";
+export const fetchOrders = (params) => fetchOrdersLocalFirst(params);
 
-export const fetchOrders = (params) =>
-  apiClient.get(ORDERS_URL, { params }).then((r) => r.data);
+export const fetchOrderStats = (params) => fetchOrderStatsLocalFirst(params);
 
-export const fetchOrderStats = (params) =>
-  apiClient.get(`${ORDERS_URL}/stats`, { params }).then((r) => r.data);
+export const fetchOrder = (id) => fetchOrderLocalFirst(id);
 
-export const fetchOrder = (id) =>
-  apiClient.get(`${ORDERS_URL}/${id}`).then((r) => r.data);
+export const createOrder = (data) => createOrderLocalFirst(data);
 
-export const createOrder = (data) =>
-  apiClient.post(ORDERS_URL, data).then((r) => r.data);
-
-export const updateOrder = (id, data) =>
-  apiClient.put(`${ORDERS_URL}/${id}`, data).then((r) => r.data);
+export const updateOrder = (id, data) => updateOrderLocalFirst(id, data);

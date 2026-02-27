@@ -20,6 +20,17 @@ export default function Invoices() {
   const { showToast } = useToast();
   const { user } = useAuth();
   const businessName = user?.business?.name || "EmbroideryOS";
+  const toMillis = (value) => {
+    if (!value) return 0;
+    const d = new Date(value).getTime();
+    return Number.isFinite(d) ? d : 0;
+  };
+  const sortLatestFirst = (rows = []) =>
+    [...rows].sort((a, b) => {
+      const aTime = toMillis(a?.invoice_date) || toMillis(a?.createdAt);
+      const bTime = toMillis(b?.invoice_date) || toMillis(b?.createdAt);
+      return bTime - aTime;
+    });
 
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -48,7 +59,7 @@ export default function Invoices() {
     try {
       setLoading(true);
       const res = await fetchInvoices({ page, limit: 30, ...filterParams });
-      setInvoices(res?.data || []);
+      setInvoices(sortLatestFirst(res?.data || []));
       if (res.pagination) setPagination(res.pagination);
     } catch (err) {
       showToast({ type: "error", message: err.response?.data?.message || "Failed to load invoices" });

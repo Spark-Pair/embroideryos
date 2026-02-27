@@ -1,18 +1,17 @@
-import { apiClient } from "./apiClient";
+import {
+  createCustomerPaymentLocalFirst,
+  fetchCustomerPaymentMonthsLocalFirst,
+  fetchCustomerPaymentStatsLocalFirst,
+  fetchCustomerPaymentsLocalFirst,
+  updateCustomerPaymentLocalFirst,
+} from "../offline/customerPaymentsLocalFirst";
 
-const CUSTOMER_PAYMENTS_URL = "/customer-payments";
+export const fetchCustomerPayments = (params) => fetchCustomerPaymentsLocalFirst(params);
 
-export const fetchCustomerPayments = (params) =>
-  apiClient.get(CUSTOMER_PAYMENTS_URL, { params }).then((r) => r.data);
+export const fetchCustomerPaymentStats = () => fetchCustomerPaymentStatsLocalFirst();
 
-export const fetchCustomerPaymentStats = () =>
-  apiClient.get(`${CUSTOMER_PAYMENTS_URL}/stats`).then((r) => r.data);
+export const fetchCustomerPaymentMonths = () => fetchCustomerPaymentMonthsLocalFirst();
 
-export const fetchCustomerPaymentMonths = () =>
-  apiClient.get(`${CUSTOMER_PAYMENTS_URL}/months`).then((r) => r.data);
+export const createCustomerPayment = (data) => createCustomerPaymentLocalFirst(data);
 
-export const createCustomerPayment = (data) =>
-  apiClient.post(CUSTOMER_PAYMENTS_URL, data).then((r) => r.data);
-
-export const updateCustomerPayment = (id, data) =>
-  apiClient.put(`${CUSTOMER_PAYMENTS_URL}/${id}`, data).then((r) => r.data);
+export const updateCustomerPayment = (id, data) => updateCustomerPaymentLocalFirst(id, data);

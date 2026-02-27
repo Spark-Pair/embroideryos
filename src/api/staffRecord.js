@@ -1,30 +1,26 @@
-import { apiClient } from "./apiClient";
+import {
+  createStaffRecordLocalFirst,
+  deleteStaffRecordLocalFirst,
+  fetchStaffLastRecordLocalFirst,
+  fetchStaffRecordLocalFirst,
+  fetchStaffRecordMonthsLocalFirst,
+  fetchStaffRecordStatsLocalFirst,
+  fetchStaffRecordsLocalFirst,
+  updateStaffRecordLocalFirst,
+} from "../offline/staffRecordsLocalFirst";
 
-const STAFF_RECORDS_URL = "/staff-records";
+export const fetchStaffRecords = (params) => fetchStaffRecordsLocalFirst(params);
 
-export const fetchStaffRecords = (params) =>
-  apiClient.get(STAFF_RECORDS_URL, { params }).then((r) => r.data);
+export const fetchStaffRecordStats = (params) => fetchStaffRecordStatsLocalFirst(params);
 
-export const fetchStaffRecordStats = () =>
-  apiClient.get(`${STAFF_RECORDS_URL}/stats`).then((r) => r.data);
+export const fetchStaffRecordMonths = () => fetchStaffRecordMonthsLocalFirst();
 
-export const fetchStaffRecordMonths = () =>
-  apiClient.get(`${STAFF_RECORDS_URL}/months`).then((r) => r.data);
+export const fetchStaffLastRecord = (staff_id) => fetchStaffLastRecordLocalFirst(staff_id);
 
-export const fetchStaffLastRecord = (staff_id) =>
-  apiClient.get(`${STAFF_RECORDS_URL}/last/${staff_id}`).then((r) => r.data);
+export const fetchStaffRecord = (id) => fetchStaffRecordLocalFirst(id);
 
-export const fetchStaffRecord = (id) =>
-  apiClient.get(`${STAFF_RECORDS_URL}/${id}`).then((r) => r.data);
+export const createStaffRecord = (data) => createStaffRecordLocalFirst(data);
 
-export const createStaffRecord = (data) =>
-  apiClient.post(STAFF_RECORDS_URL, data).then((r) => r.data);
+export const updateStaffRecord = (id, data) => updateStaffRecordLocalFirst(id, data);
 
-export const updateStaffRecord = (id, data) =>
-  apiClient.put(`${STAFF_RECORDS_URL}/${id}`, data).then((r) => r.data);
-
-export const deleteStaffRecord = (id) =>
-  apiClient.delete(`${STAFF_RECORDS_URL}/${id}`).then((r) => r.data);
-
-export const toggleStaffRecordStatus = (id) =>
-  apiClient.patch(`${STAFF_RECORDS_URL}/${id}/toggle-status`).then((r) => r.data);
+export const deleteStaffRecord = (id) => deleteStaffRecordLocalFirst(id);

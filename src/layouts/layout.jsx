@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle } from "lucide-react";
 import { formatDate } from "../utils";
 import { useToast } from "../context/ToastContext";
+import SyncStatusPortal from "../components/SyncStatusPortal";
 
 export default function Layout({ children }) {
   const { logout, user } = useAuth();
@@ -147,6 +148,7 @@ export default function Layout({ children }) {
           </motion.div>
         </AnimatePresence>
       </main>
+      <SyncStatusPortal />
     </div>
   );
 }

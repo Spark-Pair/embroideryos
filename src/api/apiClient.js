@@ -1,5 +1,7 @@
 // src/api/apiClient.js
 import axios from "axios";
+import { logDataSource } from "../offline/logger";
+import { offlineAccess } from "../offline/idb";
 
 const API = import.meta.env.VITE_API_URL;
 const READ_ONLY_BYPASS_PATHS = new Set(["/auth/logout", "/auth/logout-all", "/auth/refresh"]);
@@ -59,9 +61,35 @@ const isReadOnlyBlockedRequest = (config) => {
   return true;
 };
 
+const isOfflineBlockedRequest = () => {
+  if (typeof navigator === "undefined") return false;
+  return navigator.onLine === false;
+};
+
 // Request interceptor
 apiClient.interceptors.request.use(
   (config) => {
+    if (isOfflineBlockedRequest()) {
+      logDataSource("IDB", "request.blocked.offline", {
+        method: String(config?.method || "get").toUpperCase(),
+        url: String(config?.url || ""),
+        offlineUnlocked: offlineAccess.isUnlocked(),
+      });
+
+      return Promise.reject({
+        config,
+        isAxiosError: true,
+        response: {
+          status: 0,
+          data: {
+            message: "Offline mode active. Cloud requests are blocked.",
+            code: "OFFLINE_REQUEST_BLOCKED",
+            offline: true,
+          },
+        },
+      });
+    }
+
     if (isReadOnlyBlockedRequest(config)) {
       return Promise.reject({
         config,
@@ -86,6 +114,11 @@ apiClient.interceptors.request.use(
     if (sessionId) {
       config.headers['x-session-id'] = sessionId;
     }
+
+    logDataSource("CLOUD", "request.start", {
+      method: String(config?.method || "get").toUpperCase(),
+      url: String(config?.url || ""),
+    });
     
     return config;
   },
@@ -109,9 +142,23 @@ const processQueue = (error, token = null) => {
 };
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    logDataSource("CLOUD", "request.success", {
+      method: String(response?.config?.method || "get").toUpperCase(),
+      url: String(response?.config?.url || ""),
+      status: Number(response?.status || 0),
+    });
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
+
+    logDataSource("CLOUD", "request.error", {
+      method: String(originalRequest?.method || "get").toUpperCase(),
+      url: String(originalRequest?.url || ""),
+      status: Number(error?.response?.status || 0),
+      code: String(error?.response?.data?.code || ""),
+    });
 
     // Handle token expiration
     if (error.response?.status === 401 && 

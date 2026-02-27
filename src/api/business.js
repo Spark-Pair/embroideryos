@@ -1,5 +1,6 @@
 // api/business.js
 import { apiClient } from "./apiClient";
+import { fetchMyInvoiceBannerLocalFirst, updateMyInvoiceBannerLocalFirst } from "../offline/businessLocalFirst";
 
 const BUSINESS_URL = "/businesses";
 
@@ -41,11 +42,9 @@ export const toggleBusinessStatus = async (id) => {
 };
 
 export const fetchMyInvoiceBanner = async () => {
-  const res = await apiClient.get(`${BUSINESS_URL}/me/invoice-banner`);
-  return res.data;
+  return fetchMyInvoiceBannerLocalFirst();
 };
 
 export const updateMyInvoiceBanner = async (invoice_banner_data) => {
-  const res = await apiClient.patch(`${BUSINESS_URL}/me/invoice-banner`, { invoice_banner_data });
-  return res.data;
+  return updateMyInvoiceBannerLocalFirst(invoice_banner_data);
 };

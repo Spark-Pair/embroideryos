@@ -7,7 +7,6 @@ import {
   fetchStaffRecordStats,
   createStaffRecord,
   updateStaffRecord,
-  toggleStaffRecordStatus,
 } from "../api/staffRecord";
 
 import StatCard from "../components/StatCard";
@@ -19,7 +18,6 @@ import StaffRecordRow from "../components/StaffRecord/StaffRecordRow";
 import FilterDrawer from "../components/FilterDrawer";
 import TableSkeleton from "../components/table/TableLoader";
 import PageHeader from "../components/PageHeader";
-import ConfirmModal from "../components/ConfirmModal";
 import { useToast } from "../context/ToastContext";
 
 export default function StaffRecords() {
@@ -46,9 +44,6 @@ export default function StaffRecords() {
   // Modals
   const [detailsModal, setDetailsModal] = useState({ isOpen: false, data: null });
   const [formModal,    setFormModal]    = useState({ isOpen: false, data: null });
-  const [confirmModal, setConfirmModal] = useState({
-    isOpen: false, title: "", message: "", onConfirm: () => {}, variant: "danger",
-  });
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [reportModal, setReportModal] = useState(false);
 
@@ -119,25 +114,6 @@ export default function StaffRecords() {
       return;
     }
 
-    if (action === "toggleStatus") {
-      setDetailsModal({ isOpen: false, data: null });
-      setConfirmModal({
-        isOpen:      true,
-        title:       data.isActive ? "Deactivate Record" : "Activate Record",
-        message:     `Are you sure you want to ${data.isActive ? "deactivate" : "activate"} this record for "${data?.staff_id?.name || "this staff"}"?`,
-        variant:     data.isActive ? "danger" : "success",
-        confirmText: data.isActive ? "Deactivate" : "Activate",
-        onConfirm: async () => {
-          try {
-            await toggleStaffRecordStatus(data._id);
-            loadRecords(pagination.currentPage);
-            showToast({ type: "success", message: "Status updated" });
-          } catch (err) {
-            showToast({ type: "error", message: err.response?.data?.message || "Failed to update status" });
-          }
-        },
-      });
-    }
   };
 
   const handleFormAction = async (action, payload) => {
@@ -291,7 +267,6 @@ export default function StaffRecords() {
                         startIndex={(pagination.currentPage - 1) * pagination.itemsPerPage}
                         onView={(data)         => setDetailsModal({ isOpen: true, data })}
                         onEdit={(data)         => setFormModal({ isOpen: true, data })}
-                        onToggleStatus={(data) => handleDetailsAction("toggleStatus", data)}
                       />
                     ))
                   )}
@@ -317,16 +292,6 @@ export default function StaffRecords() {
         onAction={handleFormAction}
         lastUsed={lastUsed}
         setLastUsed={setLastUsed}
-      />
-
-      <ConfirmModal
-        isOpen={confirmModal.isOpen}
-        onClose={() => setConfirmModal((p) => ({ ...p, isOpen: false }))}
-        onConfirm={confirmModal.onConfirm}
-        title={confirmModal.title}
-        message={confirmModal.message}
-        variant={confirmModal.variant}
-        confirmText={confirmModal.confirmText}
       />
 
       <FilterDrawer
