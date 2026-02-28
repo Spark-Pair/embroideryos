@@ -105,6 +105,8 @@ export const fetchDashboardSummaryLocalFirst = async (params = {}) => {
   const customerPayments = await getMergedSnapshot("customerPayments:all", "customerPayments:overlay");
   const supplierPayments = await getMergedSnapshot("supplierPayments:all", "supplierPayments:overlay");
   const staffPayments = await getMergedSnapshot("staffPayments:all", "staffPayments:overlay");
+  const staffRecords = await getMergedSnapshot("staffRecords:all", "staffRecords:overlay");
+  const crpRecords = await getMergedSnapshot("crpStaffRecords:all", "crpStaffRecords:overlay");
   const customers = await getMergedSnapshot("customers:all", "customers:overlay");
   const suppliers = await getMergedSnapshot("suppliers:all", "suppliers:overlay");
   const staff = await getMergedSnapshot("staffs:all", "staffs:overlay");
@@ -122,6 +124,8 @@ export const fetchDashboardSummaryLocalFirst = async (params = {}) => {
   const monthCustomerPayments = customerPayments.filter((row) => inDateRange(row?.date, monthRange.from, monthRange.to));
   const monthSupplierPayments = supplierPayments.filter((row) => inDateRange(row?.date, monthRange.from, monthRange.to));
   const monthStaffPayments = staffPayments.filter((row) => inDateRange(row?.date, monthRange.from, monthRange.to));
+  const monthStaffRecords = staffRecords.filter((row) => inDateRange(row?.date, monthRange.from, monthRange.to));
+  const monthCrpRecords = crpRecords.filter((row) => inDateRange(row?.order_date, monthRange.from, monthRange.to));
 
   const summary = {
     today: {
@@ -138,10 +142,20 @@ export const fetchDashboardSummaryLocalFirst = async (params = {}) => {
       orders: { count: monthOrders.length, amount: sumBy(monthOrders, "total_amount") },
       invoices: { count: monthInvoices.length, amount: sumBy(monthInvoices, "total_amount") },
       expenses: { count: monthExpenses.length, amount: sumBy(monthExpenses, "amount") },
+      staff_records: { count: monthStaffRecords.length, amount: sumBy(monthStaffRecords, "final_amount") },
+      crp_records: { count: monthCrpRecords.length, amount: sumBy(monthCrpRecords, "total_amount") },
       payment_in: { count: monthCustomerPayments.length, amount: sumBy(monthCustomerPayments, "amount") },
       payment_out: {
         count: monthSupplierPayments.length + monthStaffPayments.length,
         amount: sumBy(monthSupplierPayments, "amount") + sumBy(monthStaffPayments, "amount"),
+        supplier: {
+          count: monthSupplierPayments.length,
+          amount: sumBy(monthSupplierPayments, "amount"),
+        },
+        staff: {
+          count: monthStaffPayments.length,
+          amount: sumBy(monthStaffPayments, "amount"),
+        },
       },
     },
     active: {

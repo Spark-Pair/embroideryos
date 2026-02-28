@@ -292,6 +292,10 @@ export default function Dashboard() {
     monthPaymentInAmount: 0,
     monthPaymentOutCount: 0,
     monthPaymentOutAmount: 0,
+    monthStaffRecordsCount: 0,
+    monthStaffRecordsAmount: 0,
+    monthCrpRecordsCount: 0,
+    monthCrpRecordsAmount: 0,
 
     customersActive: 0,
     staffActive: 0,
@@ -410,6 +414,10 @@ export default function Dashboard() {
           monthPaymentInAmount: Number(data?.month?.payment_in?.amount || 0),
           monthPaymentOutCount: Number(data?.month?.payment_out?.count || 0),
           monthPaymentOutAmount: Number(data?.month?.payment_out?.amount || 0),
+          monthStaffRecordsCount: Number(data?.month?.staff_records?.count || 0),
+          monthStaffRecordsAmount: Number(data?.month?.staff_records?.amount || 0),
+          monthCrpRecordsCount: Number(data?.month?.crp_records?.count || 0),
+          monthCrpRecordsAmount: Number(data?.month?.crp_records?.amount || 0),
 
           customersActive: Number(data?.active?.customers || 0),
           suppliersActive: Number(data?.active?.suppliers || 0),
@@ -641,9 +649,11 @@ export default function Dashboard() {
           <div className="space-y-6 pb-6">
             <div>
               <p className="text-xs font-medium uppercase tracking-wider text-gray-400 mb-3">Month Overview · {selectedMonth}</p>
-              <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-7 gap-4">
                 <StatCard label="Orders" value={ops.monthOrdersCount} icon={FileText} />
                 <StatCard label="Invoices" value={ops.monthInvoicesCount} icon={Receipt} variant="success" />
+                <StatCard label="Staff Records" value={ops.monthStaffRecordsCount} icon={Users2} />
+                <StatCard label="CRP Records" value={ops.monthCrpRecordsCount} icon={Users} />
                 <StatCard label="Expenses" value={ops.monthExpenseCount} icon={CreditCard} variant="danger" />
                 <StatCard label="Payment In" value={ops.monthPaymentInCount} icon={Banknote} variant="success" />
                 <StatCard label="Payment Out" value={ops.monthPaymentOutCount} icon={Building2} variant="warning" />
@@ -682,9 +692,11 @@ export default function Dashboard() {
                   {[
                     { label: "Orders", count: ops.monthOrdersCount, amount: ops.monthOrderAmount, countCls: "text-gray-900" },
                     { label: "Invoices", count: ops.monthInvoicesCount, amount: ops.monthInvoiceAmount, countCls: "text-gray-900" },
+                    { label: "Staff Records", count: ops.monthStaffRecordsCount, amount: ops.monthStaffRecordsAmount, countCls: "text-indigo-700" },
+                    { label: "CRP Records", count: ops.monthCrpRecordsCount, amount: ops.monthCrpRecordsAmount, countCls: "text-cyan-700" },
                     { label: "Expenses", count: ops.monthExpenseCount, amount: ops.monthExpenseAmount, countCls: "text-rose-500" },
                     { label: "Payment In", count: ops.monthPaymentInCount, amount: ops.monthPaymentInAmount, countCls: "text-emerald-600" },
-                    { label: "Payment Out", count: ops.monthPaymentOutCount, amount: ops.monthPaymentOutAmount, countCls: "text-amber-600" },
+                    { label: "Payment Out (Supplier + Staff)", count: ops.monthPaymentOutCount, amount: ops.monthPaymentOutAmount, countCls: "text-amber-600" },
                   ].map((item) => (
                     <div key={item.label} className="flex items-center justify-between px-5 py-3">
                       <p className="text-xs text-gray-500">{item.label}</p>
