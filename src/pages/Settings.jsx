@@ -38,6 +38,7 @@ import { useToast } from "../context/ToastContext";
 
 const fmt = (val, isDate = false) => {
   if (val === null || val === undefined || val === "") return "—";
+  if (typeof val === "boolean") return val ? "Enabled" : "Disabled";
   if (isDate) {
     return new Date(val).toLocaleDateString("en-US", {
       day: "numeric", month: "short", year: "numeric",
@@ -56,6 +57,7 @@ const DISPLAY_FIELDS = [
   { key: "off_amount", label: "Off Day Amount" },
   { key: "bonus_rate", label: "Bonus Rate" },
   { key: "allowance", label: "Monthly Allowance" },
+  { key: "stitch_formula_enabled", label: "Stitch Formula" },
 ];
 
 // ── ConfigCard ──────────────────────────────────────────────────────────────
@@ -144,7 +146,7 @@ function ConfigCardSkeleton() {
     <div className="rounded-2xl border border-gray-300 overflow-hidden animate-pulse">
       <div className="h-12 bg-gray-100" />
       <div className="grid grid-cols-2 gap-px bg-gray-200">
-        {Array.from({ length: 10 }).map((_, i) => (
+        {Array.from({ length: DISPLAY_FIELDS.length }).map((_, i) => (
           <div key={i} className="bg-white px-4 py-3">
             <div className="h-3 w-20 bg-gray-100 rounded mb-1.5" />
             <div className="h-4 w-12 bg-gray-200 rounded" />

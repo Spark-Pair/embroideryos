@@ -29,6 +29,15 @@ const normalizeConfig = (value = {}) => ({
   off_amount: value?.off_amount ?? null,
   bonus_rate: value?.bonus_rate ?? null,
   allowance: value?.allowance ?? null,
+  stitch_formula_enabled:
+    value?.stitch_formula_enabled === undefined ? true : Boolean(value?.stitch_formula_enabled),
+  stitch_formula_rules: Array.isArray(value?.stitch_formula_rules)
+    ? value.stitch_formula_rules.map((rule = {}) => ({
+        up_to: rule?.up_to === "" || rule?.up_to == null ? null : Number(rule.up_to),
+        mode: ["fixed", "percent", "identity"].includes(rule?.mode) ? rule.mode : "identity",
+        value: Number(rule?.value || 0),
+      }))
+    : null,
   effective_date: value?.effective_date ?? null,
 });
 

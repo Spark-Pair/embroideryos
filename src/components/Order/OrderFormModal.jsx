@@ -11,6 +11,7 @@ import { useShortcut } from "../../hooks/useShortcuts";
 import { formatComboDisplay, isEventMatchingShortcut } from "../../utils/shortcuts";
 import { fetchCustomers } from "../../api/customer";
 import { useToast } from "../../context/ToastContext";
+import { fetchProductionConfig } from "../../api/productionConfig";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -46,13 +47,45 @@ function roundDown(value, digits = 2) {
   return Math.floor(value * factor) / factor;
 }
 
-function computeDesignStitches(s) {
-  s = toNum(s);
-  if (s <= 0)     return 0;
-  if (s <= 4237)  return 5000;
-  if (s <= 10000) return s + (s * 18 / 100);
-  if (s <= 50000) return s + (s * 10 / 100);
-  return s + (s * 5 / 100);
+const DEFAULT_STITCH_FORMULA_RULES = [
+  { up_to: 4237, mode: "fixed", value: 5000 },
+  { up_to: 10000, mode: "percent", value: 18 },
+  { up_to: 50000, mode: "percent", value: 10 },
+  { up_to: null, mode: "percent", value: 5 },
+];
+
+function normalizeFormulaRules(rawRules) {
+  if (!Array.isArray(rawRules) || rawRules.length === 0) return DEFAULT_STITCH_FORMULA_RULES;
+  const clean = rawRules
+    .map((rule = {}) => {
+      const upToRaw = rule?.up_to;
+      const up_to = upToRaw === "" || upToRaw == null ? null : Math.max(0, toNum(upToRaw));
+      const mode = ["fixed", "percent", "identity"].includes(rule?.mode) ? rule.mode : "identity";
+      const value = mode === "identity" ? 0 : Math.max(0, toNum(rule?.value));
+      return { up_to, mode, value };
+    })
+    .sort((a, b) => {
+      const av = a.up_to == null ? Number.POSITIVE_INFINITY : a.up_to;
+      const bv = b.up_to == null ? Number.POSITIVE_INFINITY : b.up_to;
+      return av - bv;
+    });
+  return clean.length ? clean : DEFAULT_STITCH_FORMULA_RULES;
+}
+
+function computeDesignStitchesByConfig(actualStitches, config) {
+  const s = toNum(actualStitches);
+  if (s <= 0) return 0;
+  if (config?.stitch_formula_enabled === false) return s;
+  const rules = normalizeFormulaRules(config?.stitch_formula_rules);
+  if (!rules.length) return s;
+  for (const rule of rules) {
+    const threshold = rule.up_to == null ? Number.POSITIVE_INFINITY : toNum(rule.up_to);
+    if (s > threshold) continue;
+    if (rule.mode === "fixed") return Math.max(0, toNum(rule.value));
+    if (rule.mode === "percent") return s + (s * toNum(rule.value)) / 100;
+    return s;
+  }
+  return s;
 }
 
 function computeCalculatedRate(baseRate, ds, apqChr) {
@@ -186,6 +219,7 @@ export default function OrderFormModal({
   const [apqError,         setApqError]         = useState("");
   const [customers,        setCustomers]        = useState([]);
   const [customersLoading, setCustomersLoading] = useState(false);
+  const [formulaConfig,    setFormulaConfig]    = useState(null);
   const [submitting,       setSubmitting]       = useState(false);
   const [reverseMode,      setReverseMode]      = useState(true);   // rate → stitch calc
   const [twoSide,          setTwoSide]          = useState(false);  // rate×2 only
@@ -251,6 +285,27 @@ export default function OrderFormModal({
       setTwoSide(!!initialData.two_side);
     }
   }, [isOpen, isEdit, initialData]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let active = true;
+
+    const loadFormulaConfig = async () => {
+      try {
+        const res = await fetchProductionConfig(form.date || undefined);
+        if (!active) return;
+        setFormulaConfig(res?.data || null);
+      } catch {
+        if (!active) return;
+        setFormulaConfig(null);
+      }
+    };
+
+    loadFormulaConfig();
+    return () => {
+      active = false;
+    };
+  }, [isOpen, form.date]);
 
   // ── Focus first field when step changes ──
   useEffect(() => {
@@ -404,8 +459,8 @@ export default function OrderFormModal({
       const ds = computeDesignStitchFromRate(rateForDs, form.customer_base_rate, form.apq_chr);
       return ds > 0 ? ds : 0;
     }
-    return computeDesignStitches(form.actual_stitches);
-  }, [reverseMode, twoSide, form.actual_stitches, form.rate, form.customer_base_rate, form.apq_chr]);
+    return computeDesignStitchesByConfig(form.actual_stitches, formulaConfig);
+  }, [reverseMode, twoSide, form.actual_stitches, form.rate, form.customer_base_rate, form.apq_chr, formulaConfig]);
 
   const effectiveRate = useMemo(() => toNum(form.rate) * rateMultiplier, [form.rate, rateMultiplier]);
 

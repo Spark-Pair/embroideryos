@@ -9,6 +9,7 @@ import {
   upsertEntitySnapshot,
 } from "./idb";
 import { logDataSource } from "./logger";
+import { fetchProductionConfigLocalFirst } from "./productionConfigLocalFirst";
 
 const ORDERS_URL = "/orders";
 const ALL_KEY = "orders:all";
@@ -155,13 +156,45 @@ const toBool = (value, fallback = false) => {
   return fallback;
 };
 
-const computeDesignStitches = (s) => {
-  s = toNum(s);
+const DEFAULT_STITCH_FORMULA_RULES = [
+  { up_to: 4237, mode: "fixed", value: 5000 },
+  { up_to: 10000, mode: "percent", value: 18 },
+  { up_to: 50000, mode: "percent", value: 10 },
+  { up_to: null, mode: "percent", value: 5 },
+];
+
+const normalizeFormulaRules = (rawRules) => {
+  if (!Array.isArray(rawRules) || rawRules.length === 0) return DEFAULT_STITCH_FORMULA_RULES;
+  const clean = rawRules
+    .map((rule = {}) => {
+      const upToRaw = rule?.up_to;
+      const up_to = upToRaw === "" || upToRaw == null ? null : Math.max(0, toNum(upToRaw));
+      const mode = ["fixed", "percent", "identity"].includes(rule?.mode) ? rule.mode : "identity";
+      const value = mode === "identity" ? 0 : Math.max(0, toNum(rule?.value));
+      return { up_to, mode, value };
+    })
+    .sort((a, b) => {
+      const av = a.up_to == null ? Number.POSITIVE_INFINITY : a.up_to;
+      const bv = b.up_to == null ? Number.POSITIVE_INFINITY : b.up_to;
+      return av - bv;
+    });
+  return clean.length ? clean : DEFAULT_STITCH_FORMULA_RULES;
+};
+
+const computeDesignStitchesByConfig = (actualStitches, config) => {
+  const s = toNum(actualStitches);
   if (s <= 0) return 0;
-  if (s <= 4237) return 5000;
-  if (s <= 10000) return s + (s * 18) / 100;
-  if (s <= 50000) return s + (s * 10) / 100;
-  return s + (s * 5) / 100;
+  if (config?.stitch_formula_enabled === false) return s;
+  const rules = normalizeFormulaRules(config?.stitch_formula_rules);
+  if (!rules.length) return s;
+  for (const rule of rules) {
+    const threshold = rule.up_to == null ? Number.POSITIVE_INFINITY : toNum(rule.up_to);
+    if (s > threshold) continue;
+    if (rule.mode === "fixed") return Math.max(0, toNum(rule.value));
+    if (rule.mode === "percent") return s + (s * toNum(rule.value)) / 100;
+    return s;
+  }
+  return s;
 };
 
 const computeCalculatedRate = (baseRate, ds, apqChr) => {
@@ -230,9 +263,11 @@ const buildOrderPayload = async (body) => {
   const resolvedRateInput = Math.max(0, toNum(rate_input ?? rate));
   const resolvedRate = !resolvedReverseMode && resolvedTwoSide ? roundDown(resolvedRateInput * 2, 2) : resolvedRateInput;
   const rateForDesignStitch = resolvedTwoSide ? resolvedRateInput / 2 : resolvedRateInput;
+  const configRes = await fetchProductionConfigLocalFirst(date);
+  const stitchFormulaConfig = configRes?.data || null;
   const design_stitches = resolvedReverseMode
     ? computeDesignStitchFromRate(rateForDesignStitch, resolvedCustomerBaseRate, resolvedApqChr)
-    : computeDesignStitches(resolvedActualStitches);
+    : computeDesignStitchesByConfig(resolvedActualStitches, stitchFormulaConfig);
   const qt_pcs = computeQtPcs(resolvedQty, resolvedUnit);
   const calculated_rate = computeCalculatedRate(resolvedCustomerBaseRate, design_stitches, resolvedApqChr);
   const stitch_rate = computeStitchRate(resolvedRate, design_stitches, resolvedApq, resolvedApqChr);
