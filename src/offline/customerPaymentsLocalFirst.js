@@ -64,6 +64,25 @@ const getCustomerSnapshot = async () => {
   return Array.isArray(customers) ? customers : [];
 };
 
+const getInvoicesSnapshot = async () => {
+  const base = await getEntitySnapshot("invoices:all");
+  const overlay = (await getEntitySnapshot("invoices:overlay")) || {};
+  const rows = Array.isArray(base) ? base : [];
+  const map = new Map(rows.map((row) => [normalizeId(row), row]));
+  Object.values(overlay || {}).forEach((item) => {
+    if (!item) return;
+    const id = normalizeId(item);
+    if (!id) return;
+    if (item._deleted) {
+      map.delete(id);
+      return;
+    }
+    const prev = map.get(id) || {};
+    map.set(id, { ...prev, ...item, _id: id });
+  });
+  return Array.from(map.values());
+};
+
 const withOverlayList = (rows = [], overlay = {}) => {
   const base = uniqueById(rows);
   const map = new Map(base.map((row) => [normalizeId(row), row]));
@@ -415,4 +434,113 @@ export const refreshCustomerPaymentsFromCloud = async () => {
   if (!offlineAccess.isUnlocked()) return;
   if (!navigator.onLine) return;
   await refreshAllSnapshotFromCloud();
+};
+
+export const fetchCustomerStatementLocalFirst = async (params = {}) => {
+  if (!offlineAccess.isUnlocked()) {
+    const res = await apiClient.get(`${CUSTOMER_PAYMENTS_URL}/statement`, { params });
+    return res.data;
+  }
+
+  const customerId = String(params?.customer_id || "").trim();
+  const dateFrom = params?.date_from;
+  const dateTo = params?.date_to;
+
+  if (!customerId) throw new Error("customer_id is required");
+  if (!dateFrom || !dateTo) throw new Error("date_from and date_to are required");
+
+  const startDate = new Date(dateFrom);
+  startDate.setHours(0, 0, 0, 0);
+  const endDate = new Date(dateTo);
+  endDate.setHours(23, 59, 59, 999);
+
+  const customers = await getCustomerSnapshot();
+  const customer = customers.find((row) => String(row?._id || "") === customerId);
+  if (!customer) throw new Error("Customer not found");
+
+  const overlay = await getOverlay();
+  const basePayments = await getAllBasePayments();
+  const payments = withOverlayList(basePayments, overlay).filter(
+    (row) => String(row?.customer_id?._id || row?.customer_id || "") === customerId
+  );
+  const invoices = (await getInvoicesSnapshot()).filter(
+    (row) => String(row?.customer_id?._id || row?.customer_id || "") === customerId
+  );
+
+  const priorInvoicesTotal = invoices
+    .filter((row) => toMillis(row?.invoice_date) < startDate.getTime())
+    .reduce((sum, row) => sum + Number(row?.total_amount || 0), 0);
+
+  const priorPaymentsTotal = payments
+    .filter((row) => toMillis(row?.date) < startDate.getTime())
+    .reduce((sum, row) => sum + Number(row?.amount || 0), 0);
+
+  const openingBalance = Number(customer?.opening_balance || 0) + priorInvoicesTotal - priorPaymentsTotal;
+
+  const rows = [
+    ...invoices
+      .filter((row) => inDateRange(row?.invoice_date, startDate, endDate))
+      .map((row) => ({
+        kind: "invoice",
+        _id: row?._id,
+        date: row?.invoice_date,
+        invoice_number: row?.invoice_number || "",
+        details: row?.note || "",
+        debit: Number(row?.total_amount || 0),
+        credit: 0,
+        createdAt: row?.createdAt,
+      })),
+    ...payments
+      .filter((row) => inDateRange(row?.date, startDate, endDate))
+      .map((row) => ({
+        kind: "payment",
+        _id: row?._id,
+        date: row?.date,
+        method: row?.method || "",
+        reference_no: row?.reference_no || "",
+        bank_name: row?.bank_name || "",
+        party_name: row?.party_name || "",
+        details: row?.remarks || "",
+        debit: 0,
+        credit: Number(row?.amount || 0),
+        createdAt: row?.createdAt,
+      })),
+  ].sort((a, b) => {
+    const ad = toMillis(a?.date);
+    const bd = toMillis(b?.date);
+    if (ad !== bd) return ad - bd;
+    const ac = toMillis(a?.createdAt);
+    const bc = toMillis(b?.createdAt);
+    if (ac !== bc) return ac - bc;
+    return String(a?._id || "").localeCompare(String(b?._id || ""));
+  });
+
+  let running = openingBalance;
+  const statementRows = rows.map((row) => {
+    running += Number(row?.debit || 0);
+    running -= Number(row?.credit || 0);
+    return { ...row, balance: running };
+  });
+
+  const totalInvoices = statementRows.reduce((sum, row) => sum + Number(row?.debit || 0), 0);
+  const totalPayments = statementRows.reduce((sum, row) => sum + Number(row?.credit || 0), 0);
+
+  return {
+    success: true,
+    data: {
+      customer: {
+        _id: customer?._id,
+        name: customer?.name || "",
+        person: customer?.person || "",
+      },
+      date_from: dateFrom,
+      date_to: dateTo,
+      opening_balance: openingBalance,
+      total_invoices: totalInvoices,
+      total_payments: totalPayments,
+      net_change: totalInvoices - totalPayments,
+      closing_balance: openingBalance + totalInvoices - totalPayments,
+      rows: statementRows,
+    },
+  };
 };

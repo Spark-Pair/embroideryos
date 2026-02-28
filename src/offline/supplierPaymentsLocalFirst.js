@@ -64,6 +64,25 @@ const getSupplierSnapshot = async () => {
   return Array.isArray(suppliers) ? suppliers : [];
 };
 
+const getExpensesSnapshot = async () => {
+  const base = await getEntitySnapshot("expenses:all");
+  const overlay = (await getEntitySnapshot("expenses:overlay")) || {};
+  const rows = Array.isArray(base) ? base : [];
+  const map = new Map(rows.map((row) => [normalizeId(row), row]));
+  Object.values(overlay || {}).forEach((item) => {
+    if (!item) return;
+    const id = normalizeId(item);
+    if (!id) return;
+    if (item._deleted) {
+      map.delete(id);
+      return;
+    }
+    const prev = map.get(id) || {};
+    map.set(id, { ...prev, ...item, _id: id });
+  });
+  return Array.from(map.values());
+};
+
 const withOverlayList = (rows = [], overlay = {}) => {
   const base = uniqueById(rows);
   const map = new Map(base.map((row) => [normalizeId(row), row]));
@@ -364,4 +383,116 @@ export const refreshSupplierPaymentsFromCloud = async () => {
   if (!offlineAccess.isUnlocked()) return;
   if (!navigator.onLine) return;
   await refreshAllSnapshotFromCloud();
+};
+
+export const fetchSupplierStatementLocalFirst = async (params = {}) => {
+  if (!offlineAccess.isUnlocked()) {
+    const res = await apiClient.get(`${SUPPLIER_PAYMENTS_URL}/statement`, { params });
+    return res.data;
+  }
+
+  const supplierId = String(params?.supplier_id || "").trim();
+  const dateFrom = params?.date_from;
+  const dateTo = params?.date_to;
+
+  if (!supplierId) throw new Error("supplier_id is required");
+  if (!dateFrom || !dateTo) throw new Error("date_from and date_to are required");
+
+  const startDate = new Date(dateFrom);
+  startDate.setHours(0, 0, 0, 0);
+  const endDate = new Date(dateTo);
+  endDate.setHours(23, 59, 59, 999);
+
+  const suppliers = await getSupplierSnapshot();
+  const supplier = suppliers.find((row) => String(row?._id || "") === supplierId);
+  if (!supplier) throw new Error("Supplier not found");
+
+  const overlay = await getOverlay();
+  const basePayments = await getAllBasePayments();
+  const payments = withOverlayList(basePayments, overlay).filter(
+    (row) => String(row?.supplier_id?._id || row?.supplier_id || "") === supplierId
+  );
+
+  const expenses = (await getExpensesSnapshot()).filter((row) => {
+    const sid = String(row?.supplier_id?._id || row?.supplier_id || "");
+    const isSupplierExpense =
+      String(row?.expense_type || "") === "supplier" ||
+      (String(row?.expense_type || "") === "fixed" && String(row?.fixed_source || "") === "supplier");
+    return sid === supplierId && isSupplierExpense;
+  });
+
+  const priorExpensesTotal = expenses
+    .filter((row) => toMillis(row?.date) < startDate.getTime())
+    .reduce((sum, row) => sum + Number(row?.amount || 0), 0);
+
+  const priorPaymentsTotal = payments
+    .filter((row) => toMillis(row?.date) < startDate.getTime())
+    .reduce((sum, row) => sum + Number(row?.amount || 0), 0);
+
+  const openingBalance = Number(supplier?.opening_balance || 0) + priorExpensesTotal - priorPaymentsTotal;
+
+  const rows = [
+    ...expenses
+      .filter((row) => inDateRange(row?.date, startDate, endDate))
+      .map((row) => ({
+        kind: "expense",
+        _id: row?._id,
+        date: row?.date,
+        reference_no: row?.reference_no || "",
+        method: row?.expense_type || "",
+        details: row?.remarks || row?.item_name || "",
+        debit: Number(row?.amount || 0),
+        credit: 0,
+        createdAt: row?.createdAt,
+      })),
+    ...payments
+      .filter((row) => inDateRange(row?.date, startDate, endDate))
+      .map((row) => ({
+        kind: "payment",
+        _id: row?._id,
+        date: row?.date,
+        reference_no: row?.reference_no || "",
+        method: row?.method || "",
+        details: row?.remarks || "",
+        debit: 0,
+        credit: Number(row?.amount || 0),
+        createdAt: row?.createdAt,
+      })),
+  ].sort((a, b) => {
+    const ad = toMillis(a?.date);
+    const bd = toMillis(b?.date);
+    if (ad !== bd) return ad - bd;
+    const ac = toMillis(a?.createdAt);
+    const bc = toMillis(b?.createdAt);
+    if (ac !== bc) return ac - bc;
+    return String(a?._id || "").localeCompare(String(b?._id || ""));
+  });
+
+  let running = openingBalance;
+  const statementRows = rows.map((row) => {
+    running += Number(row?.debit || 0);
+    running -= Number(row?.credit || 0);
+    return { ...row, balance: running };
+  });
+
+  const totalExpenses = statementRows.reduce((sum, row) => sum + Number(row?.debit || 0), 0);
+  const totalPayments = statementRows.reduce((sum, row) => sum + Number(row?.credit || 0), 0);
+
+  return {
+    success: true,
+    data: {
+      supplier: {
+        _id: supplier?._id,
+        name: supplier?.name || "",
+      },
+      date_from: dateFrom,
+      date_to: dateTo,
+      opening_balance: openingBalance,
+      total_expenses: totalExpenses,
+      total_payments: totalPayments,
+      net_change: totalExpenses - totalPayments,
+      closing_balance: openingBalance + totalExpenses - totalPayments,
+      rows: statementRows,
+    },
+  };
 };

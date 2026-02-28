@@ -1,5 +1,6 @@
 import {
   createSupplierPaymentLocalFirst,
+  fetchSupplierStatementLocalFirst,
   fetchSupplierPaymentMonthsLocalFirst,
   fetchSupplierPaymentStatsLocalFirst,
   fetchSupplierPaymentsLocalFirst,
@@ -12,3 +13,5 @@ export const fetchSupplierPaymentStats = () => fetchSupplierPaymentStatsLocalFir
 export const fetchSupplierPaymentMonths = () => fetchSupplierPaymentMonthsLocalFirst();
 
 export const createSupplierPayment = (data) => createSupplierPaymentLocalFirst(data);
+
+export const fetchSupplierStatement = (params) => fetchSupplierStatementLocalFirst(params);

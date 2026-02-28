@@ -38,6 +38,15 @@ const sortLatestFirst = (rows = []) =>
     return bTime - aTime;
   });
 
+const parseInvoiceSeq = (invoiceNumber = "", year) => {
+  const raw = String(invoiceNumber || "").trim();
+  const m = raw.match(/^(\d{4})-(\d{4,})$/);
+  if (!m) return 0;
+  if (Number(m[1]) !== Number(year)) return 0;
+  const seq = Number(m[2]);
+  return Number.isFinite(seq) ? seq : 0;
+};
+
 const uniqueById = (rows = []) => {
   const map = new Map();
   rows.forEach((row) => {
@@ -381,6 +390,7 @@ export const createInvoiceLocalFirst = async (payload) => {
 
   const localId = `local-invoice-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const customers = await getCustomersSnapshot();
+  const allExisting = withOverlayList(await getAllBaseInvoices(), await getOverlay());
   const customer = customers.find((row) => String(row?._id || "") === String(payload?.customer_id || ""));
   const orders = await getOrdersSnapshot();
   const orderMap = new Map(orders.map((row) => [String(row?._id || ""), row]));
@@ -388,9 +398,16 @@ export const createInvoiceLocalFirst = async (payload) => {
   const selectedOrders = orderIds.map((oid) => orderMap.get(String(oid))).filter(Boolean);
   const totalAmount = selectedOrders.reduce((sum, row) => sum + Number(row?.total_amount || 0), 0);
   const invoiceDate = payload?.invoice_date || new Date().toISOString();
+  const invoiceYear = new Date(invoiceDate).getFullYear();
+  const maxSeq = allExisting.reduce((acc, row) => {
+    const seq = parseInvoiceSeq(row?.invoice_number, invoiceYear);
+    return seq > acc ? seq : acc;
+  }, 0);
+  const invoiceNumber = `${invoiceYear}-${String(maxSeq + 1).padStart(4, "0")}`;
 
   const localInvoice = {
     _id: localId,
+    invoice_number: invoiceNumber,
     customer_id: payload?.customer_id,
     customer_name: customer?.name || payload?.customer_name || "",
     customer_person: customer?.person || "",

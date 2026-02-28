@@ -115,15 +115,22 @@ const Select = forwardRef(function Select(
     openDropdown();
   };
 
+  const handleContainerBlurCapture = () => {
+    setTimeout(() => {
+      if (!containerRef.current) return;
+      if (containerRef.current.contains(document.activeElement)) return;
+      closeDropdown();
+    }, 0);
+  };
+
   return (
-    <div className="relative" ref={containerRef}>
+    <div className="relative" ref={containerRef} onBlurCapture={handleContainerBlurCapture}>
       {label && (
         <label className="block mb-1.5 text-sm text-gray-700">{label}</label>
       )}
 
       <div
         ref={triggerRef}
-        onClick={openDropdown}
         onFocus={handleTriggerFocus}
         tabIndex={disabled ? -1 : 0}
         data-focusable="select"

@@ -202,6 +202,7 @@ export default function Invoices() {
               <thead className="sticky top-0 z-20 bg-gray-100" style={{ boxShadow: "0 1px 0 0 rgba(209,213,219,1)" }}>
                 <tr className="text-sm tracking-wider text-gray-500">
                   <th className="px-5 py-3.5 font-medium">#</th>
+                  <th className="px-5 py-3.5 font-medium">Invoice No</th>
                   <th className="px-5 py-3.5 font-medium">Invoice Date</th>
                   <th className="px-5 py-3.5 font-medium">Customer</th>
                   <th className="px-5 py-3.5 font-medium">Orders</th>
@@ -211,12 +212,12 @@ export default function Invoices() {
               </thead>
 
               {loading ? (
-                <TableSkeleton rows={30} columns={6} />
+                <TableSkeleton rows={30} columns={7} />
               ) : (
                 <tbody className="divide-y divide-gray-200">
                   {invoices.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-7 py-16 text-center text-sm text-gray-400">
+                      <td colSpan={7} className="px-7 py-16 text-center text-sm text-gray-400">
                         No invoices found.
                       </td>
                     </tr>
@@ -229,6 +230,9 @@ export default function Invoices() {
                       >
                         <td className="px-5 py-4 font-medium text-gray-500">
                           {(pagination.currentPage - 1) * pagination.itemsPerPage + index + 1}
+                        </td>
+                        <td className="px-5 py-4 text-sm font-semibold text-gray-700">
+                          {invoice.invoice_number || "—"}
                         </td>
                         <td className="px-5 py-4 text-sm text-gray-600">{formatDate(invoice.invoice_date, "DD MMM yyyy")}</td>
                         <td className="px-5 py-4 text-sm font-semibold text-gray-800">{invoice.customer_name}</td>

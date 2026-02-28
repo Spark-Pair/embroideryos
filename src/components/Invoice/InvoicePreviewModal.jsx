@@ -165,7 +165,7 @@ function getQuantityInPcs(order) {
 }
 
 function InvoiceDocument({ invoice, businessName, bannerUrl }) {
-  const invoiceNo = invoice?._id ? String(invoice._id).slice(-8).toUpperCase() : "N/A";
+  const invoiceNo = String(invoice?.invoice_number || "").trim() || (invoice?._id ? String(invoice._id).slice(-8).toUpperCase() : "N/A");
   const orders = (invoice?.orders || []).slice(0, MAX_INVOICE_ORDERS);
   const totalAmt = invoice?.total_amount ?? 0;
   const outstandingBalance = Number(invoice?.outstanding_balance) || 0;
@@ -211,7 +211,7 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
               {invoice.customer_name || "-"}
             </span>
             <span style={{ fontSize: "10px", fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}>
-              INV-{invoiceNo}
+              {invoiceNo}
             </span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>

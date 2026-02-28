@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LayoutGrid, Users, FileText, DollarSign, CreditCard, Users2, Settings, LogOut, Building2, Banknote, Repeat, ChevronDown, History, Keyboard, Crown, Scissors } from 'lucide-react';
+import { LayoutGrid, Users, FileText, DollarSign, CreditCard, Users2, Settings, LogOut, Building2, Banknote, Repeat, ChevronDown, History, Keyboard, Crown, Scissors, ScrollText } from 'lucide-react';
 import SidebarNavItem from './SidebarNavItem';
 import useAuth from '../hooks/useAuth';
 import { AnimatePresence } from "framer-motion";
@@ -20,6 +20,7 @@ const adminNav = [
   { id: 'customer_payment', icon: <DollarSign className="w-4.5 h-4.5" />, label: 'Customer Payments', path: '/customer_payments' },
   { id: 'suppliers', icon: <Users className="w-4.5 h-4.5" />, label: 'Suppliers', path: '/suppliers' },
   { id: 'supplier_payment', icon: <DollarSign className="w-4.5 h-4.5" />, label: 'Supplier Payments', path: '/supplier_payments' },
+  { id: 'statements', icon: <ScrollText className="w-4.5 h-4.5" />, label: 'Statements', path: '/statements' },
   { id: 'expenses', icon: <CreditCard className="w-4.5 h-4.5" />, label: 'Expenses', path: '/expenses' },
   { id: 'orders', icon: <FileText className="w-4.5 h-4.5" />, label: 'Orders', path: '/orders' },
   { id: 'invoices', icon: <FileText className="w-4.5 h-4.5" />, label: 'Invoices', path: '/invoices' },
@@ -36,6 +37,7 @@ const staffNav = [
   { id: 'customer_payment', icon: <DollarSign className="w-4.5 h-4.5" />, label: 'Customer Payments', path: '/customer_payments' },
   { id: 'suppliers', icon: <Users className="w-4.5 h-4.5" />, label: 'Suppliers', path: '/suppliers' },
   { id: 'supplier_payment', icon: <DollarSign className="w-4.5 h-4.5" />, label: 'Supplier Payments', path: '/supplier_payments' },
+  { id: 'statements', icon: <ScrollText className="w-4.5 h-4.5" />, label: 'Statements', path: '/statements' },
   { id: 'expenses', icon: <CreditCard className="w-4.5 h-4.5" />, label: 'Expenses', path: '/expenses' },
   { id: 'orders', icon: <FileText className="w-4.5 h-4.5" />, label: 'Orders', path: '/orders' },
   { id: 'invoices', icon: <FileText className="w-4.5 h-4.5" />, label: 'Invoices', path: '/invoices' },
