@@ -425,7 +425,13 @@ export const fetchStaffNamesLocalFirst = async (params = {}) => {
     return true;
   });
   const data = filtered
-    .map((row) => ({ _id: row?._id, name: row?.name, category: row?.category || "Embroidery", joining_date: row?.joining_date }))
+    .map((row) => ({
+      _id: row?._id,
+      name: row?.name,
+      category: row?.category || "Embroidery",
+      joining_date: row?.joining_date,
+      salary: Number(row?.salary || 0),
+    }))
     .filter((row) => row?._id && row?.name)
     .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")));
 

@@ -1,25 +1,7 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  Activity,
-  Banknote,
-  Building2,
-  CreditCard,
-  Expand,
-  FileText,
-  Receipt,
-  RefreshCcw,
-  Users,
-  Users2,
-} from "lucide-react";
-import {
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip,
-} from "recharts";
+import { Activity, Banknote, Building2, CreditCard, FileText, Receipt, RefreshCcw, Users, Users2, } from "lucide-react";
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, } from "recharts";
 import useAuth from "../hooks/useAuth";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
@@ -544,21 +526,21 @@ export default function Dashboard() {
             <h1 className="text-3xl font-medium tracking-tight">{title}</h1>
             <p className="text-gray-400 text-sm">Welcome back, {user?.name?.split(" ")[0] || "User"}.</p>
           </div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex gap-2.5">
             <input
               type="month"
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 outline-none focus:border-teal-400 cursor-pointer"
+              className="rounded-2xl border border-gray-400 bg-white px-4 py-3 font-medium text-gray-700 outline-none focus:border-teal-400 cursor-pointer"
             />
             {!isDeveloper && (
               <>
-                <Button size="sm" variant="secondary" outline icon={CreditCard} onClick={() => setOpenTarget(true)}>
+                <Button size="md" variant="secondary" outline icon={CreditCard} onClick={() => setOpenTarget(true)}>
                   Target
                 </Button>
               </>
             )}
-            <Button size="sm" icon={RefreshCcw} onClick={loadDashboard}>Refresh</Button>
+            <Button size="md" icon={RefreshCcw} onClick={loadDashboard}>Refresh</Button>
           </div>
         </div>
 
@@ -649,11 +631,9 @@ export default function Dashboard() {
           <div className="space-y-6 pb-6">
             <div>
               <p className="text-xs font-medium uppercase tracking-wider text-gray-400 mb-3">Month Overview · {selectedMonth}</p>
-              <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-7 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4">
                 <StatCard label="Orders" value={ops.monthOrdersCount} icon={FileText} />
                 <StatCard label="Invoices" value={ops.monthInvoicesCount} icon={Receipt} variant="success" />
-                <StatCard label="Staff Records" value={ops.monthStaffRecordsCount} icon={Users2} />
-                <StatCard label="CRP Records" value={ops.monthCrpRecordsCount} icon={Users} />
                 <StatCard label="Expenses" value={ops.monthExpenseCount} icon={CreditCard} variant="danger" />
                 <StatCard label="Payment In" value={ops.monthPaymentInCount} icon={Banknote} variant="success" />
                 <StatCard label="Payment Out" value={ops.monthPaymentOutCount} icon={Building2} variant="warning" />

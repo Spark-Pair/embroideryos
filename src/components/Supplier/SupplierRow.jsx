@@ -14,7 +14,7 @@ export default function SupplierRow({ item, index, startIndex, onView, onEdit, o
     >
       <td className="px-7 py-4 font-medium text-gray-500">{startIndex + index + 1}</td>
       <td className="px-7 py-4 font-semibold text-gray-800">{item.name}</td>
-      <td className="px-7 py-4 text-sm text-gray-500 font-light">
+      <td className="px-7 py-4 text-sm text-gray-700 font-medium">
         {formatNumbers(item.current_balance ?? item.opening_balance, 2)}
       </td>
       <td className="px-7 py-3.5">

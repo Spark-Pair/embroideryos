@@ -249,6 +249,9 @@ export const createCrpStaffRecordLocalFirst = async (payload) => {
     ...(payload || {}),
     category: normalizeCategory(payload?.category),
   };
+  if (!normalizedPayload.month) {
+    normalizedPayload.month = String(normalizedPayload.order_date || new Date().toISOString()).slice(0, 7);
+  }
   if (!offlineAccess.isUnlocked()) {
     const res = await apiClient.post(CRP_STAFF_RECORDS_URL, normalizedPayload);
     return res.data;
@@ -272,8 +275,8 @@ export const createCrpStaffRecordLocalFirst = async (payload) => {
   const localRow = {
     _id: localId,
     order_id: normalizedPayload?.order_id || null,
-    order_date: order?.date || new Date().toISOString(),
-    order_description: order?.description || "",
+    order_date: normalizedPayload?.order_date || order?.date || new Date().toISOString(),
+    order_description: normalizedPayload?.order_description || order?.description || "",
     quantity_dzn,
     staff_id: normalizedPayload?.staff_id || null,
     staff_name: staff?.name || "",
@@ -281,7 +284,7 @@ export const createCrpStaffRecordLocalFirst = async (payload) => {
     type_name: normalizedPayload?.type_name || "",
     rate,
     total_amount: quantity_dzn * rate,
-    month: normalizedPayload?.month || String(order?.date || new Date().toISOString()).slice(0, 7),
+    month: normalizedPayload?.month || String(normalizedPayload?.order_date || order?.date || new Date().toISOString()).slice(0, 7),
     __syncStatus: "pending",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

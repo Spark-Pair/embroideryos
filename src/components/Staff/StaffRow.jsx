@@ -17,7 +17,7 @@ export default function StaffRow({ item, index, startIndex, onView, onEdit, onTo
       <td className="px-7 py-4 text-sm text-gray-500 font-light">{item.category || "Embroidery"}</td>
       <td className="px-7 py-4 text-sm text-gray-500 font-light">{formatDate(item.joining_date, "dd-MMM-YYYY, DDD")}</td>
       <td className="px-7 py-4 text-sm text-gray-500 font-light">{formatNumbers(item.salary, 1) ?? '---'}</td>
-      <td className="px-7 py-4 text-sm text-gray-500 font-light">
+      <td className="px-7 py-4 text-sm text-gray-700 font-medium">
         {formatNumbers(item.current_balance ?? item.opening_balance, 1) ?? "---"}
       </td>
       <td className="px-7 py-3.5">

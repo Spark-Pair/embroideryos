@@ -18,6 +18,16 @@ import {
 
 const DEFAULT_ALLOWANCE = 1500;
 
+function formatBonusQtyDisplay(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return "0";
+  if (Number.isInteger(n)) return String(n);
+  const rounded = Math.round(n * 1000) / 1000;
+  return String(rounded)
+    .replace(/(\.\d*?[1-9])0+$/, "$1")
+    .replace(/\.0+$/, "");
+}
+
 /* ─────────────────────────────────────────────────────────────
    openPrintWindow
    Builds HTML that exactly mirrors the screen preview design,
@@ -66,7 +76,7 @@ function openPrintWindow({ staffName, monthLabel, summary, reportRows, totalDedu
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<title>Salary Slip — ${staffName} — ${monthLabel}</title>
+<title>Report — ${staffName} — ${monthLabel}</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -77,7 +87,7 @@ function openPrintWindow({ staffName, monthLabel, summary, reportRows, totalDedu
     
   @media print {
     html {
-      zoom: 95%;
+      zoom: 100%;
     }
   }
 
@@ -137,14 +147,14 @@ function openPrintWindow({ staffName, monthLabel, summary, reportRows, totalDedu
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    padding: 6pt 10pt;
+    padding: 6pt 5pt;
     text-align: left;
     border: none;
   }
   th.r { text-align: right; }
 
   td {
-    padding: 6pt 10pt;
+    padding: 6pt 5pt;
     border-bottom: 0.5pt solid #fff; /* divide-y divide-white */
     vertical-align: middle;
     color: #111;
@@ -216,6 +226,12 @@ function openPrintWindow({ staffName, monthLabel, summary, reportRows, totalDedu
   win.document.write(html);
   win.document.close();
   win.focus();
+  const closePrintWindow = () => {
+    try { win.close(); } catch { /* no-op */ }
+  };
+  const handleAfterPrint = () => setTimeout(closePrintWindow, 100);
+  win.addEventListener("afterprint", handleAfterPrint);
+  win.onafterprint = handleAfterPrint;
   setTimeout(() => win.print(), 500);
 }
 
@@ -268,10 +284,12 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
       try {
         setLoadingOptions(true);
         const [staffRes, monthsRes] = await Promise.all([
-          fetchStaffNames({ params: { status: "active" } }),
+          fetchStaffNames({ status: "active", category: "Embroidery" }),
           fetchStaffRecordMonths(),
         ]);
-        const staffs = (staffRes.data  || []).map((s) => ({ label: s.name,           value: s._id }));
+        const staffs = (staffRes.data  || [])
+          .filter((s) => String(s?.category || "Embroidery") === "Embroidery")
+          .map((s) => ({ label: s.name, value: s._id }));
         const months = (monthsRes.data || []).map((m) => ({ label: getMonthLabel(m), value: m    }));
         setStaffOptions(staffs);
         setMonthOptions(months);
@@ -425,6 +443,11 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
           ? afterTarget - (targetAmt / (cfg.on_target_pct || 1)) * (cfg.after_target_pct || 0)
           : 0;
       const isOff = rec.attendance === "Close" || rec.attendance === "Off" || rec.attendance === "Sunday";
+      const rowBonusQty = Number(rec.bonus_qty) || 0;
+      const typeLabel =
+        rowBonusQty > 0
+          ? `${rec.attendance || "-"} (${formatBonusQtyDisplay(rowBonusQty)})`
+          : rec.attendance || "-";
 
       const prodRows = (rec.production || []).map((prod) => ({
         date:      rec.date,
@@ -444,7 +467,7 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
         date:      rec.date,
         sortOrder: 1,
         rowKind:   isOff ? "off" : "day",
-        typeLabel: rec.attendance || "-",
+        typeLabel,
         stitches:  isOff ? "-" : formatNumbers(totalStitch),
         roundApp:  isOff ? "-" : formatNumbers(rounds),
         ratePct:   isOff ? "-" : ratePct,

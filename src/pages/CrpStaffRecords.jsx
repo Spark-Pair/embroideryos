@@ -20,6 +20,7 @@ import Input from "../components/Input";
 import Select from "../components/Select";
 import Button from "../components/Button";
 import ConfirmModal from "../components/ConfirmModal";
+import CrpMonthlyReportModal from "../components/StaffRecord/CrpMonthlyReportModal";
 import { useToast } from "../context/ToastContext";
 import { formatDate, formatNumbers } from "../utils";
 
@@ -51,6 +52,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
   const [orders, setOrders] = useState([]);
   const [staffs, setStaffs] = useState([]);
   const [rateConfigs, setRateConfigs] = useState([]);
+  const [previousRecords, setPreviousRecords] = useState([]);
   const [loadingData, setLoadingData] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -58,9 +60,13 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
   const [formData, setFormData] = useState({
     month: new Date().toISOString().slice(0, 7),
     order_id: "",
+    order_date: new Date().toISOString().slice(0, 10),
+    order_description: "",
+    quantity_dzn: "",
     staff_id: "",
     category: "Press",
     type_name: "",
+    repeat_record_id: "",
   });
 
   const loadOrdersForMonth = async (monthValue) => {
@@ -68,27 +74,14 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
     setLoadingData(true);
     try {
       const { date_from, date_to } = getMonthDateRange(monthValue);
-      const [ordersRes, existingCrpRes] = await Promise.all([
-        fetchOrders({ page: 1, limit: 5000, date_from, date_to }),
-        fetchCrpStaffRecords({ page: 1, limit: 5000, month: monthValue }),
-      ]);
-
-      const usedOrderIds = new Set(
-        (existingCrpRes?.data || []).map((record) =>
-          String(record?.order_id?._id || record?.order_id || "")
-        )
-      );
-
-      const availableOrders = (ordersRes?.data || []).filter(
-        (order) => !usedOrderIds.has(String(order._id))
-      );
-      setOrders(availableOrders);
-
-      setFormData((prev) =>
-        availableOrders.some((order) => String(order._id) === String(prev.order_id))
+      const ordersRes = await fetchOrders({ page: 1, limit: 5000, date_from, date_to });
+      const orderList = ordersRes?.data || [];
+      setOrders(orderList);
+      setFormData((prev) => (
+        orderList.some((order) => String(order._id) === String(prev.order_id))
           ? prev
           : { ...prev, order_id: "" }
-      );
+      ));
     } catch {
       setOrders([]);
     } finally {
@@ -101,24 +94,31 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
     setFormData({
       month: new Date().toISOString().slice(0, 7),
       order_id: "",
+      order_date: new Date().toISOString().slice(0, 10),
+      order_description: "",
+      quantity_dzn: "",
       staff_id: "",
       category: "Press",
       type_name: "",
+      repeat_record_id: "",
     });
     setError("");
 
     const loadInitial = async () => {
       setLoadingData(true);
       try {
-        const [staffRes, configRes] = await Promise.all([
+        const [staffRes, configRes, recordsRes] = await Promise.all([
           fetchStaffNames({ status: "active", category: "Cropping" }),
           fetchCrpRateConfigs({ status: "active" }),
+          fetchCrpStaffRecords({ page: 1, limit: 300 }),
         ]);
         setStaffs(staffRes?.data || []);
         setRateConfigs(configRes?.data || []);
+        setPreviousRecords(recordsRes?.data || []);
       } catch {
         setStaffs([]);
         setRateConfigs([]);
+        setPreviousRecords([]);
       } finally {
         setLoadingData(false);
       }
@@ -133,34 +133,63 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, formData.month]);
 
-  const selectedOrder = useMemo(
-    () => orders.find((o) => String(o._id) === String(formData.order_id)),
-    [orders, formData.order_id]
-  );
-
   const selectedType = useMemo(
     () => rateConfigs.find((c) => c.category === formData.category && c.type_name === formData.type_name),
     [rateConfigs, formData.category, formData.type_name]
   );
 
-  const qtyDzn = toQtyDzn(selectedOrder);
+  const qtyDzn = Number(formData.quantity_dzn || 0);
   const rate = Number(selectedType?.rate || 0);
   const totalAmount = qtyDzn * rate;
 
   const staffOptions = staffs.map((staff) => ({ label: staff.name, value: staff._id }));
+  const repeatOptions = previousRecords.map((record) => ({
+    label: `${formatDate(record.order_date, "DD MMM yyyy")} · ${record.order_description || "No description"} · ${formatNumbers(record.quantity_dzn, 2)} Dzn`,
+    value: record._id,
+  }));
 
   const typeOptions = rateConfigs
     .filter((cfg) => cfg.category === formData.category)
     .map((cfg) => ({ label: `${cfg.type_name} (Rate: ${formatNumbers(cfg.rate, 2)})`, value: cfg.type_name }));
 
   const isValid =
-    !!formData.month &&
-    !!formData.order_id &&
+    !!formData.order_date &&
     !!formData.staff_id &&
     !!formData.category &&
     !!formData.type_name &&
     rate > 0 &&
     qtyDzn > 0;
+
+  const applyOrderPrefill = (order) => {
+    if (!order) return;
+    const qty = toQtyDzn(order);
+    const month = String(order?.date || "").slice(0, 7) || formData.month;
+    setFormData((prev) => ({
+      ...prev,
+      order_id: order._id,
+      month,
+      order_date: String(order?.date || "").slice(0, 10),
+      order_description: order?.description || "",
+      quantity_dzn: qty > 0 ? String(Number(qty.toFixed(3))) : "",
+    }));
+  };
+
+  const applyRepeatPrefill = (recordId) => {
+    const rec = previousRecords.find((r) => String(r._id) === String(recordId));
+    if (!rec) return;
+    setFormData((prev) => ({
+      ...prev,
+      repeat_record_id: recordId,
+      order_id: "",
+      month: String(rec?.order_date || "").slice(0, 7) || prev.month,
+      order_date: String(rec?.order_date || "").slice(0, 10),
+      order_description: rec?.order_description || "",
+      quantity_dzn: String(Number(rec?.quantity_dzn || 0)),
+      staff_id: String(rec?.staff_id?._id || rec?.staff_id || prev.staff_id || ""),
+      category: rec?.category || prev.category,
+      type_name: rec?.type_name || prev.type_name,
+    }));
+  };
 
   return (
     <Modal
@@ -168,7 +197,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
       onClose={onClose}
       maxWidth="max-w-6xl"
       title="Add CRP Record"
-      subtitle="Select available orders and create cropping staff record"
+      subtitle="Order link is optional. You can create CRP record manually."
       footer={
         <div className="w-full flex items-center justify-between gap-3">
           <p className="text-xs text-red-600">{error}</p>
@@ -184,7 +213,9 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
                 setSubmitting(true);
                 try {
                   await onAction({
-                    order_id: formData.order_id,
+                    order_id: formData.order_id || null,
+                    order_date: formData.order_date,
+                    order_description: formData.order_description,
                     staff_id: formData.staff_id,
                     category: formData.category,
                     type_name: formData.type_name,
@@ -211,8 +242,8 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
         <div className="xl:col-span-2 rounded-2xl border border-gray-300 bg-white overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
             <div>
-              <h3 className="text-sm font-semibold text-gray-800">Available Orders</h3>
-              <p className="text-xs text-gray-500">Orders with CRP record are hidden</p>
+              <h3 className="text-sm font-semibold text-gray-800">Optional Order Prefill</h3>
+              <p className="text-xs text-gray-500">Pick an order only if you want to prefill values</p>
             </div>
             <Button
               variant="secondary"
@@ -241,7 +272,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
             {loadingData && <p className="text-sm text-gray-500">Loading orders...</p>}
             {!loadingData && orders.length === 0 && (
               <p className="text-sm text-gray-500">
-                No available orders for this month.
+                No orders found for this month. You can still create CRP record manually.
               </p>
             )}
 
@@ -253,9 +284,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
                   <button
                     key={order._id}
                     type="button"
-                    onClick={() =>
-                      setFormData((prev) => ({ ...prev, order_id: order._id }))
-                    }
+                    onClick={() => applyOrderPrefill(order)}
                     className={`w-full text-left rounded-xl border px-3.5 py-2.5 transition ${
                       isSelected
                         ? "border-teal-400 bg-teal-50"
@@ -292,23 +321,33 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
         <div className="rounded-2xl border border-gray-300 bg-white p-4 h-fit">
           <h3 className="text-sm font-semibold text-gray-800 mb-3">CRP Details</h3>
           <div className="space-y-3">
+            <Select
+              label="Repeat Previous Record"
+              value={formData.repeat_record_id}
+              onChange={applyRepeatPrefill}
+              options={repeatOptions}
+              placeholder="Select previous record..."
+              disabled={loadingData || repeatOptions.length === 0}
+            />
             <Input
               label="Order Date"
-              value={selectedOrder ? formatDate(selectedOrder.date, "DD MMM yyyy") : ""}
-              readOnly
-              required={false}
+              type="date"
+              value={formData.order_date}
+              onChange={(e) => setFormData((prev) => ({ ...prev, order_date: e.target.value }))}
             />
             <Input
               label="Description"
-              value={selectedOrder?.description || ""}
-              readOnly
+              value={formData.order_description}
+              onChange={(e) => setFormData((prev) => ({ ...prev, order_description: e.target.value }))}
               required={false}
             />
             <Input
               label="Quantity (Dzn)"
-              value={selectedOrder ? formatNumbers(qtyDzn, 2) : ""}
-              readOnly
-              required={false}
+              type="number"
+              step="0.001"
+              min="0"
+              value={formData.quantity_dzn}
+              onChange={(e) => setFormData((prev) => ({ ...prev, quantity_dzn: e.target.value }))}
             />
 
             <Select
@@ -366,6 +405,7 @@ export default function CrpStaffRecords() {
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: "", message: "", onConfirm: () => {}, variant: "danger" });
   const [activeMenu, setActiveMenu] = useState(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [reportModal, setReportModal] = useState(false);
   const [filters, setFilters] = useState({ month: "", category: "", type_name: "", date_from: "", date_to: "" });
 
   const tableScrollRef = useRef(null);
@@ -407,7 +447,7 @@ export default function CrpStaffRecords() {
       <div className="relative z-10 max-w-7xl mx-auto h-full flex flex-col">
         <PageHeader
           title="CRP Staff Records"
-          subtitle="Manage cropping records from monthly orders"
+          subtitle="Manage CRP records with optional order link, manual entry, and repeat prefill"
           actionLabel="Add CRP Record"
           actionIcon={Plus}
           onAction={() => setFormModal({ isOpen: true })}
@@ -425,6 +465,7 @@ export default function CrpStaffRecords() {
             totalPages={pagination.totalPages}
             onPageChange={(page) => loadRecords(page, filters)}
             onFilter={() => setIsFilterOpen(true)}
+            onReport={() => setReportModal(true)}
           />
 
           <div ref={tableScrollRef} className="flex-1 overflow-auto">
@@ -560,6 +601,11 @@ export default function CrpStaffRecords() {
           await confirmModal.onConfirm();
           setConfirmModal((prev) => ({ ...prev, isOpen: false }));
         }}
+      />
+
+      <CrpMonthlyReportModal
+        isOpen={reportModal}
+        onClose={() => setReportModal(false)}
       />
     </>
   );
