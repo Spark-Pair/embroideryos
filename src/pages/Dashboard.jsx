@@ -278,6 +278,23 @@ export default function Dashboard() {
     monthStaffRecordsAmount: 0,
     monthCrpRecordsCount: 0,
     monthCrpRecordsAmount: 0,
+    monthStaffSummary: {
+      staff_count: 0,
+      active_staff_count: 0,
+      staff_with_records: 0,
+      record_count: 0,
+      work_amount: 0,
+      arrears_amount: 0,
+      allowance_amount: 0,
+      bonus_qty: 0,
+      bonus_amount: 0,
+      deduction_amount: 0,
+      deduction_advance_amount: 0,
+      deduction_payment_amount: 0,
+      deduction_adjustment_amount: 0,
+      balance_amount: 0,
+      by_staff: [],
+    },
 
     customersActive: 0,
     staffActive: 0,
@@ -400,6 +417,40 @@ export default function Dashboard() {
           monthStaffRecordsAmount: Number(data?.month?.staff_records?.amount || 0),
           monthCrpRecordsCount: Number(data?.month?.crp_records?.count || 0),
           monthCrpRecordsAmount: Number(data?.month?.crp_records?.amount || 0),
+          monthStaffSummary: {
+            staff_count: Number(data?.month?.staff_summary?.staff_count || 0),
+            active_staff_count: Number(data?.month?.staff_summary?.active_staff_count || 0),
+            staff_with_records: Number(data?.month?.staff_summary?.staff_with_records || 0),
+            record_count: Number(data?.month?.staff_summary?.record_count || 0),
+            work_amount: Number(data?.month?.staff_summary?.work_amount || 0),
+            arrears_amount: Number(data?.month?.staff_summary?.arrears_amount || 0),
+            allowance_amount: Number(data?.month?.staff_summary?.allowance_amount || 0),
+            bonus_qty: Number(data?.month?.staff_summary?.bonus_qty || 0),
+            bonus_amount: Number(data?.month?.staff_summary?.bonus_amount || 0),
+            deduction_amount: Number(data?.month?.staff_summary?.deduction_amount || 0),
+            deduction_advance_amount: Number(data?.month?.staff_summary?.deduction_advance_amount || 0),
+            deduction_payment_amount: Number(data?.month?.staff_summary?.deduction_payment_amount || 0),
+            deduction_adjustment_amount: Number(data?.month?.staff_summary?.deduction_adjustment_amount || 0),
+            balance_amount: Number(data?.month?.staff_summary?.balance_amount || 0),
+            by_staff: Array.isArray(data?.month?.staff_summary?.by_staff)
+              ? data.month.staff_summary.by_staff.map((row) => ({
+                staff_id: String(row?.staff_id || ""),
+                staff_name: row?.staff_name || "-",
+                is_active: Boolean(row?.is_active),
+                records: Number(row?.records || 0),
+                work_amount: Number(row?.work_amount || 0),
+                arrears_amount: Number(row?.arrears_amount || 0),
+                allowance_amount: Number(row?.allowance_amount || 0),
+                bonus_qty: Number(row?.bonus_qty || 0),
+                bonus_amount: Number(row?.bonus_amount || 0),
+                deduction_amount: Number(row?.deduction_amount || 0),
+                deduction_advance_amount: Number(row?.deduction_advance_amount || 0),
+                deduction_payment_amount: Number(row?.deduction_payment_amount || 0),
+                deduction_adjustment_amount: Number(row?.deduction_adjustment_amount || 0),
+                balance_amount: Number(row?.balance_amount || 0),
+              }))
+              : [],
+          },
 
           customersActive: Number(data?.active?.customers || 0),
           suppliersActive: Number(data?.active?.suppliers || 0),
@@ -641,7 +692,7 @@ export default function Dashboard() {
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
-              <div className="rounded-3xl border border-gray-300 bg-white xl:col-span-6 overflow-hidden flex flex-col justify-between">
+              <div className="rounded-3xl border border-gray-300 bg-white xl:col-span-8 overflow-hidden flex flex-col justify-between">
                 <div className="flex items-center justify-between px-5 py-4 border-b border-gray-300 bg-gray-100">
                   <div>
                     <p className="text-sm font-medium text-gray-800">7-Day Trend</p>
@@ -664,7 +715,7 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="rounded-3xl border border-gray-300 bg-white overflow-hidden xl:col-span-3">
+              <div className="rounded-3xl border border-gray-300 bg-white overflow-hidden xl:col-span-4">
                 <div className="px-5 py-4 border-b border-gray-300 bg-gray-100">
                   <p className="text-sm font-medium text-gray-800">Selected Month Snapshot</p>
                 </div>
@@ -688,25 +739,71 @@ export default function Dashboard() {
                   ))}
                 </div>
               </div>
+            </div>
 
-              <div className="rounded-3xl border border-gray-300 bg-white overflow-hidden xl:col-span-3">
-                <div className="px-5 py-4 border-b border-gray-300 bg-gray-100">
-                  <p className="text-sm font-medium text-gray-800">Active Entities</p>
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+              <div className="rounded-3xl border border-gray-300 bg-white overflow-hidden xl:col-span-12">
+                <div className="px-5 py-4 border-b border-gray-300 bg-gray-100 flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-gray-800">Staff Month Summary ({selectedMonth})</p>
+                  <p className="text-xs text-gray-500">
+                    Employees: {ops.monthStaffSummary.staff_count} · Active: {ops.monthStaffSummary.active_staff_count} · Worked: {ops.monthStaffSummary.staff_with_records}
+                  </p>
                 </div>
-                <div className="divide-y divide-gray-200">
-                  {[
-                    { label: "Customers", value: ops.customersActive, icon: Users, iconBg: "bg-teal-100/60", iconText: "text-teal-700" },
-                    { label: "Suppliers", value: ops.suppliersActive, icon: Building2, iconBg: "bg-amber-100/60", iconText: "text-amber-700" },
-                    { label: "Staff", value: ops.staffActive, icon: Users2, iconBg: "bg-emerald-100/60", iconText: "text-emerald-700" },
-                  ].map((item) => (
-                    <div key={item.label} className="flex items-center gap-4 px-5 py-4">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${item.iconBg} ${item.iconText}`}>
-                        <item.icon size={18} strokeWidth={1.5} />
-                      </div>
-                      <p className="text-sm text-gray-500 flex-1">{item.label}</p>
-                      <p className="text-2xl font-semibold text-gray-900 tabular-nums">{item.value}</p>
-                    </div>
-                  ))}
+                <div>
+                  <div className="overflow-auto">
+                    <table className="w-full text-left border-collapse font-medium">
+                      <thead className="bg-gray-200/85 boder-t border-b border-gray-300">
+                        <tr className="text-xs uppercase tracking-wide text-gray-500">
+                          <th className="px-2.5 py-2.5 font-semibold">Staff</th>
+                          <th className="px-2.5 py-2.5 font-semibold text-right">Records</th>
+                          <th className="px-2.5 py-2.5 font-semibold text-right">Work</th>
+                          <th className="px-2.5 py-2.5 font-semibold text-right">Arrears</th>
+                          <th className="px-2.5 py-2.5 font-semibold text-right">Allowance</th>
+                          <th className="px-2.5 py-2.5 font-semibold text-right">Bonus</th>
+                          <th className="px-2.5 py-2.5 font-semibold text-right">Deductions</th>
+                          <th className="px-2.5 py-2.5 font-semibold text-right">Balance</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-300">
+                        {ops.monthStaffSummary.by_staff.length === 0 ? (
+                          <tr>
+                            <td colSpan={8} className="px-2.5 py-8 text-center text-sm text-gray-400">
+                              No staff summary available for selected month.
+                            </td>
+                          </tr>
+                        ) : (
+                          ops.monthStaffSummary.by_staff.map((row) => (
+                            <tr key={row.staff_id || row.staff_name} className="hover:bg-gray-50/70">
+                              <td className="px-2.5 py-2.5">{row.staff_name}</td>
+                              <td className="px-2.5 py-2.5 text-sm text-right tabular-nums text-gray-700">{formatNumbers(row.records, 0)}</td>
+                              <td className="px-2.5 py-2.5 text-sm text-right tabular-nums text-gray-800">{formatNumbers(row.work_amount, 2)}</td>
+                              <td className="px-2.5 py-2.5 text-sm text-right tabular-nums">{formatNumbers(row.arrears_amount, 2)}</td>
+                              <td className="px-2.5 py-2.5 text-sm text-right tabular-nums text-indigo-700">{formatNumbers(row.allowance_amount)}</td>
+                              <td className="px-2.5 py-2.5 text-sm text-right tabular-nums text-emerald-700">
+                                {formatNumbers(row.bonus_amount)} ({formatNumbers(row.bonus_qty, 1)})
+                              </td>
+                              <td className="px-2.5 py-2.5 text-xs text-right tabular-nums text-rose-600">{formatNumbers(row.deduction_amount, 2)}</td>
+                              <td className="px-2.5 py-2.5 text-sm text-right tabular-nums font-semibold text-teal-700">{formatNumbers(row.balance_amount, 2)}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-gray-200/85 border-t border-gray-300">
+                          <td className="px-2.5 py-3 text-sm font-semibold text-gray-900">Total</td>
+                          <td className="px-2.5 py-3 text-sm text-right font-semibold tabular-nums text-gray-800">{formatNumbers(ops.monthStaffSummary.record_count, 0)}</td>
+                          <td className="px-2.5 py-3 text-sm text-right font-semibold tabular-nums text-gray-900">{formatNumbers(ops.monthStaffSummary.work_amount, 2)}</td>
+                          <td className="px-2.5 py-3 text-sm text-right font-semibold tabular-nums text-amber-700">{formatNumbers(ops.monthStaffSummary.arrears_amount, 2)}</td>
+                          <td className="px-2.5 py-3 text-sm text-right font-semibold tabular-nums text-indigo-700">{formatNumbers(ops.monthStaffSummary.allowance_amount)}</td>
+                          <td className="px-2.5 py-3 text-sm text-right font-semibold tabular-nums text-emerald-700">
+                            {formatNumbers(ops.monthStaffSummary.bonus_amount)} ({formatNumbers(ops.monthStaffSummary.bonus_qty, 1)})
+                          </td>
+                          <td className="px-2.5 py-3 text-xs text-right font-semibold tabular-nums text-rose-600">{formatNumbers(ops.monthStaffSummary.deduction_amount, 2)}</td>
+                          <td className="px-2.5 py-3 text-sm text-right font-semibold tabular-nums text-teal-700">{formatNumbers(ops.monthStaffSummary.balance_amount, 2)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>
