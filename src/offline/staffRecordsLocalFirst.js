@@ -266,11 +266,28 @@ const inDateRange = (value, from, to) => {
   return true;
 };
 
+const getEffectivePercent = (row) => {
+  if (!row || row?.fix_amount != null) return null;
+  const totals = row?.totals;
+  if (!totals) return null;
+  const onTargetAmount = Number(totals?.on_target_amt || 0);
+  if (onTargetAmount <= 0) return null;
+  const targetAmount = Number(row?.config_snapshot?.target_amount);
+  const targetMet = Number.isFinite(targetAmount)
+    ? onTargetAmount >= targetAmount
+    : false;
+  const pct = targetMet
+    ? Number(row?.config_snapshot?.after_target_pct)
+    : Number(row?.config_snapshot?.on_target_pct);
+  return Number.isFinite(pct) ? pct : null;
+};
+
 const applyFilters = (rows = [], params = {}) => {
   let data = [...rows].filter(
     (row) => String(row?.staff_id?.category || "Embroidery") !== "Cropping"
   );
   const attendance = String(params?.attendance || "").trim();
+  const percent = String(params?.percent || "").trim();
   const staffId = String(params?.staff_id || "").trim();
   const name = String(params?.name || "").trim().toLowerCase();
   const dateFrom = params?.date_from;
@@ -278,6 +295,12 @@ const applyFilters = (rows = [], params = {}) => {
 
   if (staffId) data = data.filter((row) => String(row?.staff_id?._id || row?.staff_id || "") === staffId);
   if (attendance) data = data.filter((row) => String(row?.attendance || "") === attendance);
+  if (percent) {
+    const percentNum = Number(percent);
+    if (Number.isFinite(percentNum)) {
+      data = data.filter((row) => getEffectivePercent(row) === percentNum);
+    }
+  }
   if (dateFrom || dateTo) data = data.filter((row) => inDateRange(row?.date, dateFrom, dateTo));
 
   if (name) {
@@ -485,17 +508,24 @@ export const fetchStaffRecordStatsLocalFirst = async (params = {}) => {
   const merged = withOverlayList(base, overlay);
   const withStaff = await attachStaffInfo(merged);
   const staffId = String(params?.staff_id || "").trim();
+  const attendance = String(params?.attendance || "").trim();
+  const percent = String(params?.percent || "").trim();
   const dateFrom = params?.date_from;
   const dateTo = params?.date_to;
 
   const filtered = withStaff.filter((row) => {
     if (String(row?.staff_id?.category || "Embroidery") === "Cropping") return false;
     if (staffId && String(row?.staff_id?._id || row?.staff_id || "") !== staffId) return false;
+    if (attendance && String(row?.attendance || "") !== attendance) return false;
+    if (percent) {
+      const percentNum = Number(percent);
+      if (Number.isFinite(percentNum) && getEffectivePercent(row) !== percentNum) return false;
+    }
     if (dateFrom || dateTo) return inDateRange(row?.date, dateFrom, dateTo);
     return true;
   });
 
-  const attendance = filtered.reduce((acc, row) => {
+  const attendanceBreakdown = filtered.reduce((acc, row) => {
     const key = String(row?.attendance || "");
     if (!key) return acc;
     acc[key] = (acc[key] || 0) + 1;
@@ -521,7 +551,7 @@ export const fetchStaffRecordStatsLocalFirst = async (params = {}) => {
   const stats = {
     success: true,
     data: {
-      attendance,
+      attendance: attendanceBreakdown,
       amounts,
     },
   };

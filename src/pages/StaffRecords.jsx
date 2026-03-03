@@ -48,7 +48,7 @@ export default function StaffRecords() {
   const [reportModal, setReportModal] = useState(false);
 
   const [filters, setFilters] = useState({
-    name: "", attendance: "", date_from: "", date_to: "",
+    name: "", attendance: "", percent: "", date_from: "", date_to: "",
   });
 
   const tableScrollRef = useRef(null);
@@ -101,7 +101,7 @@ export default function StaffRecords() {
   const handlePageChange   = (page) => loadRecords(page);
   const handleApplyFilters = () => { loadRecords(1, filters); setIsFilterOpen(false); };
   const handleResetFilters = () => {
-    const reset = { name: "", attendance: "", date_from: "", date_to: "" };
+    const reset = { name: "", attendance: "", percent: "", date_from: "", date_to: "" };
     setFilters(reset);
     loadRecords(1, reset);
     setIsFilterOpen(false);
@@ -157,6 +157,22 @@ export default function StaffRecords() {
         { label: "Sunday",  value: "Sunday" },
       ],
       onChange: (val) => setFilters((p) => ({ ...p, attendance: val })),
+    },
+    {
+      label:    "Percent",
+      type:     "select",
+      value:    filters.percent,
+      options:  [
+        { label: "All", value: "" },
+        { label: "5%", value: "5" },
+        { label: "10%", value: "10" },
+        { label: "18%", value: "18" },
+        { label: "30%", value: "30" },
+        { label: "34%", value: "34" },
+        { label: "40%", value: "40" },
+        { label: "50%", value: "50" },
+      ],
+      onChange: (val) => setFilters((p) => ({ ...p, percent: val })),
     },
     {
       label:    "Date From",
