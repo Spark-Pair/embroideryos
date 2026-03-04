@@ -119,9 +119,10 @@ export default function StaffRecordDetailsModal({ isOpen, onClose, initialData, 
   const targetMet    = totals && targetAmount != null
     ? totals.on_target_amt >= targetAmount
     : false;
+  const forceAfter   = Boolean(initialData.force_after_target_for_non_target);
 
-  const effectivePct = isFixed ? null : targetMet ? snapshot?.after_target_pct : snapshot?.on_target_pct;
-  const effectiveAmt = targetMet ? totals?.after_target_amt : totals?.on_target_amt;
+  const effectivePct = isFixed ? null : (targetMet || forceAfter) ? snapshot?.after_target_pct : snapshot?.on_target_pct;
+  const effectiveAmt = (targetMet || forceAfter) ? totals?.after_target_amt : totals?.on_target_amt;
 
   return (
     <Modal
@@ -168,9 +169,9 @@ export default function StaffRecordDetailsModal({ isOpen, onClose, initialData, 
                 ? <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
                 : <AlertCircle  className="h-4 w-4 text-amber-500 shrink-0" />
               }
-              {targetMet ? (
+              {(targetMet || forceAfter) ? (
                 <span className="text-emerald-700">
-                  <span className="font-semibold">Target Met</span>
+                  <span className="font-semibold">{targetMet ? "Target Met" : "After Target Forced"}</span>
                   {" "}— Effective amount (After Target):{" "}
                   <span className="font-bold">{formatNumbers(totals.after_target_amt, 2)}</span>
                 </span>

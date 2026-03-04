@@ -122,7 +122,7 @@ const calcTotals = (rows, cfg) =>
     { pcs: 0, rounds: 0, total_stitch: 0, on_target_amt: 0, after_target_amt: 0 }
   );
 
-const resolveBaseAmount = ({ attendance, totals, salary, config }) => {
+const resolveBaseAmount = ({ attendance, totals, salary, config, forceAfterTargetForNonTarget = false }) => {
   const hasSalary = salary != null && salary > 0;
   const perDay = hasSalary ? salary / 30 : 0;
   const perHalfDay = hasSalary ? salary / 60 : 0;
@@ -143,7 +143,7 @@ const resolveBaseAmount = ({ attendance, totals, salary, config }) => {
       base_amount = perHalfDay;
     } else {
       const productionAmt = totals
-        ? totals.on_target_amt >= targetAmount
+        ? (totals.on_target_amt >= targetAmount || forceAfterTargetForNonTarget)
           ? totals.after_target_amt
           : totals.on_target_amt
         : 0;
@@ -157,7 +157,7 @@ const resolveBaseAmount = ({ attendance, totals, salary, config }) => {
       base_amount = perDay;
     } else {
       base_amount = totals
-        ? totals.on_target_amt >= targetAmount
+        ? (totals.on_target_amt >= targetAmount || forceAfterTargetForNonTarget)
           ? totals.after_target_amt
           : totals.on_target_amt
         : 0;
@@ -203,6 +203,8 @@ const buildLocalRecordPayload = async (payload) => {
     totals,
     salary,
     config,
+    forceAfterTargetForNonTarget:
+      Boolean(payload?.force_after_target_for_non_target) && !(salary != null && salary > 0),
   });
 
   const canHaveBonus = !NO_BONUS.has(resolvedAttendance);
@@ -223,6 +225,8 @@ const buildLocalRecordPayload = async (payload) => {
     bonus_rate: effectiveBonusRate,
     bonus_amount,
     fix_amount: fixAmount,
+    force_after_target_for_non_target:
+      Boolean(payload?.force_after_target_for_non_target) && !(salary != null && salary > 0),
     final_amount,
     config_snapshot: {
       stitch_rate: config.stitch_rate,
@@ -276,7 +280,8 @@ const getEffectivePercent = (row) => {
   const targetMet = Number.isFinite(targetAmount)
     ? onTargetAmount >= targetAmount
     : false;
-  const pct = targetMet
+  const forceAfter = Boolean(row?.force_after_target_for_non_target);
+  const pct = (targetMet || forceAfter)
     ? Number(row?.config_snapshot?.after_target_pct)
     : Number(row?.config_snapshot?.on_target_pct);
   return Number.isFinite(pct) ? pct : null;

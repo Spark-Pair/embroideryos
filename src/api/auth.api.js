@@ -20,24 +20,6 @@ export const loginUser = async (data) => {
   }
 };
 
-export const forceLoginUser = async (data) => {
-  try {
-    const res = await apiClient.post("/auth/force-login", data);
-    
-    if (res.data.accessToken) {
-      storage.setAuth(
-        res.data.accessToken,
-        res.data.refreshToken,
-        res.data.sessionId
-      );
-    }
-    
-    return res;
-  } catch (error) {
-    throw error;
-  }
-};
-
 export const logoutUser = async () => {
   try {
     await apiClient.post("/auth/logout");

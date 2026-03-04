@@ -31,6 +31,7 @@ export default function StaffRecordRow({ item, index, startIndex, onView, onEdit
   const targetMet = totals
     ? totals.on_target_amt >= configSnapshot?.target_amount
     : false;
+  const forceAfter = Boolean(item.force_after_target_for_non_target);
 
   let pctLabel = null;
   let pctStyle = "";
@@ -38,7 +39,7 @@ export default function StaffRecordRow({ item, index, startIndex, onView, onEdit
     pctLabel = "FIX";
     pctStyle = "bg-amber-100 text-amber-700";
   } else if (totals && totals.on_target_amt > 0) {
-    if (targetMet) {
+    if (targetMet || forceAfter) {
       pctLabel = configSnapshot?.after_target_pct != null
         ? `${configSnapshot.after_target_pct}%`
         : "After";

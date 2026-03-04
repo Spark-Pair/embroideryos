@@ -45,6 +45,18 @@ const hasExistingData = (existing) =>
   (Array.isArray(existing) && existing.length > 0) ||
   (!Array.isArray(existing) && Boolean(existing));
 
+const hasRemoteCountMismatch = async ({ existingRows, endpoint }) => {
+  if (!Array.isArray(existingRows)) return false;
+  try {
+    const res = await apiClient.get(`${endpoint}?page=1&limit=1`);
+    const remoteCount = Number(res?.data?.pagination?.totalItems);
+    if (!Number.isFinite(remoteCount)) return false;
+    return remoteCount !== existingRows.length;
+  } catch {
+    return false;
+  }
+};
+
 let customersSeedInFlight = false;
 
 export const seedCustomersCache = async ({ forceRefresh = false } = {}) => {
@@ -53,8 +65,15 @@ export const seedCustomersCache = async ({ forceRefresh = false } = {}) => {
 
   const existingAll = await getEntitySnapshot(CUSTOMERS_ALL_KEY);
   if (!forceRefresh && Array.isArray(existingAll) && existingAll.length > 0) {
-    logDataSource("IDB", "seed.customers.skip_existing", { count: existingAll.length });
-    return;
+    const mismatch = await hasRemoteCountMismatch({ existingRows: existingAll, endpoint: "/customers" });
+    if (mismatch) {
+      logDataSource("IDB", "seed.customers.mismatch_refresh", {
+        localCount: existingAll.length,
+      });
+    } else {
+      logDataSource("IDB", "seed.customers.skip_existing", { count: existingAll.length });
+      return;
+    }
   }
 
   customersSeedInFlight = true;
@@ -100,8 +119,13 @@ export const seedSuppliersCache = async ({ forceRefresh = false } = {}) => {
 
   const existingAll = await getEntitySnapshot(SUPPLIERS_ALL_KEY);
   if (!forceRefresh && Array.isArray(existingAll) && existingAll.length > 0) {
-    logDataSource("IDB", "seed.suppliers.skip_existing", { count: existingAll.length });
-    return;
+    const mismatch = await hasRemoteCountMismatch({ existingRows: existingAll, endpoint: "/suppliers" });
+    if (mismatch) {
+      logDataSource("IDB", "seed.suppliers.mismatch_refresh", { localCount: existingAll.length });
+    } else {
+      logDataSource("IDB", "seed.suppliers.skip_existing", { count: existingAll.length });
+      return;
+    }
   }
 
   suppliersSeedInFlight = true;
@@ -137,8 +161,13 @@ export const seedStaffsCache = async ({ forceRefresh = false } = {}) => {
 
   const existingAll = await getEntitySnapshot(STAFFS_ALL_KEY);
   if (!forceRefresh && Array.isArray(existingAll) && existingAll.length > 0) {
-    logDataSource("IDB", "seed.staffs.skip_existing", { count: existingAll.length });
-    return;
+    const mismatch = await hasRemoteCountMismatch({ existingRows: existingAll, endpoint: "/staffs" });
+    if (mismatch) {
+      logDataSource("IDB", "seed.staffs.mismatch_refresh", { localCount: existingAll.length });
+    } else {
+      logDataSource("IDB", "seed.staffs.skip_existing", { count: existingAll.length });
+      return;
+    }
   }
 
   staffsSeedInFlight = true;
@@ -181,8 +210,13 @@ export const seedStaffRecordsCache = async ({ forceRefresh = false } = {}) => {
 
   const existingAll = await getEntitySnapshot(STAFF_RECORDS_ALL_KEY);
   if (!forceRefresh && Array.isArray(existingAll) && existingAll.length > 0) {
-    logDataSource("IDB", "seed.staffRecords.skip_existing", { count: existingAll.length });
-    return;
+    const mismatch = await hasRemoteCountMismatch({ existingRows: existingAll, endpoint: "/staff-records" });
+    if (mismatch) {
+      logDataSource("IDB", "seed.staffRecords.mismatch_refresh", { localCount: existingAll.length });
+    } else {
+      logDataSource("IDB", "seed.staffRecords.skip_existing", { count: existingAll.length });
+      return;
+    }
   }
 
   staffRecordsSeedInFlight = true;
@@ -220,8 +254,13 @@ export const seedStaffPaymentsCache = async ({ forceRefresh = false } = {}) => {
 
   const existingAll = await getEntitySnapshot(STAFF_PAYMENTS_ALL_KEY);
   if (!forceRefresh && Array.isArray(existingAll) && existingAll.length > 0) {
-    logDataSource("IDB", "seed.staffPayments.skip_existing", { count: existingAll.length });
-    return;
+    const mismatch = await hasRemoteCountMismatch({ existingRows: existingAll, endpoint: "/staff-payments" });
+    if (mismatch) {
+      logDataSource("IDB", "seed.staffPayments.mismatch_refresh", { localCount: existingAll.length });
+    } else {
+      logDataSource("IDB", "seed.staffPayments.skip_existing", { count: existingAll.length });
+      return;
+    }
   }
 
   staffPaymentsSeedInFlight = true;
@@ -290,8 +329,13 @@ export const seedCustomerPaymentsCache = async ({ forceRefresh = false } = {}) =
 
   const existingAll = await getEntitySnapshot(CUSTOMER_PAYMENTS_ALL_KEY);
   if (!forceRefresh && Array.isArray(existingAll) && existingAll.length > 0) {
-    logDataSource("IDB", "seed.customerPayments.skip_existing", { count: existingAll.length });
-    return;
+    const mismatch = await hasRemoteCountMismatch({ existingRows: existingAll, endpoint: "/customer-payments" });
+    if (mismatch) {
+      logDataSource("IDB", "seed.customerPayments.mismatch_refresh", { localCount: existingAll.length });
+    } else {
+      logDataSource("IDB", "seed.customerPayments.skip_existing", { count: existingAll.length });
+      return;
+    }
   }
 
   customerPaymentsSeedInFlight = true;
@@ -329,8 +373,13 @@ export const seedSupplierPaymentsCache = async ({ forceRefresh = false } = {}) =
 
   const existingAll = await getEntitySnapshot(SUPPLIER_PAYMENTS_ALL_KEY);
   if (!forceRefresh && Array.isArray(existingAll) && existingAll.length > 0) {
-    logDataSource("IDB", "seed.supplierPayments.skip_existing", { count: existingAll.length });
-    return;
+    const mismatch = await hasRemoteCountMismatch({ existingRows: existingAll, endpoint: "/supplier-payments" });
+    if (mismatch) {
+      logDataSource("IDB", "seed.supplierPayments.mismatch_refresh", { localCount: existingAll.length });
+    } else {
+      logDataSource("IDB", "seed.supplierPayments.skip_existing", { count: existingAll.length });
+      return;
+    }
   }
 
   supplierPaymentsSeedInFlight = true;
@@ -368,8 +417,13 @@ export const seedExpensesCache = async ({ forceRefresh = false } = {}) => {
 
   const existingAll = await getEntitySnapshot(EXPENSES_ALL_KEY);
   if (!forceRefresh && Array.isArray(existingAll) && existingAll.length > 0) {
-    logDataSource("IDB", "seed.expenses.skip_existing", { count: existingAll.length });
-    return;
+    const mismatch = await hasRemoteCountMismatch({ existingRows: existingAll, endpoint: "/expenses" });
+    if (mismatch) {
+      logDataSource("IDB", "seed.expenses.mismatch_refresh", { localCount: existingAll.length });
+    } else {
+      logDataSource("IDB", "seed.expenses.skip_existing", { count: existingAll.length });
+      return;
+    }
   }
 
   expensesSeedInFlight = true;
@@ -405,8 +459,13 @@ export const seedOrdersCache = async ({ forceRefresh = false } = {}) => {
 
   const existingAll = await getEntitySnapshot(ORDERS_ALL_KEY);
   if (!forceRefresh && Array.isArray(existingAll) && existingAll.length > 0) {
-    logDataSource("IDB", "seed.orders.skip_existing", { count: existingAll.length });
-    return;
+    const mismatch = await hasRemoteCountMismatch({ existingRows: existingAll, endpoint: "/orders" });
+    if (mismatch) {
+      logDataSource("IDB", "seed.orders.mismatch_refresh", { localCount: existingAll.length });
+    } else {
+      logDataSource("IDB", "seed.orders.skip_existing", { count: existingAll.length });
+      return;
+    }
   }
 
   ordersSeedInFlight = true;
@@ -442,8 +501,13 @@ export const seedInvoicesCache = async ({ forceRefresh = false } = {}) => {
 
   const existingAll = await getEntitySnapshot(INVOICES_ALL_KEY);
   if (!forceRefresh && Array.isArray(existingAll) && existingAll.length > 0) {
-    logDataSource("IDB", "seed.invoices.skip_existing", { count: existingAll.length });
-    return;
+    const mismatch = await hasRemoteCountMismatch({ existingRows: existingAll, endpoint: "/invoices" });
+    if (mismatch) {
+      logDataSource("IDB", "seed.invoices.mismatch_refresh", { localCount: existingAll.length });
+    } else {
+      logDataSource("IDB", "seed.invoices.skip_existing", { count: existingAll.length });
+      return;
+    }
   }
 
   invoicesSeedInFlight = true;
@@ -582,8 +646,13 @@ export const seedCrpStaffRecordsCache = async ({ forceRefresh = false } = {}) =>
 
   const existingAll = await getEntitySnapshot(CRP_STAFF_RECORDS_ALL_KEY);
   if (!forceRefresh && hasExistingData(existingAll)) {
-    logDataSource("IDB", "seed.crpStaffRecords.skip_existing", { count: existingAll.length });
-    return;
+    const mismatch = await hasRemoteCountMismatch({ existingRows: existingAll, endpoint: "/crp-staff-records" });
+    if (mismatch) {
+      logDataSource("IDB", "seed.crpStaffRecords.mismatch_refresh", { localCount: existingAll.length });
+    } else {
+      logDataSource("IDB", "seed.crpStaffRecords.skip_existing", { count: existingAll.length });
+      return;
+    }
   }
 
   crpStaffRecordsSeedInFlight = true;
@@ -611,7 +680,7 @@ export const seedCrpStaffRecordsCache = async ({ forceRefresh = false } = {}) =>
   }
 };
 
-export const runFullBootstrapSeed = async ({ forceRefresh = true } = {}) => {
+export const runFullBootstrapSeed = async ({ forceRefresh = false } = {}) => {
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
 
   const steps = [

@@ -177,9 +177,9 @@ function openPrintWindow({ staffName, monthLabel, summary, reportRows, totalDedu
     display: flex;
     justify-content: space-between;
     font-size: 7pt;
-    color: #646769;
+    color: #111;
     margin-top: 10pt;
-    border-top: 0.5pt solid #646769;
+    border-top: 0.5pt solid #111;
     padding-top: 5pt;
   }
 </style>
@@ -432,9 +432,10 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
       const afterTarget = (rec.production || []).reduce((s, r) => s + (Number(r.after_target_amt) || 0), 0);
       const cfg         = rec.config_snapshot || {};
       const targetAmt   = Number(cfg.target_amount) || 0;
+      const forceAfter  = Boolean(rec.force_after_target_for_non_target);
       const ratePct =
         onTarget > 0
-          ? targetAmt > 0 && onTarget >= targetAmt
+          ? (targetAmt > 0 && onTarget >= targetAmt) || forceAfter
             ? `${cfg.after_target_pct ?? cfg.on_target_pct ?? 0}%`
             : `(${cfg.on_target_pct ?? 0}%)`
           : "0%";

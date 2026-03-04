@@ -222,6 +222,7 @@ export default function StaffRecordFormModal({
   const [bonusQty,      setBonusQty]      = useState("");
   const [bonusRate,     setBonusRate]     = useState("");
   const [fixAmount,     setFixAmount]     = useState("");
+  const [forceAfterTargetForNonTarget, setForceAfterTargetForNonTarget] = useState(false);
   const [submitting,    setSubmitting]    = useState(false);
   const [staffList,     setStaffList]     = useState([]);
   const [staffLoading,  setStaffLoading]  = useState(false);
@@ -262,6 +263,7 @@ export default function StaffRecordFormModal({
       setBonusQty("");
       setBonusRate("");
       setFixAmount("");
+      setForceAfterTargetForNonTarget(false);
       setCfg(DEFAULT_CONFIG);
       autoSelectedRef.current = false;
     }
@@ -326,6 +328,7 @@ export default function StaffRecordFormModal({
     setBonusQty(initialData.bonus_qty   ? String(initialData.bonus_qty)   : "");
     setBonusRate(initialData.bonus_rate  ? String(initialData.bonus_rate)  : "");
     setFixAmount(initialData.fix_amount != null ? String(initialData.fix_amount) : "");
+    setForceAfterTargetForNonTarget(Boolean(initialData.force_after_target_for_non_target));
     setRows(
       initialData.production?.length
         ? initialData.production.map((r) => ({
@@ -425,8 +428,16 @@ export default function StaffRecordFormModal({
   const hasSalary     = selectedStaff?.salary > 0;
   const salary        = selectedStaff?.salary || 0;
   const targetMet     = totals.on_target_amt >= (cfg.target_amount ?? DEFAULT_CONFIG.target_amount);
+  const canForceAfterTargetForNonTarget =
+    showProduction &&
+    !hasSalary &&
+    totals.on_target_amt > 0 &&
+    !targetMet &&
+    (attendance === "Day" || attendance === "Night" || attendance === "Half");
   const productionAmt = showProduction
-    ? (targetMet ? totals.after_target_amt : totals.on_target_amt)
+    ? ((targetMet || (canForceAfterTargetForNonTarget && forceAfterTargetForNonTarget))
+      ? totals.after_target_amt
+      : totals.on_target_amt)
     : 0;
 
   let previewBase = 0;
@@ -481,7 +492,9 @@ export default function StaffRecordFormModal({
           : [],
         bonus_qty:  bonusQty  ? parseFloat(bonusQty)  : 0,
         bonus_rate: bonusRate ? parseFloat(bonusRate)  : null,
+        bonus_rate_override: bonusRate ? parseFloat(bonusRate) : null,
         fix_amount: fixAmount ? parseFloat(fixAmount)  : null,
+        force_after_target_for_non_target: canForceAfterTargetForNonTarget && forceAfterTargetForNonTarget,
       };
       await onAction(isEdit ? "edit" : "add", isEdit ? { id: initialData._id, ...payload } : payload);
       onClose();
@@ -665,6 +678,20 @@ export default function StaffRecordFormModal({
                   </span>
                 )}
               </div>
+            )}
+
+            {canForceAfterTargetForNonTarget && (
+              <label className="mt-2 inline-flex items-center gap-2 text-xs text-gray-700 select-none">
+                <input
+                  type="checkbox"
+                  checked={forceAfterTargetForNonTarget}
+                  onChange={(e) => setForceAfterTargetForNonTarget(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-400"
+                />
+                <span>
+                  Use <span className="font-semibold text-emerald-700">After Target ({cfg.after_target_pct}%)</span> amount even if target is not met
+                </span>
+              </label>
             )}
           </div>
         )}

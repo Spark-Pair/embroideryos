@@ -3,7 +3,7 @@ import { createContext, useEffect, useState, useCallback, useRef } from 'react';
 import { getMe, logoutUser } from '../api/auth.api';
 import { storage } from '../api/apiClient';
 import { useToast } from "./ToastContext";
-import { clearOfflineData, initOfflineForUser, offlineAccess } from "../offline/idb";
+import { clearOfflineData, getOfflineSessionMeta, initOfflineForUser, offlineAccess } from "../offline/idb";
 import { logDataSource } from "../offline/logger";
 import {
   runFullBootstrapSeed,
@@ -40,13 +40,21 @@ export default function AuthProvider({ children }) {
     };
   }, [isSubscriptionExpired]);
 
-  const triggerBootstrapSync = useCallback((forceRefresh = true) => {
-    runFullBootstrapSeed({ forceRefresh }).catch((error) => {
+  const triggerBootstrapSync = useCallback(async ({ forceRefresh = false, notifyOnFinish = false } = {}) => {
+    try {
+      await runFullBootstrapSeed({ forceRefresh });
+      if (notifyOnFinish) {
+        showToast({
+          type: "info",
+          message: "Sync completed. Latest cloud updates fetched. Refresh app if needed.",
+        });
+      }
+    } catch (error) {
       logDataSource("IDB", "seed.bootstrap.failed", {
         message: error?.response?.data?.message || error?.message || "bootstrap failed",
       });
-    });
-  }, []);
+    }
+  }, [showToast]);
 
   const maybeShowReadOnlyToast = useCallback((userData) => {
     const normalized = applySubscriptionGuard(userData);
@@ -114,6 +122,17 @@ export default function AuthProvider({ children }) {
       try {
         const userData = await getMe();
         const guardedUser = applySubscriptionGuard(userData);
+        const offlineMeta = await getOfflineSessionMeta().catch(() => null);
+        const nextUserId = String(userData?._id || userData?.id || "");
+        const nextBusinessId = String(userData?.businessId?._id || userData?.businessId || "");
+        const prevUserId = String(offlineMeta?.userId || "");
+        const prevBusinessId = String(offlineMeta?.businessId || "");
+        const isDifferentSessionScope =
+          Boolean(prevUserId && prevUserId !== nextUserId) ||
+          Boolean(prevBusinessId && prevBusinessId !== nextBusinessId);
+        if (isDifferentSessionScope) {
+          await clearOfflineData().catch(() => null);
+        }
         setUser(guardedUser);
         localStorage.setItem("cachedUser", JSON.stringify(guardedUser));
         offlineAccess.unlock();
@@ -122,7 +141,7 @@ export default function AuthProvider({ children }) {
           businessId: userData?.businessId?._id || userData?.businessId,
         });
         maybeShowReadOnlyToast(guardedUser);
-        triggerBootstrapSync(true);
+        triggerBootstrapSync({ forceRefresh: false, notifyOnFinish: true });
       } catch (error) {
         console.error('Auth init error:', error);
         const status = Number(error?.response?.status || 0);
@@ -158,6 +177,17 @@ export default function AuthProvider({ children }) {
       // Auth data already stored by loginUser in auth.api.js
       const userData = await getMe();
       const guardedUser = applySubscriptionGuard(userData);
+      const offlineMeta = await getOfflineSessionMeta().catch(() => null);
+      const nextUserId = String(userData?._id || userData?.id || "");
+      const nextBusinessId = String(userData?.businessId?._id || userData?.businessId || "");
+      const prevUserId = String(offlineMeta?.userId || "");
+      const prevBusinessId = String(offlineMeta?.businessId || "");
+      const isDifferentSessionScope =
+        Boolean(prevUserId && prevUserId !== nextUserId) ||
+        Boolean(prevBusinessId && prevBusinessId !== nextBusinessId);
+      if (isDifferentSessionScope) {
+        await clearOfflineData().catch(() => null);
+      }
       setUser(guardedUser);
       localStorage.setItem("cachedUser", JSON.stringify(guardedUser));
       offlineAccess.unlock();
@@ -165,7 +195,7 @@ export default function AuthProvider({ children }) {
         userId: userData?._id || userData?.id,
         businessId: userData?.businessId?._id || userData?.businessId,
       });
-      triggerBootstrapSync(true);
+      triggerBootstrapSync({ forceRefresh: false, notifyOnFinish: true });
       maybeShowReadOnlyToast(guardedUser);
 
       showToast({
@@ -208,7 +238,6 @@ export default function AuthProvider({ children }) {
       localStorage.removeItem("cachedUser");
       lastReadOnlyToastKeyRef.current = "";
       offlineAccess.lock();
-      clearOfflineData().catch(() => null);
       logDataSource("IDB", "offline.locked");
       localStorage.removeItem("auth:logout_in_progress");
     }

@@ -8,131 +8,151 @@ import { fetchCrpStaffRecords } from "../../api/crpStaffRecord";
 import { formatDate, formatNumbers } from "../../utils";
 
 function openPrintWindow({ staffName, monthLabel, summary, rows }) {
-  const generatedOn = new Date().toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
+  const genDate = new Date().toLocaleDateString("en-GB", {
+    day: "2-digit", month: "short", year: "numeric",
   });
 
   const infoItems = [
-    { l: "Staff", v: staffName },
-    { l: "Month", v: monthLabel },
-    { l: "Total Records", v: formatNumbers(summary.total_records, 0) },
+    { l: "Staff",           v: staffName },
+    { l: "Month",           v: monthLabel },
+    { l: "Total Records",   v: formatNumbers(summary.total_records, 0) },
     { l: "Total Qty (Dzn)", v: formatNumbers(summary.total_quantity_dzn, 2) },
-    { l: "Total Amount", v: formatNumbers(summary.total_amount, 2) },
+    { l: "Total Amount",    v: formatNumbers(summary.total_amount, 2) },
   ];
 
-  const infoHtml = infoItems
-    .map(
-      (item) => `
-      <div class="info-item">
-        <span class="lbl">${item.l}:</span>
-        <span class="val">${item.v}</span>
-      </div>`
-    )
-    .join("");
+  const infoHtml = infoItems.map(({ l, v }) => `
+    <div class="ic">
+      <span class="ic-lbl">${l}:</span>
+      <span class="ic-val">${v}</span>
+    </div>`).join("");
 
-  const rowHtml = rows
-    .map(
-      (row, idx) => `
-      <tr>
-        <td>${idx + 1}</td>
-        <td>${formatDate(row.order_date, "DD MMM yyyy")}</td>
-        <td>${row.order_description || "-"}</td>
-        <td class="r">${formatNumbers(row.quantity_dzn, 2)}</td>
-        <td>${row.category || "-"}</td>
-        <td>${row.type_name || "-"}</td>
-        <td class="r">${formatNumbers(row.rate, 2)}</td>
-        <td class="r bold">${formatNumbers(row.total_amount, 2)}</td>
-      </tr>`
-    )
-    .join("");
+  const rowsHtml = rows.map((row, idx) => `
+    <tr class="${idx % 2 === 0 ? "row-even" : "row-odd"}">
+      <td class="td-num">${idx + 1}</td>
+      <td class="td-date">${formatDate(row.order_date, "DD MMM yyyy")}</td>
+      <td>${row.order_description || "-"}</td>
+      <td class="r">${formatNumbers(row.quantity_dzn, 2)}</td>
+      <td>${row.category || "-"}</td>
+      <td>${row.type_name || "-"}</td>
+      <td class="r">${formatNumbers(row.rate, 2)}</td>
+      <td class="r bold">${formatNumbers(row.total_amount, 2)}</td>
+    </tr>`).join("");
 
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<title>CRP Report - ${staffName} - ${monthLabel}</title>
+<meta charset="UTF-8"/>
+<title>CRP Report — ${staffName} — ${monthLabel}</title>
 <style>
-  * { box-sizing: border-box; }
-  @page { size: A4 portrait; margin: 12mm; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  @page {
+    size: A4 portrait;
+    margin: 0.4in 0.4in 0.4in 0.5in;
+  }
+
+  @media print {
+    html { zoom: 100%; }
+  }
+
   body {
     font-family: 'Segoe UI', Arial, sans-serif;
-    margin: 0;
-    color: #111827;
+    font-size: 8.5pt;
+    color: #111;
+    background: #fff;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
-    font-size: 12px;
+    padding: 1pt;
   }
-  .sheet { width: 100%; }
-  .head {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    margin-bottom: 12px;
-  }
-  .title { font-size: 20px; font-weight: 700; }
-  .muted { color: #6b7280; font-size: 11px; }
+
   .info-grid {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
-    border: 1px solid #d1d5db;
-    border-radius: 12px;
+    border: 0.75pt solid #111;
+    border-radius: 8pt;
     overflow: hidden;
-    margin-bottom: 12px;
+    margin-bottom: 12pt;
+    font-size: 8pt;
   }
-  .info-item {
-    border-right: 1px solid #e5e7eb;
-    padding: 10px 12px;
+  .ic {
+    padding: 6pt 10pt;
+    border-right: 0.75pt solid #111;
+    border-bottom: 0.75pt solid #111;
     display: flex;
-    gap: 6px;
     align-items: center;
+    gap: 4pt;
   }
-  .info-item:last-child { border-right: none; }
-  .lbl { color: #6b7280; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
-  .val { font-weight: 700; }
+  .ic:nth-child(5n)        { border-right: none; }
+  .ic:nth-last-child(-n+5) { border-bottom: none; }
+  .ic-lbl { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.06em; color: #555; white-space: nowrap; }
+  .ic-val { font-weight: 600; color: #111; font-variant-numeric: tabular-nums; }
+
+  .tbl-wrap {
+    border: 0.75pt solid #111;
+    border-radius: 10pt;
+    overflow: hidden;
+  }
   table {
     width: 100%;
     border-collapse: collapse;
-    border: 1px solid #d1d5db;
-    border-radius: 12px;
-    overflow: hidden;
+    font-size: 7.5pt;
+    page-break-inside: auto;
   }
-  thead tr { background: #1f2937; color: #d1d5db; }
-  th, td { padding: 8px 10px; border-bottom: 1px solid #f3f4f6; text-align: left; }
-  th { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
-  td { font-size: 11px; }
-  .r { text-align: right; }
-  .bold { font-weight: 700; }
+  thead { display: table-header-group; }
+  tr    { page-break-inside: avoid; }
+
+  th {
+    background: #1e293b;
+    color: #dee6ef;
+    font-size: 7pt;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 6pt 5pt;
+    text-align: left;
+    border: none;
+  }
+  th.r { text-align: right; }
+
+  td {
+    padding: 6pt 5pt;
+    border-bottom: 0.5pt solid #e5e7eb;
+    vertical-align: middle;
+    color: #111;
+  }
+  td.r    { text-align: right; }
+  td.bold { font-weight: 600; }
+  td.td-num  { font-size: 7.5pt; color: #555; }
+  td.td-date { white-space: nowrap; font-weight: 500; }
+
+  tr.row-even { background: #fff; }
+  tr.row-odd  { background: #f3f4f6; }
+
   tfoot td {
-    background: #111827;
+    background: #1e293b;
     color: #fff;
-    font-weight: 800;
+    font-weight: 700;
     border-bottom: none;
+    padding: 6pt 5pt;
   }
-  .footer {
-    margin-top: 10px;
-    border-top: 1px solid #d1d5db;
-    padding-top: 8px;
+  tfoot td.r { text-align: right; }
+
+  .print-footer {
     display: flex;
     justify-content: space-between;
-    color: #6b7280;
-    font-size: 10px;
+    font-size: 7pt;
+    color: #555;
+    margin-top: 10pt;
+    border-top: 0.5pt solid #111;
+    padding-top: 5pt;
   }
 </style>
 </head>
 <body>
-  <div class="sheet">
-    <div class="head">
-      <div>
-        <div class="title">CRP Staff Monthly Report</div>
-        <div class="muted">Cropping Category Report</div>
-      </div>
-      <div class="muted">Generated: ${generatedOn}</div>
-    </div>
+<div>
+  <div class="info-grid">${infoHtml}</div>
 
-    <div class="info-grid">${infoHtml}</div>
-
+  <div class="tbl-wrap">
     <table>
       <thead>
         <tr>
@@ -146,7 +166,7 @@ function openPrintWindow({ staffName, monthLabel, summary, rows }) {
           <th class="r">Amount</th>
         </tr>
       </thead>
-      <tbody>${rowHtml}</tbody>
+      <tbody>${rowsHtml}</tbody>
       <tfoot>
         <tr>
           <td colspan="3" class="r">Total</td>
@@ -156,24 +176,23 @@ function openPrintWindow({ staffName, monthLabel, summary, rows }) {
         </tr>
       </tfoot>
     </table>
-
-    <div class="footer">
-      <span>EmbroideryOS</span>
-      <span>${staffName} · ${monthLabel}</span>
-    </div>
   </div>
+
+  <div class="print-footer">
+    <span>Generated: ${genDate} — © SparkPair · Confidential</span>
+    <span>EmbroideryOS | ${staffName} · ${monthLabel}</span>
+  </div>
+</div>
 </body>
 </html>`;
 
-  const win = window.open("", "_blank", "width=1024,height=768");
-  if (!win) return;
+  const win = window.open("", "_blank", "width=960,height=780");
+  if (!win) { alert("Pop-up blocked — please allow pop-ups for this site."); return; }
   win.document.open();
   win.document.write(html);
   win.document.close();
   win.focus();
-  const closePrintWindow = () => {
-    try { win.close(); } catch { /* no-op */ }
-  };
+  const closePrintWindow = () => { try { win.close(); } catch { /* no-op */ } };
   const handleAfterPrint = () => setTimeout(closePrintWindow, 100);
   win.addEventListener("afterprint", handleAfterPrint);
   win.onafterprint = handleAfterPrint;
@@ -181,20 +200,19 @@ function openPrintWindow({ staffName, monthLabel, summary, rows }) {
 }
 
 export default function CrpMonthlyReportModal({ isOpen, onClose }) {
-  const [staffOptions, setStaffOptions] = useState([]);
-  const [monthOptions, setMonthOptions] = useState([]);
-  const [selectedStaff, setSelectedStaff] = useState("");
-  const [selectedMonth, setSelectedMonth] = useState("");
-  const [rows, setRows] = useState([]);
-  const [summary, setSummary] = useState(null);
-  const [generated, setGenerated] = useState(false);
+  const [staffOptions,   setStaffOptions]   = useState([]);
+  const [monthOptions,   setMonthOptions]   = useState([]);
+  const [selectedStaff,  setSelectedStaff]  = useState("");
+  const [selectedMonth,  setSelectedMonth]  = useState("");
+  const [rows,           setRows]           = useState([]);
+  const [summary,        setSummary]        = useState(null);
+  const [generated,      setGenerated]      = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(false);
-  const [loadingReport, setLoadingReport] = useState(false);
+  const [loadingReport,  setLoadingReport]  = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
-
-    const loadOptions = async () => {
+    (async () => {
       setLoadingOptions(true);
       try {
         const [staffRes, recordsRes] = await Promise.all([
@@ -202,17 +220,13 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
           fetchCrpStaffRecords({ page: 1, limit: 5000 }),
         ]);
 
-        const staffs = (staffRes?.data || []).map((s) => ({
-          label: s.name,
-          value: s._id,
-        }));
+        const staffs = (staffRes?.data || []).map((s) => ({ label: s.name, value: s._id }));
 
         const monthSet = new Set(
           (recordsRes?.data || [])
             .map((r) => String(r?.month || "").trim())
             .filter(Boolean)
         );
-
         const months = Array.from(monthSet)
           .sort((a, b) => b.localeCompare(a))
           .map((m) => ({ label: m, value: m }));
@@ -230,9 +244,7 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
       } finally {
         setLoadingOptions(false);
       }
-    };
-
-    loadOptions();
+    })();
   }, [isOpen]);
 
   const selectedStaffLabel = useMemo(
@@ -242,7 +254,6 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
 
   const handleGenerate = async () => {
     if (!selectedStaff || !selectedMonth) return;
-
     setLoadingReport(true);
     try {
       const res = await fetchCrpStaffRecords({ page: 1, limit: 5000, month: selectedMonth });
@@ -252,18 +263,14 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
       });
 
       const sorted = [...filtered].sort(
-        (a, b) => new Date(a?.order_date || 0).getTime() - new Date(b?.order_date || 0).getTime()
+        (a, b) => new Date(a?.order_date || 0) - new Date(b?.order_date || 0)
       );
 
       const total_quantity_dzn = sorted.reduce((sum, r) => sum + Number(r?.quantity_dzn || 0), 0);
-      const total_amount = sorted.reduce((sum, r) => sum + Number(r?.total_amount || 0), 0);
+      const total_amount       = sorted.reduce((sum, r) => sum + Number(r?.total_amount  || 0), 0);
 
       setRows(sorted);
-      setSummary({
-        total_records: sorted.length,
-        total_quantity_dzn,
-        total_amount,
-      });
+      setSummary({ total_records: sorted.length, total_quantity_dzn, total_amount });
       setGenerated(true);
     } finally {
       setLoadingReport(false);
@@ -273,7 +280,7 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
   const handlePrint = () => {
     if (!summary) return;
     openPrintWindow({
-      staffName: selectedStaffLabel,
+      staffName:  selectedStaffLabel,
       monthLabel: selectedMonth,
       summary,
       rows,
@@ -311,6 +318,8 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
       }
     >
       <div className="space-y-4">
+
+        {/* Filters */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Select
             label="CRP Staff"
@@ -330,21 +339,24 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
           />
         </div>
 
+        {/* Screen Preview */}
         {generated && (
           <>
             {rows.length === 0 || !summary ? (
-              <div className="py-14 text-center text-sm text-gray-400">
+              <div className="py-14 text-center text-gray-400 text-sm">
                 No CRP records found for this staff / month.
               </div>
             ) : (
               <div className="rounded-3xl border border-gray-300 overflow-hidden bg-white shadow-sm p-5 space-y-4">
+
+                {/* Info grid */}
                 <div className="grid grid-cols-2 md:grid-cols-5 border border-gray-300 rounded-2xl overflow-hidden text-sm">
                   {[
-                    { l: "Staff", v: selectedStaffLabel },
-                    { l: "Month", v: selectedMonth },
-                    { l: "Total Records", v: formatNumbers(summary.total_records, 0) },
+                    { l: "Staff",           v: selectedStaffLabel },
+                    { l: "Month",           v: selectedMonth },
+                    { l: "Total Records",   v: formatNumbers(summary.total_records, 0) },
                     { l: "Total Qty (Dzn)", v: formatNumbers(summary.total_quantity_dzn, 2) },
-                    { l: "Total Amount", v: formatNumbers(summary.total_amount, 2) },
+                    { l: "Total Amount",    v: formatNumbers(summary.total_amount, 2) },
                   ].map(({ l, v }) => (
                     <div key={l} className="px-4 py-3 flex items-center gap-1.5 border-r border-b border-gray-200 last:border-r-0">
                       <p className="text-xs uppercase tracking-wide text-gray-600 shrink-0">{l}:</p>
@@ -353,6 +365,7 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
                   ))}
                 </div>
 
+                {/* Detail table */}
                 <div className="overflow-auto rounded-xl border border-gray-300">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead className="bg-slate-800 text-slate-300 uppercase text-xs tracking-wider">
@@ -369,9 +382,12 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
                     </thead>
                     <tbody className="divide-y divide-white">
                       {rows.map((row, idx) => (
-                        <tr key={row._id || `${row.order_id || "r"}-${idx}`} className={idx % 2 === 0 ? "bg-white" : "bg-gray-100"}>
-                          <td className="px-3 py-2.5">{idx + 1}</td>
-                          <td className="px-3 py-2.5 whitespace-nowrap">{formatDate(row.order_date, "DD MMM yyyy")}</td>
+                        <tr
+                          key={row._id || `r-${idx}`}
+                          className={idx % 2 === 0 ? "bg-white text-gray-800" : "bg-gray-200/85 text-black"}
+                        >
+                          <td className="px-2 py-2.5 text-gray-600 text-xs">{idx + 1}</td>
+                          <td className="px-3 py-2.5 whitespace-nowrap font-medium">{formatDate(row.order_date, "DD MMM yyyy")}</td>
                           <td className="px-3 py-2.5">{row.order_description || "-"}</td>
                           <td className="px-3 py-2.5 text-right tabular-nums">{formatNumbers(row.quantity_dzn, 2)}</td>
                           <td className="px-3 py-2.5">{row.category || "-"}</td>
@@ -383,7 +399,7 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
                     </tbody>
                     <tfoot>
                       <tr className="bg-slate-800">
-                        <td colSpan={3} className="px-3 py-2.5 text-right font-bold tracking-wider text-slate-300 uppercase">Total</td>
+                        <td colSpan={3} className="px-3 py-2.5 text-right font-bold tracking-wider text-slate-300 uppercase text-xs">Total</td>
                         <td className="px-3 py-2.5 text-right font-bold text-white tabular-nums">{formatNumbers(summary.total_quantity_dzn, 2)}</td>
                         <td colSpan={3} />
                         <td className="px-3 py-2.5 text-right font-extrabold text-white tabular-nums">{formatNumbers(summary.total_amount, 2)}</td>
@@ -391,6 +407,7 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
                     </tfoot>
                   </table>
                 </div>
+
               </div>
             )}
           </>

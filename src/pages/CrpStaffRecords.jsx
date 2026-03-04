@@ -21,12 +21,13 @@ import Select from "../components/Select";
 import Button from "../components/Button";
 import ConfirmModal from "../components/ConfirmModal";
 import CrpMonthlyReportModal from "../components/StaffRecord/CrpMonthlyReportModal";
+import { useFormKeyboard } from "../hooks/useFormKeyboard";
 import { useToast } from "../context/ToastContext";
 import { formatDate, formatNumbers } from "../utils";
 
 const CATEGORY_OPTIONS = [
-  { label: "Press", value: "Press" },
   { label: "Cropping", value: "Cropping" },
+  { label: "Press", value: "Press" },
   { label: "Other", value: "Other" },
 ];
 
@@ -49,6 +50,14 @@ function toQtyDzn(order) {
 }
 
 function CrpRecordFormModal({ isOpen, onClose, onAction }) {
+  const monthRef = useRef(null);
+  const repeatRef = useRef(null);
+  const orderDateRef = useRef(null);
+  const descriptionRef = useRef(null);
+  const quantityRef = useRef(null);
+  const staffRef = useRef(null);
+  const categoryRef = useRef(null);
+  const typeRef = useRef(null);
   const [orders, setOrders] = useState([]);
   const [staffs, setStaffs] = useState([]);
   const [rateConfigs, setRateConfigs] = useState([]);
@@ -64,7 +73,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
     order_description: "",
     quantity_dzn: "",
     staff_id: "",
-    category: "Press",
+    category: "Cropping",
     type_name: "",
     repeat_record_id: "",
   });
@@ -98,7 +107,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
       order_description: "",
       quantity_dzn: "",
       staff_id: "",
-      category: "Press",
+      category: "Cropping",
       type_name: "",
       repeat_record_id: "",
     });
@@ -143,10 +152,13 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
   const totalAmount = qtyDzn * rate;
 
   const staffOptions = staffs.map((staff) => ({ label: staff.name, value: staff._id }));
-  const repeatOptions = previousRecords.map((record) => ({
-    label: `${formatDate(record.order_date, "DD MMM yyyy")} · ${record.order_description || "No description"} · ${formatNumbers(record.quantity_dzn, 2)} Dzn`,
-    value: record._id,
-  }));
+  const repeatOptions = [
+    { label: "None (No prefill)", value: "" },
+    ...previousRecords.map((record) => ({
+      label: `${formatDate(record.order_date, "DD MMM yyyy")} · ${record.order_description || "No description"} · ${formatNumbers(record.quantity_dzn, 2)} Dzn`,
+      value: record._id,
+    })),
+  ];
 
   const typeOptions = rateConfigs
     .filter((cfg) => cfg.category === formData.category)
@@ -159,6 +171,34 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
     !!formData.type_name &&
     rate > 0 &&
     qtyDzn > 0;
+
+  const handleSubmit = async () => {
+    if (!isValid || submitting) {
+      if (!isValid) setError("Please complete all required fields.");
+      return;
+    }
+    setError("");
+    setSubmitting(true);
+    try {
+      await onAction({
+        order_id: formData.order_id || null,
+        order_date: formData.order_date,
+        order_description: formData.order_description,
+        staff_id: formData.staff_id,
+        category: formData.category,
+        type_name: formData.type_name,
+        rate,
+        quantity_dzn: qtyDzn,
+      });
+      onClose();
+    } catch {
+      // parent toast
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  useFormKeyboard({ onEnterSubmit: handleSubmit });
 
   const applyOrderPrefill = (order) => {
     if (!order) return;
@@ -175,6 +215,10 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
   };
 
   const applyRepeatPrefill = (recordId) => {
+    if (!recordId) {
+      setFormData((prev) => ({ ...prev, repeat_record_id: "" }));
+      return;
+    }
     const rec = previousRecords.find((r) => String(r._id) === String(recordId));
     if (!rec) return;
     setFormData((prev) => ({
@@ -191,6 +235,23 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
     }));
   };
 
+  const focusRef = (ref) => {
+    setTimeout(() => ref?.current?.focus?.(), 0);
+  };
+
+  const focusSaveButton = () => {
+    setTimeout(() => {
+      const btn = document.querySelector('button[data-save-btn="true"]');
+      btn?.focus?.();
+    }, 0);
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const t = setTimeout(() => monthRef.current?.focus(), 120);
+    return () => clearTimeout(t);
+  }, [isOpen]);
+
   return (
     <Modal
       isOpen={isOpen}
@@ -204,31 +265,8 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
           <div className="flex gap-2">
             <Button variant="secondary" outline onClick={onClose} disabled={submitting}>Cancel</Button>
             <Button
-              onClick={async () => {
-                if (!isValid) {
-                  setError("Please complete all required fields.");
-                  return;
-                }
-                setError("");
-                setSubmitting(true);
-                try {
-                  await onAction({
-                    order_id: formData.order_id || null,
-                    order_date: formData.order_date,
-                    order_description: formData.order_description,
-                    staff_id: formData.staff_id,
-                    category: formData.category,
-                    type_name: formData.type_name,
-                    rate,
-                    quantity_dzn: qtyDzn,
-                  });
-                  onClose();
-                } catch {
-                  // parent toast
-                } finally {
-                  setSubmitting(false);
-                }
-              }}
+              onClick={handleSubmit}
+              data-save-btn="true"
               loading={submitting}
               disabled={!isValid}
             >
@@ -259,9 +297,15 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
 
           <div className="p-4 border-b border-gray-200">
             <Input
+              ref={monthRef}
               label="Month"
               type="month"
               value={formData.month}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                focusRef(repeatRef);
+              }}
               onChange={(e) =>
                 setFormData((prev) => ({ ...prev, month: e.target.value, order_id: "" }))
               }
@@ -285,7 +329,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
                     key={order._id}
                     type="button"
                     onClick={() => applyOrderPrefill(order)}
-                    className={`w-full text-left rounded-xl border px-3.5 py-2.5 transition ${
+                    className={`w-full text-left rounded-xl border px-3.5 py-2.5 transition focus:outline-none focus:ring-2 focus:ring-teal-300 ${
                       isSelected
                         ? "border-teal-400 bg-teal-50"
                         : "border-gray-200 bg-white hover:bg-gray-50"
@@ -322,55 +366,87 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
           <h3 className="text-sm font-semibold text-gray-800 mb-3">CRP Details</h3>
           <div className="space-y-3">
             <Select
+              ref={repeatRef}
               label="Repeat Previous Record"
               value={formData.repeat_record_id}
-              onChange={applyRepeatPrefill}
+              onChange={(value) => {
+                applyRepeatPrefill(value);
+                focusRef(orderDateRef);
+              }}
               options={repeatOptions}
               placeholder="Select previous record..."
               disabled={loadingData || repeatOptions.length === 0}
             />
             <Input
+              ref={orderDateRef}
               label="Order Date"
               type="date"
               value={formData.order_date}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                focusRef(descriptionRef);
+              }}
               onChange={(e) => setFormData((prev) => ({ ...prev, order_date: e.target.value }))}
             />
             <Input
+              ref={descriptionRef}
               label="Description"
               value={formData.order_description}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                focusRef(quantityRef);
+              }}
               onChange={(e) => setFormData((prev) => ({ ...prev, order_description: e.target.value }))}
               required={false}
             />
             <Input
+              ref={quantityRef}
               label="Quantity (Dzn)"
               type="number"
               step="0.001"
               min="0"
               value={formData.quantity_dzn}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                focusRef(staffRef);
+              }}
               onChange={(e) => setFormData((prev) => ({ ...prev, quantity_dzn: e.target.value }))}
             />
 
             <Select
+              ref={staffRef}
               label="Staff (Cropping)"
               value={formData.staff_id}
-              onChange={(value) => setFormData((prev) => ({ ...prev, staff_id: value }))}
+              onChange={(value) => {
+                setFormData((prev) => ({ ...prev, staff_id: value }));
+                focusRef(categoryRef);
+              }}
               options={staffOptions}
               placeholder={loadingData ? "Loading staff..." : "Select staff"}
             />
 
             <Select
+              ref={categoryRef}
               label="Category"
               value={formData.category}
-              onChange={(value) =>
-                setFormData((prev) => ({ ...prev, category: value, type_name: "" }))
-              }
+              onChange={(value) => {
+                setFormData((prev) => ({ ...prev, category: value, type_name: "" }));
+                focusRef(typeRef);
+              }}
               options={CATEGORY_OPTIONS}
             />
 
             <Select
+              ref={typeRef}
               label="Type"
               value={formData.type_name}
-              onChange={(value) => setFormData((prev) => ({ ...prev, type_name: value }))}
+              onChange={(value) => {
+                setFormData((prev) => ({ ...prev, type_name: value }));
+                focusSaveButton();
+              }}
               options={typeOptions}
               placeholder="Select type"
             />

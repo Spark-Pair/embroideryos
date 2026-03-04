@@ -70,6 +70,17 @@ export const initOfflineForUser = async ({ userId, businessId }) => {
   logDataSource("IDB", "offline.init", { userId, businessId });
 };
 
+export const getOfflineSessionMeta = async () => {
+  const db = await getDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("meta", "readonly");
+    const store = tx.objectStore("meta");
+    const req = store.get("session");
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error || new Error("Failed to read offline session meta"));
+  });
+};
+
 export const clearOfflineData = async () => {
   const db = await getDb();
   db.close();
