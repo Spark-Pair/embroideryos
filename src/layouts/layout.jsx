@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import SidebarNav from '../components/SidebarNav';
 import useAuth from '../hooks/useAuth';
 import { Outlet, useLocation } from 'react-router-dom';
@@ -7,12 +7,15 @@ import { AlertTriangle } from "lucide-react";
 import { formatDate } from "../utils";
 import { useToast } from "../context/ToastContext";
 import SyncStatusPortal from "../components/SyncStatusPortal";
+import ConfirmModal from "../components/ConfirmModal";
 
 export default function Layout({ children }) {
   const { logout, user } = useAuth();
   const location = useLocation();
   const { showToast } = useToast();
   const lastReadOnlyBlockToastAtRef = useRef(0);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [logoutLoading, setLogoutLoading] = useState(false);
   const isReadOnly = Boolean(user?.subscription?.readOnly);
   const expiryText = user?.subscription?.expiresAt
     ? formatDate(user.subscription.expiresAt, "DD MMM yyyy")
@@ -114,7 +117,17 @@ export default function Layout({ children }) {
   }, [isReadOnly, showToast]);
 
   const handleLogout = () => {
-    logout();
+    setLogoutConfirmOpen(true);
+  };
+
+  const confirmLogout = async () => {
+    setLogoutLoading(true);
+    try {
+      await logout();
+    } finally {
+      setLogoutLoading(false);
+      setLogoutConfirmOpen(false);
+    }
   };
 
   return (
@@ -149,6 +162,21 @@ export default function Layout({ children }) {
         </AnimatePresence>
       </main>
       <SyncStatusPortal />
+      <ConfirmModal
+        isOpen={logoutConfirmOpen}
+        onClose={() => {
+          if (logoutLoading) return;
+          setLogoutConfirmOpen(false);
+        }}
+        onConfirm={confirmLogout}
+        isLoading={logoutLoading}
+        closeOnConfirm={false}
+        variant="danger"
+        title="Logout"
+        message="Are you sure you want to logout from this device?"
+        confirmText="Logout"
+        cancelText="Cancel"
+      />
     </div>
   );
 }

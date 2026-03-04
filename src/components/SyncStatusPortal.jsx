@@ -3,11 +3,37 @@ import { RefreshCcw, WifiOff, X, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getPendingSyncActions, offlineAccess } from "../offline/idb";
 import { subscribeBootstrapSyncState } from "../offline/bootstrapSyncState";
+import { runFullBootstrapSeed } from "../offline/bootstrapSeed";
+import { logDataSource } from "../offline/logger";
 import useAuth from "../hooks/useAuth";
+import { useToast } from "../context/ToastContext";
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
 const formatCount = (n) => (n > 99 ? "99+" : String(n));
 const CHECK_TICK_MS = 30000;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const warmSyncWorkers = async () => {
+  await Promise.all([
+    import("../offline/customersLocalFirst"),
+    import("../offline/suppliersLocalFirst"),
+    import("../offline/staffLocalFirst"),
+    import("../offline/staffRecordsLocalFirst"),
+    import("../offline/staffPaymentsLocalFirst"),
+    import("../offline/customerPaymentsLocalFirst"),
+    import("../offline/supplierPaymentsLocalFirst"),
+    import("../offline/expensesLocalFirst"),
+    import("../offline/ordersLocalFirst"),
+    import("../offline/invoicesLocalFirst"),
+    import("../offline/expenseItemsLocalFirst"),
+    import("../offline/productionConfigLocalFirst"),
+    import("../offline/crpRateConfigsLocalFirst"),
+    import("../offline/crpStaffRecordsLocalFirst"),
+    import("../offline/businessLocalFirst"),
+    import("../offline/shortcutsLocalFirst"),
+  ]);
+};
+
 const relativeTime = (ts) => {
   if (!ts) return "Checking…";
   const d = Date.now() - Number(ts);
@@ -45,6 +71,7 @@ function StatusDot({ statusKey, color }) {
 /* ─── Main ────────────────────────────────────────────────────────────────── */
 export default function SyncStatusPortal() {
   const { user } = useAuth();
+  const { showToast } = useToast();
 
   const [pendingCount, setPendingCount]   = useState(0);
   const [isOnline, setIsOnline]           = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
@@ -56,6 +83,7 @@ export default function SyncStatusPortal() {
     phase: "idle", totalSteps: 0, completedSteps: 0,
     failedSteps: 0, currentStepLabel: "", startedAt: 0,
   });
+  const [manualSyncing, setManualSyncing] = useState(false);
 
   const bootstrapInProgress = bootstrap.phase === "syncing";
   const bootstrapPercent = useMemo(() => {
@@ -64,11 +92,11 @@ export default function SyncStatusPortal() {
   }, [bootstrap.completedSteps, bootstrap.totalSteps, bootstrapInProgress]);
 
   const hasPendingQueue = pendingCount > 0;
-  const isBusy          = bootstrapInProgress || hasPendingQueue;
+  const isBusy          = bootstrapInProgress || hasPendingQueue || manualSyncing;
   const hasError        = bootstrap.phase === "done" && bootstrap.failedSteps > 0;
 
   const statusKey = !isOnline        ? "offline"
-    : bootstrapInProgress            ? "syncing"
+    : (bootstrapInProgress || manualSyncing) ? "syncing"
     : hasPendingQueue                ? "pending"
     : hasError                       ? "error"
     : "synced";
@@ -113,11 +141,61 @@ export default function SyncStatusPortal() {
     return () => clearInterval(id);
   }, []);
 
-  const handleManualSync = () => {
-    if (!isOnline || isBusy) return;
+  const triggerQueueWorkers = () => {
     window.dispatchEvent(new Event("online"));
     window.dispatchEvent(new Event("visibilitychange"));
-    setLastCheckedAt(Date.now());
+    document.dispatchEvent(new Event("visibilitychange"));
+  };
+
+  const waitUntilQueueDrained = async (timeoutMs = 90000) => {
+    const startedAt = Date.now();
+    let zeroSeenAt = 0;
+    while (Date.now() - startedAt < timeoutMs) {
+      const actions = await getPendingSyncActions();
+      const count = Array.isArray(actions) ? actions.length : 0;
+      setPendingCount(count);
+      if (count === 0) {
+        if (!zeroSeenAt) zeroSeenAt = Date.now();
+        if (Date.now() - zeroSeenAt >= 1200) return true;
+      } else {
+        zeroSeenAt = 0;
+      }
+      triggerQueueWorkers();
+      await sleep(900);
+    }
+    return false;
+  };
+
+  const handleManualSync = async () => {
+    if (!isOnline || isBusy) return;
+    setManualSyncing(true);
+    setPollError(false);
+    try {
+      await warmSyncWorkers();
+      triggerQueueWorkers();
+      const drained = await waitUntilQueueDrained(90000);
+      if (!drained) {
+        showToast({
+          type: "warning",
+          message: "Some pending local changes are still syncing in background.",
+        });
+      }
+
+      // Cloud -> IDB refresh for all bootstrap modules.
+      await runFullBootstrapSeed({ forceRefresh: true });
+      logDataSource("IDB", "sync.manual.complete", { drained });
+      showToast({ type: "success", message: "Manual sync completed." });
+    } catch (error) {
+      logDataSource("IDB", "sync.manual.failed", {
+        message: error?.response?.data?.message || error?.message || "manual sync failed",
+      });
+      showToast({ type: "error", message: "Manual sync failed. Please retry." });
+    } finally {
+      setManualSyncing(false);
+      setLastCheckedAt(Date.now());
+      const actions = await getPendingSyncActions().catch(() => []);
+      setPendingCount(Array.isArray(actions) ? actions.length : 0);
+    }
   };
 
   if (!user || !offlineAccess.isUnlocked()) return null;

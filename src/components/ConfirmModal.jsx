@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { AlertTriangle, CircleCheck, Info, Power, XCircle } from 'lucide-react';
 import Button from './Button';
 import Modal from './Modal';
@@ -10,8 +11,12 @@ export default function ConfirmModal({
   message,
   confirmText = "Confirm",
   cancelText = "Cancel",
-  variant = "danger" // danger, success, warning, info
+  variant = "danger", // danger, success, warning, info
+  isLoading = false,
+  closeOnConfirm = true,
 }) {
+  const [internalLoading, setInternalLoading] = useState(false);
+  const loading = Boolean(isLoading || internalLoading);
   
   const icons = {
     danger: XCircle,
@@ -47,15 +52,21 @@ export default function ConfirmModal({
 
   const colors = colorClasses[variant];
 
-  const handleConfirm = () => {
-    onConfirm();
-    onClose();
+  const handleConfirm = async () => {
+    if (loading) return;
+    try {
+      setInternalLoading(true);
+      await onConfirm?.();
+      if (closeOnConfirm) onClose?.();
+    } finally {
+      setInternalLoading(false);
+    }
   };
 
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={loading ? () => {} : onClose}
       maxWidth="max-w-md"
     >
       <div className="text-center">
@@ -85,12 +96,14 @@ export default function ConfirmModal({
               outline
               variant="secondary"
               className="w-1/3"
+              disabled={loading}
               onClick={onClose}
             >
               {cancelText}
             </Button>
             <Button
               icon={Power}
+              loading={loading}
               outline
               variant={variant}
               onClick={handleConfirm}
