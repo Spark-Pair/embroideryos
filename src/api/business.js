@@ -1,6 +1,11 @@
 // api/business.js
 import { apiClient } from "./apiClient";
-import { fetchMyInvoiceBannerLocalFirst, updateMyInvoiceBannerLocalFirst } from "../offline/businessLocalFirst";
+import {
+  fetchMyInvoiceBannerLocalFirst,
+  updateMyInvoiceBannerLocalFirst,
+  fetchMyInvoiceCounterLocalFirst,
+  updateMyInvoiceCounterLocalFirst,
+} from "../offline/businessLocalFirst";
 
 const BUSINESS_URL = "/businesses";
 
@@ -47,4 +52,12 @@ export const fetchMyInvoiceBanner = async () => {
 
 export const updateMyInvoiceBanner = async (invoice_banner_data) => {
   return updateMyInvoiceBannerLocalFirst(invoice_banner_data);
+};
+
+export const fetchMyInvoiceCounter = async (params = {}) => {
+  return fetchMyInvoiceCounterLocalFirst(params);
+};
+
+export const updateMyInvoiceCounter = async (payload) => {
+  return updateMyInvoiceCounterLocalFirst(payload);
 };

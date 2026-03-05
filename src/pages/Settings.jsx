@@ -10,9 +10,15 @@ import {
   Edit3,
   Power,
   Scissors,
+  Hash,
 } from "lucide-react";
 import { fetchProductionConfig, createProductionConfig } from "../api/productionConfig";
-import { fetchMyInvoiceBanner, updateMyInvoiceBanner } from "../api/business";
+import {
+  fetchMyInvoiceBanner,
+  updateMyInvoiceBanner,
+  fetchMyInvoiceCounter,
+  updateMyInvoiceCounter,
+} from "../api/business";
 import { fetchMySubscription } from "../api/subscription";
 import {
   createExpenseItem,
@@ -448,6 +454,10 @@ export default function SettingsPage() {
   const [formModal, setFormModal] = useState(false);
   const [invoiceBanner, setInvoiceBanner] = useState("");
   const [bannerModalOpen, setBannerModalOpen] = useState(false);
+  const [invoiceCounter, setInvoiceCounter] = useState(null);
+  const [invoiceCounterInput, setInvoiceCounterInput] = useState("");
+  const [invoiceCounterLoading, setInvoiceCounterLoading] = useState(false);
+  const [savingInvoiceCounter, setSavingInvoiceCounter] = useState(false);
   const [subscription, setSubscription] = useState(null);
   const [expenseItems, setExpenseItems] = useState([]);
   const [crpRateConfigs, setCrpRateConfigs] = useState([]);
@@ -504,6 +514,20 @@ export default function SettingsPage() {
       }
     };
 
+    const loadInvoiceCounter = async () => {
+      try {
+        setInvoiceCounterLoading(true);
+        const res = await fetchMyInvoiceCounter();
+        setInvoiceCounter(res || null);
+        setInvoiceCounterInput(String(res?.last_invoice_no ?? 0));
+      } catch {
+        setInvoiceCounter(null);
+        setInvoiceCounterInput("0");
+      } finally {
+        setInvoiceCounterLoading(false);
+      }
+    };
+
     const loadSubscription = async () => {
       try {
         const res = await fetchMySubscription();
@@ -514,6 +538,7 @@ export default function SettingsPage() {
     };
 
     loadInvoiceBanner();
+    loadInvoiceCounter();
     loadExpenseItems();
     loadCrpRateConfigs();
     loadSubscription();
@@ -587,6 +612,10 @@ export default function SettingsPage() {
   const planDetails = subscription?.plan_details;
   const hasInvoiceBanner = Boolean(planDetails?.features?.invoice_banner);
   const hasInvoiceImageUpload = Boolean(planDetails?.features?.invoice_image_upload);
+  const invoiceCanUpdate = Boolean(invoiceCounter?.can_update);
+  const invoiceYear = Number(invoiceCounter?.year) || new Date().getFullYear();
+  const nextInvoiceNo = Number(invoiceCounter?.next_invoice_no || 1);
+  const nextInvoiceLabel = `${invoiceYear}-${String(nextInvoiceNo).padStart(4, "0")}`;
 
   // ── Shared row renderer for expense item lists ────────────────────────────
   const renderExpenseRow = (item, variant) => (
@@ -850,6 +879,74 @@ export default function SettingsPage() {
           </SettingsSection>
 
           {/* ── Invoice Banner ── */}
+          <SettingsSection
+            title="Invoice Numbering"
+            description="Set starting sequence for invoice numbers. Format: YYYY-0001"
+            icon={Hash}
+            action={
+              <Button
+                onClick={async () => {
+                  try {
+                    setSavingInvoiceCounter(true);
+                    const value = Number(invoiceCounterInput);
+                    const res = await updateMyInvoiceCounter({
+                      year: invoiceYear,
+                      last_invoice_no: value,
+                    });
+                    setInvoiceCounter(res || null);
+                    setInvoiceCounterInput(String(res?.last_invoice_no ?? value));
+                    showToast({ type: "success", message: "Invoice counter updated" });
+                  } catch (err) {
+                    showToast({
+                      type: "error",
+                      message: err.response?.data?.message || "Failed to update invoice counter",
+                    });
+                  } finally {
+                    setSavingInvoiceCounter(false);
+                  }
+                }}
+                disabled={
+                  invoiceCounterLoading ||
+                  savingInvoiceCounter ||
+                  !invoiceCanUpdate ||
+                  invoiceCounterInput === "" ||
+                  Number(invoiceCounterInput) < 0
+                }
+              >
+                Save Counter
+              </Button>
+            }
+          >
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <Input
+                label="Year"
+                value={String(invoiceYear)}
+                readOnly
+                required={false}
+              />
+              <Input
+                label="Last Invoice No"
+                type="number"
+                value={invoiceCounterInput}
+                onChange={(e) => setInvoiceCounterInput(e.target.value)}
+                disabled={invoiceCounterLoading || !invoiceCanUpdate}
+                required={false}
+              />
+              <Input
+                label="Next Invoice"
+                value={nextInvoiceLabel}
+                readOnly
+                required={false}
+              />
+            </div>
+
+            {!invoiceCanUpdate && (
+              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                Invoice counter locked: invoices already exist for this business.
+              </div>
+            )}
+          </SettingsSection>
+
           <SettingsSection
             title="Invoice Banner"
             description="This banner appears at the top of invoice preview and print."

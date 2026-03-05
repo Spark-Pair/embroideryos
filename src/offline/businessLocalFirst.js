@@ -3,6 +3,7 @@ import { completeSyncAction, failSyncAction, getEntitySnapshot, getPendingSyncAc
 import { logDataSource } from "./logger";
 
 const BANNER_KEY = "business:invoice_banner";
+const INVOICE_COUNTER_KEY = "business:invoice_counter";
 
 let syncInFlight = false;
 let onlineHandlerAttached = false;
@@ -36,6 +37,34 @@ const processBannerQueue = async () => {
       } catch (error) {
         await failSyncAction(action.id, error?.response?.data?.message || error?.message || "sync failed");
         logDataSource("IDB", "sync.invoiceBanner.failed", {
+          id: action.id,
+          method: action.method,
+          url: action.url,
+        });
+      }
+    }
+
+    const counterActions = await getPendingSyncActions("business.invoiceCounter");
+    for (const action of counterActions) {
+      try {
+        logDataSource("IDB", "sync.invoiceCounter.start", {
+          id: action.id,
+          method: action.method,
+          url: action.url,
+        });
+        const res = await apiClient.patch(action.url, action.payload);
+        await completeSyncAction(action.id);
+        logDataSource("IDB", "sync.invoiceCounter.success", {
+          id: action.id,
+          method: action.method,
+          url: action.url,
+        });
+        if (res?.data) {
+          await upsertEntitySnapshot(INVOICE_COUNTER_KEY, res.data);
+        }
+      } catch (error) {
+        await failSyncAction(action.id, error?.response?.data?.message || error?.message || "sync failed");
+        logDataSource("IDB", "sync.invoiceCounter.failed", {
           id: action.id,
           method: action.method,
           url: action.url,
@@ -99,4 +128,70 @@ export const updateMyInvoiceBannerLocalFirst = async (invoice_banner_data) => {
 
   processBannerQueue().catch(() => null);
   return { invoice_banner_data };
+};
+
+export const fetchMyInvoiceCounterLocalFirst = async () => {
+  if (!offlineAccess.isUnlocked()) {
+    const res = await apiClient.get("/businesses/me/invoice-counter");
+    return res.data;
+  }
+
+  if (navigator.onLine) {
+    try {
+      const res = await apiClient.get("/businesses/me/invoice-counter");
+      if (res?.data) {
+        await upsertEntitySnapshot(INVOICE_COUNTER_KEY, res.data);
+        return res.data;
+      }
+    } catch {
+      // Fall back to local snapshot
+    }
+  }
+
+  const cached = await getEntitySnapshot(INVOICE_COUNTER_KEY);
+  if (cached && typeof cached === "object") {
+    logDataSource("IDB", "business.invoiceCounter.local", { cached: true });
+    return cached;
+  }
+
+  return {
+    year: new Date().getFullYear(),
+    last_invoice_no: 0,
+    next_invoice_no: 1,
+    can_update: true,
+    has_invoices: false,
+    invoice_count: 0,
+  };
+};
+
+export const updateMyInvoiceCounterLocalFirst = async (payload) => {
+  if (!offlineAccess.isUnlocked()) {
+    const res = await apiClient.patch("/businesses/me/invoice-counter", payload);
+    return res.data;
+  }
+
+  const merged = {
+    ...(await getEntitySnapshot(INVOICE_COUNTER_KEY)),
+    ...(payload || {}),
+  };
+  const next = {
+    year: Number(merged?.year || new Date().getFullYear()),
+    last_invoice_no: Number(merged?.last_invoice_no || 0),
+    next_invoice_no: Number(merged?.last_invoice_no || 0) + 1,
+    can_update: true,
+    has_invoices: false,
+    invoice_count: 0,
+  };
+  await upsertEntitySnapshot(INVOICE_COUNTER_KEY, next);
+
+  await queueSyncAction({
+    entity: "business.invoiceCounter",
+    method: "PATCH",
+    url: "/businesses/me/invoice-counter",
+    payload,
+    meta: {},
+  });
+
+  processBannerQueue().catch(() => null);
+  return next;
 };
