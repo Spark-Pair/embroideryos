@@ -189,7 +189,7 @@ function normalizePrintStyles() {
       #salary-slips-print-root > div {
         display: grid !important;
         grid-template-columns: repeat(2, 1fr) !important;
-        gap: 12px !important;
+        gap: 50px !important;
         width: 100% !important;
       }
       #salary-slips-print-root > div > div {
