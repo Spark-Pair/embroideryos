@@ -278,10 +278,11 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
       const prevMonthKey = getPreviousMonthKey(selectedMonth);
       const prevMonthMeta = toMonthWindow(prevMonthKey);
 
-      const [staffRes, currentRes, historyRes, historyPaymentsRes] = await Promise.all([
+      const [staffRes, currentRes, historyRes, currentPaymentsRes, historyPaymentsRes] = await Promise.all([
         fetchStaff(selectedStaff),
         fetchCrpStaffRecords({ page: 1, limit: 5000, month: selectedMonth }),
         fetchCrpStaffRecords({ page: 1, limit: 20000, staff_id: selectedStaff, date_to: prevMonthMeta.to }),
+        fetchStaffPayments({ staff_id: selectedStaff, month: selectedMonth, limit: 5000 }),
         fetchStaffPayments({ staff_id: selectedStaff, limit: 20000 }),
       ]);
 
@@ -291,6 +292,7 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
       });
 
       const historyRecords = historyRes?.data || [];
+      const currentPayments = currentPaymentsRes?.data || [];
       const historyPayments = historyPaymentsRes?.data || [];
       const openingBalance = Number(staffRes?.opening_balance) || 0;
 
@@ -308,7 +310,7 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
         if (p.type === "advance" || p.type === "payment") historyClosing -= amt;
       });
 
-      const thisMonthDeduction = historyPayments.reduce((sum, p) => {
+      const thisMonthDeduction = currentPayments.reduce((sum, p) => {
         if (!getPaymentInMonth(p, selectedMonth, monthMeta.from, monthMeta.to)) return sum;
         const amt = Number(p.amount) || 0;
         if (p.type === "advance" || p.type === "payment" || p.type === "adjustment") {

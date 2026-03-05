@@ -16,8 +16,9 @@ const TYPE_OPTIONS = [
 
 const todayInput = () => new Date().toISOString().slice(0, 10);
 const monthInput = () => new Date().toISOString().slice(0, 7);
+const toInputDate = (value) => (value ? new Date(value).toISOString().slice(0, 10) : "");
 
-export default function StaffPaymentFormModal({ isOpen, onClose, onAction }) {
+export default function StaffPaymentFormModal({ isOpen, onClose, onAction, initialData }) {
   const { showToast } = useToast();
   const staffRef = useRef(null);
   const dateRef = useRef(null);
@@ -30,6 +31,7 @@ export default function StaffPaymentFormModal({ isOpen, onClose, onAction }) {
   const [staffLoading, setStaffLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
+    id: "",
     staff_id: "",
     date: todayInput(),
     month: monthInput(),
@@ -37,6 +39,7 @@ export default function StaffPaymentFormModal({ isOpen, onClose, onAction }) {
     amount: "",
     remarks: "",
   });
+  const mode = formData.id ? "edit" : "add";
 
   const staffOptions = useMemo(
     () => staffList.map((s) => ({ label: s.name, value: s._id })),
@@ -51,10 +54,12 @@ export default function StaffPaymentFormModal({ isOpen, onClose, onAction }) {
 
     setSubmitting(true);
     try {
-      await onAction("add", {
-        ...formData,
-        amount: Number(formData.amount),
-        remarks: formData.remarks?.trim() ? formData.remarks.trim() : null,
+      const { id, ...rest } = formData;
+      await onAction(mode, {
+        id: id || undefined,
+        ...rest,
+        amount: Number(rest.amount),
+        remarks: rest.remarks?.trim() ? rest.remarks.trim() : null,
       });
 
       onClose();
@@ -70,14 +75,27 @@ export default function StaffPaymentFormModal({ isOpen, onClose, onAction }) {
   useEffect(() => {
     if (!isOpen) return;
 
-    setFormData({
-      staff_id: "",
-      date: todayInput(),
-      month: monthInput(),
-      type: "",
-      amount: "",
-      remarks: "",
-    });
+    if (initialData?._id) {
+      setFormData({
+        id: initialData._id,
+        staff_id: initialData.staff_id?._id || initialData.staff_id || "",
+        date: toInputDate(initialData.date) || todayInput(),
+        month: initialData.month || monthInput(),
+        type: initialData.type || "",
+        amount: initialData.amount ?? "",
+        remarks: initialData.remarks || "",
+      });
+    } else {
+      setFormData({
+        id: "",
+        staff_id: "",
+        date: todayInput(),
+        month: monthInput(),
+        type: "",
+        amount: "",
+        remarks: "",
+      });
+    }
 
     const loadStaffs = async () => {
       setStaffLoading(true);
@@ -94,14 +112,14 @@ export default function StaffPaymentFormModal({ isOpen, onClose, onAction }) {
     };
 
     loadStaffs();
-  }, [isOpen]);
+  }, [isOpen, initialData]);
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       maxWidth="max-w-xl"
-      title="Add Staff Payment"
+      title={mode === "edit" ? "Edit Staff Payment" : "Add Staff Payment"}
       subtitle="Select staff, date, month, type, amount and optional remarks."
       footer={
         <div className="flex justify-end gap-3">
@@ -113,7 +131,7 @@ export default function StaffPaymentFormModal({ isOpen, onClose, onAction }) {
             loading={submitting}
             disabled={!formData.staff_id || !formData.date || !formData.month || !formData.type || !formData.amount}
           >
-            Save Payment
+            {mode === "edit" ? "Update Payment" : "Save Payment"}
           </Button>
         </div>
       }

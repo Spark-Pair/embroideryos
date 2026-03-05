@@ -178,6 +178,15 @@ const syncCreateSuccess = async (action, serverPayment) => {
   });
 };
 
+const syncUpdateSuccess = async (action, serverPayment) => {
+  const id = normalizeId(serverPayment) || String(action?.meta?.id || "");
+  if (!id) return;
+  await patchOverlay((overlay) => {
+    overlay[id] = { ...serverPayment, _id: id };
+    return overlay;
+  });
+};
+
 const processStaffPaymentQueue = async () => {
   if (syncInFlight) return;
   if (!offlineAccess.isUnlocked()) return;
@@ -197,6 +206,10 @@ const processStaffPaymentQueue = async () => {
           const res = await apiClient.post(action.url, action.payload);
           const serverPayment = res?.data?.data || res?.data;
           await syncCreateSuccess(action, serverPayment);
+        } else if (action.method === "PUT") {
+          const res = await apiClient.put(action.url, action.payload);
+          const serverPayment = res?.data?.data || res?.data;
+          await syncUpdateSuccess(action, serverPayment);
         }
 
         await completeSyncAction(action.id);
@@ -362,6 +375,39 @@ export const createStaffPaymentLocalFirst = async (payload) => {
     url: STAFF_PAYMENTS_URL,
     payload,
     meta: { localId },
+  });
+
+  processStaffPaymentQueue().catch(() => null);
+  return { success: true, data: localPayment };
+};
+
+export const updateStaffPaymentLocalFirst = async (id, payload) => {
+  if (!offlineAccess.isUnlocked()) {
+    const res = await apiClient.put(`${STAFF_PAYMENTS_URL}/${id}`, payload);
+    return res.data;
+  }
+
+  const staff = await getStaffSnapshot();
+  const staffRow = staff.find((row) => String(row?._id || "") === String(payload?.staff_id || ""));
+  const localPayment = {
+    ...(payload || {}),
+    _id: String(id),
+    staff_id: staffRow ? { ...staffRow, _id: staffRow._id } : payload?.staff_id,
+    __syncStatus: "pending",
+    updatedAt: new Date().toISOString(),
+  };
+
+  await patchOverlay((overlay) => {
+    overlay[String(id)] = { ...(overlay[String(id)] || {}), ...localPayment };
+    return overlay;
+  });
+
+  await queueSyncAction({
+    entity: "staffPayments",
+    method: "PUT",
+    url: `${STAFF_PAYMENTS_URL}/${id}`,
+    payload,
+    meta: { id: String(id) },
   });
 
   processStaffPaymentQueue().catch(() => null);

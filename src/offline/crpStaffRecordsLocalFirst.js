@@ -60,6 +60,11 @@ const getAllBase = async () => {
   return uniqueById(Array.isArray(all) ? all : []);
 };
 
+const getStaffSnapshot = async () => {
+  const staff = await getEntitySnapshot("staffs:names");
+  return Array.isArray(staff) ? staff : [];
+};
+
 const withOverlayList = (rows = [], overlay = {}) => {
   const base = uniqueById(rows);
   const map = new Map(base.map((row) => [normalizeId(row), row]));
@@ -107,6 +112,15 @@ const syncCreateSuccess = async (action, serverRow) => {
   });
 };
 
+const syncUpdateSuccess = async (action, serverRow) => {
+  const id = normalizeId(serverRow) || String(action?.meta?.id || "");
+  if (!id) return;
+  await patchOverlay((overlay) => {
+    overlay[id] = { ...serverRow, _id: id };
+    return overlay;
+  });
+};
+
 const processQueue = async () => {
   if (syncInFlight) return;
   if (!offlineAccess.isUnlocked()) return;
@@ -120,6 +134,9 @@ const processQueue = async () => {
         if (action.method === "POST") {
           const res = await apiClient.post(action.url, action.payload);
           await syncCreateSuccess(action, res?.data?.data || res?.data);
+        } else if (action.method === "PUT") {
+          const res = await apiClient.put(action.url, action.payload);
+          await syncUpdateSuccess(action, res?.data?.data || res?.data);
         } else if (action.method === "DELETE") {
           await apiClient.delete(action.url);
           await patchOverlay((overlay) => {
@@ -301,6 +318,54 @@ export const createCrpStaffRecordLocalFirst = async (payload) => {
     url: CRP_STAFF_RECORDS_URL,
     payload: normalizedPayload,
     meta: { localId },
+  });
+
+  processQueue().catch(() => null);
+  return { success: true, data: localRow };
+};
+
+export const updateCrpStaffRecordLocalFirst = async (id, payload) => {
+  const normalizedPayload = {
+    ...(payload || {}),
+    category: normalizeCategory(payload?.category),
+  };
+  if (!normalizedPayload.month) {
+    normalizedPayload.month = String(normalizedPayload.order_date || new Date().toISOString()).slice(0, 7);
+  }
+
+  if (!offlineAccess.isUnlocked()) {
+    const res = await apiClient.put(`${CRP_STAFF_RECORDS_URL}/${id}`, normalizedPayload);
+    return res.data;
+  }
+
+  const staff = await getStaffSnapshot();
+  const staffRow = staff.find((row) => String(row?._id || "") === String(normalizedPayload?.staff_id || ""));
+  const quantity_dzn = Number(normalizedPayload?.quantity_dzn || 0);
+  const rate = Number(normalizedPayload?.rate || 0);
+  const localRow = {
+    ...(normalizedPayload || {}),
+    _id: String(id),
+    staff_id: normalizedPayload?.staff_id || null,
+    staff_name: staffRow?.name || "",
+    quantity_dzn,
+    rate,
+    total_amount: quantity_dzn * rate,
+    month: normalizedPayload.month,
+    __syncStatus: "pending",
+    updatedAt: new Date().toISOString(),
+  };
+
+  await patchOverlay((overlay) => {
+    overlay[String(id)] = { ...(overlay[String(id)] || {}), ...localRow };
+    return overlay;
+  });
+
+  await queueSyncAction({
+    entity: "crpStaffRecords",
+    method: "PUT",
+    url: `${CRP_STAFF_RECORDS_URL}/${id}`,
+    payload: normalizedPayload,
+    meta: { id: String(id) },
   });
 
   processQueue().catch(() => null);

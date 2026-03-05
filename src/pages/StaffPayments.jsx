@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { Banknote, CircleDollarSign, Plus, Wrench } from "lucide-react";
+import { Banknote, CircleDollarSign, Edit3, MoreVertical, Plus, Wrench } from "lucide-react";
 import {
   createStaffPayment,
   fetchStaffPaymentStats,
   fetchStaffPayments,
+  updateStaffPayment,
 } from "../api/staffPayment";
 import StatCard from "../components/StatCard";
 import TableToolbar from "../components/table/TableToolbar";
 import TableSkeleton from "../components/table/TableLoader";
 import FilterDrawer from "../components/FilterDrawer";
 import PageHeader from "../components/PageHeader";
+import ContextMenu from "../components/ContextMenu";
 import StaffPaymentFormModal from "../components/StaffPayment/StaffPaymentFormModal";
 import { useToast } from "../context/ToastContext";
 import { formatDate, formatNumbers } from "../utils";
@@ -43,7 +45,8 @@ export default function StaffPayments() {
     totalItems: 0,
     itemsPerPage: 30,
   });
-  const [formModal, setFormModal] = useState({ isOpen: false });
+  const [formModal, setFormModal] = useState({ isOpen: false, initialData: null });
+  const [activeMenu, setActiveMenu] = useState(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [filters, setFilters] = useState({
     name: "",
@@ -99,14 +102,20 @@ export default function StaffPayments() {
     setIsFilterOpen(false);
   };
 
-  const handleFormAction = async (_action, payload) => {
+  const handleFormAction = async (action, payload) => {
     try {
-      await createStaffPayment(payload);
-      showToast({ type: "success", message: "Staff payment created successfully" });
-      setFormModal({ isOpen: false });
+      if (action === "edit" && payload?.id) {
+        const { id, ...updatePayload } = payload;
+        await updateStaffPayment(id, updatePayload);
+        showToast({ type: "success", message: "Staff payment updated successfully" });
+      } else {
+        await createStaffPayment(payload);
+        showToast({ type: "success", message: "Staff payment created successfully" });
+      }
+      setFormModal({ isOpen: false, initialData: null });
       loadPayments(pagination.currentPage);
     } catch (err) {
-      showToast({ type: "error", message: err.response?.data?.message || "Failed to create payment" });
+      showToast({ type: "error", message: err.response?.data?.message || "Failed to save payment" });
       throw err;
     }
   };
@@ -159,7 +168,7 @@ export default function StaffPayments() {
           subtitle="Track advances, payments, and adjustments for staff."
           actionLabel="Add Payment"
           actionIcon={Plus}
-          onAction={() => setFormModal({ isOpen: true })}
+          onAction={() => setFormModal({ isOpen: true, initialData: null })}
         />
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
@@ -192,16 +201,17 @@ export default function StaffPayments() {
                   <th className="px-7 py-3.5 font-medium">Amount</th>
                   <th className="px-7 py-3.5 font-medium">Remarks</th>
                   <th className="px-7 py-3.5 font-medium">Created</th>
+                  <th className="px-7 py-3.5 font-medium text-right">Actions</th>
                 </tr>
               </thead>
 
               {loading ? (
-                <TableSkeleton rows={8} columns={8} />
+                <TableSkeleton rows={8} columns={9} />
               ) : (
                 <tbody>
                   {payments.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-7 py-12 text-center text-gray-500">
+                      <td colSpan={9} className="px-7 py-12 text-center text-gray-500">
                         No staff payments found.
                       </td>
                     </tr>
@@ -211,17 +221,38 @@ export default function StaffPayments() {
                         <td className="px-7 py-4 text-sm text-gray-500">
                           {String(index + 1 + (pagination.currentPage - 1) * pagination.itemsPerPage).padStart(2, "0")}
                         </td>
-                        <td className="px-7 py-4 text-sm font-medium text-gray-800">{item.staff_id?.name || "—"}</td>
-                        <td className="px-7 py-4 text-sm text-gray-600">{formatDate(item.date, 'dd-MMM-YYYY, DDD')}</td>
-                        <td className="px-7 py-4 text-sm text-gray-600">{item.month || "—"}</td>
+                        <td className="px-7 py-4 text-sm font-medium text-gray-800">{item.staff_id?.name || "-"}</td>
+                        <td className="px-7 py-4 text-sm text-gray-600">{formatDate(item.date, "dd-MMM-YYYY, DDD")}</td>
+                        <td className="px-7 py-4 text-sm text-gray-600">{item.month || "-"}</td>
                         <td className="px-7 py-4">
                           <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${TYPE_BADGE_CLASS[item.type] || "bg-gray-100 text-gray-700"}`}>
                             {TYPE_LABEL[item.type] || item.type}
                           </span>
                         </td>
                         <td className="px-7 py-4 text-sm text-gray-600">{formatNumbers(item.amount, 2) || "0.00"}</td>
-                        <td className="px-7 py-4 text-sm text-gray-500">{item.remarks || "—"}</td>
+                        <td className="px-7 py-4 text-sm text-gray-500">{item.remarks || "-"}</td>
                         <td className="px-7 py-4 text-sm text-gray-500">{formatDate(item.createdAt, "dd-MMM-YYYY, DDD")}</td>
+                        <td className="px-7 py-4 text-right relative">
+                          <button
+                            onClick={() => setActiveMenu(activeMenu === item._id ? null : item._id)}
+                            className="p-2 text-gray-400 hover:text-gray-900 rounded-lg hover:bg-gray-100"
+                            aria-label="Open actions menu"
+                          >
+                            <MoreVertical size={18} />
+                          </button>
+                          <ContextMenu isOpen={activeMenu === item._id}>
+                            <button
+                              onClick={() => {
+                                setFormModal({ isOpen: true, initialData: item });
+                                setActiveMenu(null);
+                              }}
+                              className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl text-gray-700 hover:bg-gray-100 cursor-pointer"
+                            >
+                              <Edit3 size={16} strokeWidth={2.5} />
+                              Edit Payment
+                            </button>
+                          </ContextMenu>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -234,8 +265,9 @@ export default function StaffPayments() {
 
       <StaffPaymentFormModal
         isOpen={formModal.isOpen}
-        onClose={() => setFormModal({ isOpen: false })}
+        onClose={() => setFormModal({ isOpen: false, initialData: null })}
         onAction={handleFormAction}
+        initialData={formModal.initialData}
       />
 
       <FilterDrawer

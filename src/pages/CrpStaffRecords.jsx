@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Banknote, CheckCircle2, MoreVertical, Plus, RefreshCcw, Scissors, Search, Trash2 } from "lucide-react";
+import { Banknote, CheckCircle2, Edit3, MoreVertical, Plus, RefreshCcw, Scissors, Search, Trash2 } from "lucide-react";
 import {
   createCrpStaffRecord,
   deleteCrpStaffRecord,
   fetchCrpStaffRecords,
   fetchCrpStaffRecordStats,
+  updateCrpStaffRecord,
 } from "../api/crpStaffRecord";
 import { fetchOrders } from "../api/order";
 import { fetchStaffNames } from "../api/staff";
@@ -60,7 +61,7 @@ function toQtyDzn(order) {
   return order.unit === "Pcs" ? Number(order.quantity || 0) / 12 : Number(order.quantity || 0);
 }
 
-function CrpRecordFormModal({ isOpen, onClose, onAction }) {
+function CrpRecordFormModal({ isOpen, onClose, onAction, initialData }) {
   const monthRef = useRef(null);
   const repeatRef = useRef(null);
   const orderDateRef = useRef(null);
@@ -89,6 +90,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
     type_name: "",
     repeat_record_id: "",
   });
+  const isEdit = Boolean(initialData?._id);
 
   const loadOrdersForMonth = async (monthValue) => {
     if (!isOpen || !monthValue) return;
@@ -125,17 +127,31 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
 
   useEffect(() => {
     if (!isOpen) return;
-    setFormData({
-      month: new Date().toISOString().slice(0, 7),
-      order_id: "",
-      order_date: new Date().toISOString().slice(0, 10),
-      order_description: "",
-      quantity_dzn: "",
-      staff_id: "",
-      category: "Cropping",
-      type_name: "",
-      repeat_record_id: "",
-    });
+    if (isEdit && initialData) {
+      setFormData({
+        month: String(initialData?.month || initialData?.order_date || new Date().toISOString()).slice(0, 7),
+        order_id: String(initialData?.order_id?._id || initialData?.order_id || ""),
+        order_date: String(initialData?.order_date || "").slice(0, 10),
+        order_description: initialData?.order_description || "",
+        quantity_dzn: String(Number(initialData?.quantity_dzn || 0)),
+        staff_id: String(initialData?.staff_id?._id || initialData?.staff_id || ""),
+        category: initialData?.category || "Cropping",
+        type_name: initialData?.type_name || "",
+        repeat_record_id: "",
+      });
+    } else {
+      setFormData({
+        month: new Date().toISOString().slice(0, 7),
+        order_id: "",
+        order_date: new Date().toISOString().slice(0, 10),
+        order_description: "",
+        quantity_dzn: "",
+        staff_id: "",
+        category: "Cropping",
+        type_name: "",
+        repeat_record_id: "",
+      });
+    }
     setError("");
     setOrderSearch("");
 
@@ -160,7 +176,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
     };
 
     loadInitial();
-  }, [isOpen]);
+  }, [isOpen, isEdit, initialData]);
 
   useEffect(() => {
     if (!isOpen || !formData.month) return;
@@ -227,7 +243,8 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
     setError("");
     setSubmitting(true);
     try {
-      await onAction({
+      await onAction(isEdit ? "edit" : "add", {
+        id: initialData?._id,
         order_id: formData.order_id || null,
         order_date: formData.order_date,
         order_description: formData.order_description,
@@ -304,7 +321,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
       isOpen={isOpen}
       onClose={onClose}
       maxWidth="max-w-6xl"
-      title="Add CRP Record"
+      title={isEdit ? "Edit CRP Record" : "Add CRP Record"}
       subtitle="Order link is optional. You can create CRP record manually."
       footer={
         <div className="w-full flex items-center justify-between gap-3">
@@ -317,7 +334,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
               loading={submitting}
               disabled={!isValid}
             >
-              Save Record
+              {isEdit ? "Update Record" : "Save Record"}
             </Button>
           </div>
         </div>
@@ -561,7 +578,7 @@ export default function CrpStaffRecords() {
   const [records, setRecords] = useState([]);
   const [pagination, setPagination] = useState({ currentPage: 1, totalPages: 1, totalItems: 0, itemsPerPage: 30 });
   const [loading, setLoading] = useState(false);
-  const [formModal, setFormModal] = useState({ isOpen: false });
+  const [formModal, setFormModal] = useState({ isOpen: false, initialData: null });
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: "", message: "", onConfirm: () => {}, variant: "danger" });
   const [activeMenu, setActiveMenu] = useState(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -610,7 +627,7 @@ export default function CrpStaffRecords() {
           subtitle="Manage CRP records with optional order link, manual entry, and repeat prefill"
           actionLabel="Add CRP Record"
           actionIcon={Plus}
-          onAction={() => setFormModal({ isOpen: true })}
+          onAction={() => setFormModal({ isOpen: true, initialData: null })}
         />
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
@@ -678,6 +695,16 @@ export default function CrpStaffRecords() {
                           <ContextMenu isOpen={activeMenu === item._id}>
                             <button
                               onClick={() => {
+                                setFormModal({ isOpen: true, initialData: item });
+                                setActiveMenu(null);
+                              }}
+                              className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl text-gray-700 hover:bg-gray-100 cursor-pointer"
+                            >
+                              <Edit3 size={16} strokeWidth={2.5} />
+                              Edit Record
+                            </button>
+                            <button
+                              onClick={() => {
                                 setConfirmModal({
                                   isOpen: true,
                                   title: "Delete CRP Record",
@@ -710,11 +737,18 @@ export default function CrpStaffRecords() {
 
       <CrpRecordFormModal
         isOpen={formModal.isOpen}
-        onClose={() => setFormModal({ isOpen: false })}
-        onAction={async (payload) => {
+        onClose={() => setFormModal({ isOpen: false, initialData: null })}
+        initialData={formModal.initialData}
+        onAction={async (action, payload) => {
           try {
-            await createCrpStaffRecord(payload);
-            showToast({ type: "success", message: "CRP record saved successfully" });
+            if (action === "edit" && payload?.id) {
+              const { id, ...updatePayload } = payload;
+              await updateCrpStaffRecord(id, updatePayload);
+              showToast({ type: "success", message: "CRP record updated successfully" });
+            } else {
+              await createCrpStaffRecord(payload);
+              showToast({ type: "success", message: "CRP record saved successfully" });
+            }
             loadRecords(pagination.currentPage, filters);
           } catch (err) {
             showToast({ type: "error", message: err.response?.data?.message || "Failed to save CRP record" });
