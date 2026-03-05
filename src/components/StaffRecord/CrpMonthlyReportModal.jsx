@@ -66,7 +66,7 @@ function openPrintWindow({ staffName, monthLabel, summary, rows }) {
 
   @page {
     size: A4 portrait;
-    margin: 0.4in 0.4in 0.4in 0.5in;
+    margin: 0.4in;
   }
 
   @media print {
@@ -144,14 +144,14 @@ function openPrintWindow({ staffName, monthLabel, summary, rows }) {
   td.td-date { white-space: nowrap; font-weight: 500; }
 
   tr.row-even { background: #fff; }
-  tr.row-odd { background: #f3f4f6; }
+  tr.row-odd { background: #bcbcbc; }
 
   tfoot td {
     background: #1e293b;
     color: #fff;
     font-weight: 700;
     border-bottom: none;
-    padding: 6pt 5pt;
+    padding: 6pt 7pt;
   }
   tfoot td.r { text-align: right; }
 
