@@ -3,9 +3,17 @@ import { Loader2, Printer, Search } from "lucide-react";
 import Modal from "../Modal";
 import Button from "../Button";
 import Select from "../Select";
-import { fetchStaffNames } from "../../api/staff";
+import { fetchStaff, fetchStaffNames } from "../../api/staff";
 import { fetchCrpStaffRecords } from "../../api/crpStaffRecord";
+import { fetchStaffPayments } from "../../api/staffPayment";
 import { formatDate, formatNumbers } from "../../utils";
+import { getPreviousMonthKey, toMonthWindow } from "../../utils/salarySlip";
+
+function getPaymentInHistory(payment, prevMonthKey, prevMonthEnd) {
+  if (typeof payment.month === "string" && payment.month) return payment.month <= prevMonthKey;
+  if (payment.date) return new Date(payment.date) <= new Date(prevMonthEnd);
+  return false;
+}
 
 function openPrintWindow({ staffName, monthLabel, summary, rows }) {
   const genDate = new Date().toLocaleDateString("en-GB", {
@@ -13,11 +21,12 @@ function openPrintWindow({ staffName, monthLabel, summary, rows }) {
   });
 
   const infoItems = [
-    { l: "Staff",           v: staffName },
-    { l: "Month",           v: monthLabel },
-    { l: "Total Records",   v: formatNumbers(summary.total_records, 0) },
+    { l: "Staff", v: staffName },
+    { l: "Month", v: monthLabel },
+    { l: "Arrears", v: formatNumbers(summary.arrears, 2) },
+    { l: "Total Records", v: formatNumbers(summary.total_records, 0) },
     { l: "Total Qty (Dzn)", v: formatNumbers(summary.total_quantity_dzn, 2) },
-    { l: "Total Amount",    v: formatNumbers(summary.total_amount, 2) },
+    { l: "Total Amount", v: formatNumbers(summary.total_amount, 2) },
   ];
 
   const infoHtml = infoItems.map(({ l, v }) => `
@@ -42,7 +51,7 @@ function openPrintWindow({ staffName, monthLabel, summary, rows }) {
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<title>CRP Report — ${staffName} — ${monthLabel}</title>
+<title>CRP Report - ${staffName} - ${monthLabel}</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -67,7 +76,7 @@ function openPrintWindow({ staffName, monthLabel, summary, rows }) {
 
   .info-grid {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     border: 0.75pt solid #111;
     border-radius: 8pt;
     overflow: hidden;
@@ -82,8 +91,8 @@ function openPrintWindow({ staffName, monthLabel, summary, rows }) {
     align-items: center;
     gap: 4pt;
   }
-  .ic:nth-child(5n)        { border-right: none; }
-  .ic:nth-last-child(-n+5) { border-bottom: none; }
+  .ic:nth-child(3n) { border-right: none; }
+  .ic:nth-last-child(-n+3) { border-bottom: none; }
   .ic-lbl { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.06em; color: #555; white-space: nowrap; }
   .ic-val { font-weight: 600; color: #111; font-variant-numeric: tabular-nums; }
 
@@ -99,7 +108,7 @@ function openPrintWindow({ staffName, monthLabel, summary, rows }) {
     page-break-inside: auto;
   }
   thead { display: table-header-group; }
-  tr    { page-break-inside: avoid; }
+  tr { page-break-inside: avoid; }
 
   th {
     background: #1e293b;
@@ -120,13 +129,13 @@ function openPrintWindow({ staffName, monthLabel, summary, rows }) {
     vertical-align: middle;
     color: #111;
   }
-  td.r    { text-align: right; }
+  td.r { text-align: right; }
   td.bold { font-weight: 600; }
-  td.td-num  { font-size: 7.5pt; color: #555; }
+  td.td-num { font-size: 7.5pt; color: #555; }
   td.td-date { white-space: nowrap; font-weight: 500; }
 
   tr.row-even { background: #fff; }
-  tr.row-odd  { background: #f3f4f6; }
+  tr.row-odd { background: #f3f4f6; }
 
   tfoot td {
     background: #1e293b;
@@ -179,15 +188,15 @@ function openPrintWindow({ staffName, monthLabel, summary, rows }) {
   </div>
 
   <div class="print-footer">
-    <span>Generated: ${genDate} — © SparkPair · Confidential</span>
-    <span>EmbroideryOS | ${staffName} · ${monthLabel}</span>
+    <span>Generated: ${genDate} - Copyright SparkPair - Confidential</span>
+    <span>EmbroideryOS | ${staffName} - ${monthLabel}</span>
   </div>
 </div>
 </body>
 </html>`;
 
   const win = window.open("", "_blank", "width=960,height=780");
-  if (!win) { alert("Pop-up blocked — please allow pop-ups for this site."); return; }
+  if (!win) { alert("Pop-up blocked - please allow pop-ups for this site."); return; }
   win.document.open();
   win.document.write(html);
   win.document.close();
@@ -200,15 +209,15 @@ function openPrintWindow({ staffName, monthLabel, summary, rows }) {
 }
 
 export default function CrpMonthlyReportModal({ isOpen, onClose }) {
-  const [staffOptions,   setStaffOptions]   = useState([]);
-  const [monthOptions,   setMonthOptions]   = useState([]);
-  const [selectedStaff,  setSelectedStaff]  = useState("");
-  const [selectedMonth,  setSelectedMonth]  = useState("");
-  const [rows,           setRows]           = useState([]);
-  const [summary,        setSummary]        = useState(null);
-  const [generated,      setGenerated]      = useState(false);
+  const [staffOptions, setStaffOptions] = useState([]);
+  const [monthOptions, setMonthOptions] = useState([]);
+  const [selectedStaff, setSelectedStaff] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [rows, setRows] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [generated, setGenerated] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(false);
-  const [loadingReport,  setLoadingReport]  = useState(false);
+  const [loadingReport, setLoadingReport] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -248,7 +257,7 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
   }, [isOpen]);
 
   const selectedStaffLabel = useMemo(
-    () => staffOptions.find((s) => s.value === selectedStaff)?.label || "—",
+    () => staffOptions.find((s) => s.value === selectedStaff)?.label || "-",
     [staffOptions, selectedStaff]
   );
 
@@ -256,21 +265,53 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
     if (!selectedStaff || !selectedMonth) return;
     setLoadingReport(true);
     try {
-      const res = await fetchCrpStaffRecords({ page: 1, limit: 5000, month: selectedMonth });
-      const filtered = (res?.data || []).filter((r) => {
+      const prevMonthKey = getPreviousMonthKey(selectedMonth);
+      const prevMonthMeta = toMonthWindow(prevMonthKey);
+
+      const [staffRes, currentRes, historyRes, historyPaymentsRes] = await Promise.all([
+        fetchStaff(selectedStaff),
+        fetchCrpStaffRecords({ page: 1, limit: 5000, month: selectedMonth }),
+        fetchCrpStaffRecords({ page: 1, limit: 20000, staff_id: selectedStaff, date_to: prevMonthMeta.to }),
+        fetchStaffPayments({ staff_id: selectedStaff, limit: 20000 }),
+      ]);
+
+      const currentFiltered = (currentRes?.data || []).filter((r) => {
         const id = String(r?.staff_id?._id || r?.staff_id || "");
         return id === String(selectedStaff);
       });
 
-      const sorted = [...filtered].sort(
+      const historyRecords = historyRes?.data || [];
+      const historyPayments = historyPaymentsRes?.data || [];
+      const openingBalance = Number(staffRes?.opening_balance) || 0;
+
+      let historyClosing = openingBalance;
+      historyRecords.forEach((rec) => {
+        const recMonth = String(rec?.month || "");
+        if (recMonth && recMonth <= prevMonthKey) {
+          historyClosing += Number(rec?.total_amount || 0);
+        }
+      });
+      historyPayments.forEach((p) => {
+        if (!getPaymentInHistory(p, prevMonthKey, prevMonthMeta.to)) return;
+        const amt = Number(p.amount) || 0;
+        if (p.type === "adjustment") historyClosing += amt;
+        if (p.type === "advance" || p.type === "payment") historyClosing -= amt;
+      });
+
+      const sorted = [...currentFiltered].sort(
         (a, b) => new Date(a?.order_date || 0) - new Date(b?.order_date || 0)
       );
 
       const total_quantity_dzn = sorted.reduce((sum, r) => sum + Number(r?.quantity_dzn || 0), 0);
-      const total_amount       = sorted.reduce((sum, r) => sum + Number(r?.total_amount  || 0), 0);
+      const total_amount = sorted.reduce((sum, r) => sum + Number(r?.total_amount || 0), 0);
 
       setRows(sorted);
-      setSummary({ total_records: sorted.length, total_quantity_dzn, total_amount });
+      setSummary({
+        total_records: sorted.length,
+        total_quantity_dzn,
+        total_amount,
+        arrears: historyClosing,
+      });
       setGenerated(true);
     } finally {
       setLoadingReport(false);
@@ -280,7 +321,7 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
   const handlePrint = () => {
     if (!summary) return;
     openPrintWindow({
-      staffName:  selectedStaffLabel,
+      staffName: selectedStaffLabel,
       monthLabel: selectedMonth,
       summary,
       rows,
@@ -318,8 +359,6 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
       }
     >
       <div className="space-y-4">
-
-        {/* Filters */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Select
             label="CRP Staff"
@@ -339,7 +378,6 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
           />
         </div>
 
-        {/* Screen Preview */}
         {generated && (
           <>
             {rows.length === 0 || !summary ? (
@@ -348,15 +386,14 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
               </div>
             ) : (
               <div className="rounded-3xl border border-gray-300 overflow-hidden bg-white shadow-sm p-5 space-y-4">
-
-                {/* Info grid */}
-                <div className="grid grid-cols-2 md:grid-cols-5 border border-gray-300 rounded-2xl overflow-hidden text-sm">
+                <div className="grid grid-cols-2 md:grid-cols-3 border border-gray-300 rounded-2xl overflow-hidden text-sm">
                   {[
-                    { l: "Staff",           v: selectedStaffLabel },
-                    { l: "Month",           v: selectedMonth },
-                    { l: "Total Records",   v: formatNumbers(summary.total_records, 0) },
+                    { l: "Staff", v: selectedStaffLabel },
+                    { l: "Month", v: selectedMonth },
+                    { l: "Arrears", v: formatNumbers(summary.arrears, 2) },
+                    { l: "Total Records", v: formatNumbers(summary.total_records, 0) },
                     { l: "Total Qty (Dzn)", v: formatNumbers(summary.total_quantity_dzn, 2) },
-                    { l: "Total Amount",    v: formatNumbers(summary.total_amount, 2) },
+                    { l: "Total Amount", v: formatNumbers(summary.total_amount, 2) },
                   ].map(({ l, v }) => (
                     <div key={l} className="px-4 py-3 flex items-center gap-1.5 border-r border-b border-gray-200 last:border-r-0">
                       <p className="text-xs uppercase tracking-wide text-gray-600 shrink-0">{l}:</p>
@@ -365,7 +402,6 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
                   ))}
                 </div>
 
-                {/* Detail table */}
                 <div className="overflow-auto rounded-xl border border-gray-300">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead className="bg-slate-800 text-slate-300 uppercase text-xs tracking-wider">
@@ -407,7 +443,6 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
                     </tfoot>
                   </table>
                 </div>
-
               </div>
             )}
           </>
