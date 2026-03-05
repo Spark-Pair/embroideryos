@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Banknote, MoreVertical, Plus, RefreshCcw, Scissors, Trash2 } from "lucide-react";
+import { Banknote, CheckCircle2, MoreVertical, Plus, RefreshCcw, Scissors, Search, Trash2 } from "lucide-react";
 import {
   createCrpStaffRecord,
   deleteCrpStaffRecord,
@@ -44,6 +44,17 @@ function getMonthDateRange(month) {
   };
 }
 
+function sortOrdersOldestFirst(rows = []) {
+  return [...rows].sort((a, b) => {
+    const aTime = new Date(a?.date || 0).getTime();
+    const bTime = new Date(b?.date || 0).getTime();
+    if (aTime !== bTime) return aTime - bTime;
+    const aCreated = new Date(a?.createdAt || 0).getTime();
+    const bCreated = new Date(b?.createdAt || 0).getTime();
+    return aCreated - bCreated;
+  });
+}
+
 function toQtyDzn(order) {
   if (!order) return 0;
   return order.unit === "Pcs" ? Number(order.quantity || 0) / 12 : Number(order.quantity || 0);
@@ -65,6 +76,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
   const [loadingData, setLoadingData] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [orderSearch, setOrderSearch] = useState("");
 
   const [formData, setFormData] = useState({
     month: new Date().toISOString().slice(0, 7),
@@ -83,11 +95,24 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
     setLoadingData(true);
     try {
       const { date_from, date_to } = getMonthDateRange(monthValue);
-      const ordersRes = await fetchOrders({ page: 1, limit: 5000, date_from, date_to });
+      const [ordersRes, crpRes] = await Promise.all([
+        fetchOrders({ page: 1, limit: 5000, date_from, date_to }),
+        fetchCrpStaffRecords({ page: 1, limit: 5000, month: monthValue }),
+      ]);
       const orderList = ordersRes?.data || [];
-      setOrders(orderList);
+      const crpList = crpRes?.data || [];
+      const usedOrderIds = new Set(
+        crpList
+          .map((record) => String(record?.order_id?._id || record?.order_id || ""))
+          .filter(Boolean)
+      );
+
+      const prefillOrders = sortOrdersOldestFirst(
+        orderList.filter((order) => !usedOrderIds.has(String(order?._id || "")))
+      );
+      setOrders(prefillOrders);
       setFormData((prev) => (
-        orderList.some((order) => String(order._id) === String(prev.order_id))
+        prefillOrders.some((order) => String(order._id) === String(prev.order_id))
           ? prev
           : { ...prev, order_id: "" }
       ));
@@ -112,6 +137,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
       repeat_record_id: "",
     });
     setError("");
+    setOrderSearch("");
 
     const loadInitial = async () => {
       setLoadingData(true);
@@ -163,6 +189,27 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
   const typeOptions = rateConfigs
     .filter((cfg) => cfg.category === formData.category)
     .map((cfg) => ({ label: `${cfg.type_name} (Rate: ${formatNumbers(cfg.rate, 2)})`, value: cfg.type_name }));
+  const filteredOrders = useMemo(() => {
+    const keyword = String(orderSearch || "").trim().toLowerCase();
+    if (!keyword) return orders;
+    return orders.filter((order) => {
+      const haystack = [
+        order?.description,
+        order?.customer_name,
+        order?.lot_no,
+        order?.machine_no,
+        formatDate(order?.date, "DD MMM yyyy"),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(keyword);
+    });
+  }, [orders, orderSearch]);
+  const selectedOrder = useMemo(
+    () => orders.find((order) => String(order?._id) === String(formData.order_id)),
+    [orders, formData.order_id]
+  );
 
   const isValid =
     !!formData.order_date &&
@@ -280,8 +327,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
         <div className="xl:col-span-2 rounded-2xl border border-gray-300 bg-white overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
             <div>
-              <h3 className="text-sm font-semibold text-gray-800">Optional Order Prefill</h3>
-              <p className="text-xs text-gray-500">Pick an order only if you want to prefill values</p>
+              <h3 className="text-sm font-semibold text-gray-800">Step 1: Optional Order Prefill</h3>
             </div>
             <Button
               variant="secondary"
@@ -296,20 +342,51 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
           </div>
 
           <div className="p-4 border-b border-gray-200">
-            <Input
-              ref={monthRef}
-              label="Month"
-              type="month"
-              value={formData.month}
-              onKeyDown={(e) => {
-                if (e.key !== "Enter") return;
-                e.preventDefault();
-                focusRef(repeatRef);
-              }}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, month: e.target.value, order_id: "" }))
-              }
-            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <Input
+                ref={monthRef}
+                label="Select Month"
+                type="month"
+                value={formData.month}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  focusRef(repeatRef);
+                }}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, month: e.target.value, order_id: "" }))
+                }
+              />
+              <Input
+                label="Search Order"
+                icon={<Search className="h-4 w-4 text-gray-400" />}
+                placeholder="Description, customer, lot, machine"
+                value={orderSearch}
+                onChange={(e) => setOrderSearch(e.target.value)}
+                required={false}
+                showClear={true}
+              />
+            </div>
+            <div className="mt-2.5 flex items-center justify-between gap-2">
+              <p className="text-xs text-gray-500">
+                Showing <span className="font-semibold text-gray-700">{filteredOrders.length}</span> available orders
+              </p>
+              {formData.order_id && (
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-rose-600 hover:text-rose-700"
+                  onClick={() => setFormData((prev) => ({ ...prev, order_id: "" }))}
+                >
+                  Clear selected order (manual mode)
+                </button>
+              )}
+            </div>
+            {selectedOrder && (
+              <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] text-emerald-700">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Order selected. Auto-filled values right side me editable hain.
+              </div>
+            )}
           </div>
 
           <div className="max-h-[56vh] overflow-auto p-4 space-y-2.5">
@@ -319,9 +396,14 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
                 No orders found for this month. You can still create CRP record manually.
               </p>
             )}
+            {!loadingData && orders.length > 0 && filteredOrders.length === 0 && (
+              <p className="text-sm text-gray-500">
+                Search se koi order match nahi hua.
+              </p>
+            )}
 
             {!loadingData &&
-              orders.map((order) => {
+              filteredOrders.map((order) => {
                 const isSelected = String(formData.order_id) === String(order._id);
                 const qty = toQtyDzn(order);
                 return (
@@ -337,13 +419,13 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-sm font-semibold text-gray-900">
-                          {formatDate(order.date, "DD MMM yyyy")}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-0.5">
+                        <p className="text-sm font-semibold text-gray-900 leading-snug break-words">
                           {order.description || "No description"}
                         </p>
-                        <p className="text-[11px] text-gray-500 mt-1">
+                        <p className="text-xs text-gray-500 mt-1">
+                          Date: {formatDate(order.date, "DD MMM yyyy")} • Customer: {order.customer_name || "---"}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5">
                           Lot: {order.lot_no || "---"} • Machine: {order.machine_no || "---"}
                         </p>
                       </div>
@@ -351,8 +433,8 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
                         <p className="text-sm font-semibold text-emerald-700">
                           {formatNumbers(order.total_amount, 2)}
                         </p>
-                        <p className="text-xs text-gray-500">
-                          {formatNumbers(qty, 2)} Dzn
+                        <p className="text-sm font-semibold text-gray-800 mt-0.5">
+                          Qty: {formatNumbers(qty, 3)} Dzn
                         </p>
                       </div>
                     </div>
@@ -363,7 +445,9 @@ function CrpRecordFormModal({ isOpen, onClose, onAction }) {
         </div>
 
         <div className="rounded-2xl border border-gray-300 bg-white p-4 h-fit">
-          <h3 className="text-sm font-semibold text-gray-800 mb-3">CRP Details</h3>
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold text-gray-800">Step 1: Optional Order Prefill</h3>
+          </div>
           <div className="space-y-3">
             <Select
               ref={repeatRef}
