@@ -19,7 +19,7 @@ const PRINT_STYLE = `
       width: 297mm !important;
       height: 210mm !important;
       margin: 0 !important;
-      padding: 0 1pt !important;
+      padding: 0pt !important;
       overflow: hidden !important;
     }
 
@@ -96,6 +96,7 @@ const PRINT_STYLE = `
     }
 
     #invoice-print-root .invoice-body {
+      padding: 1pt !important;
       flex: 1 1 auto !important;
       overflow: hidden !important;
       width: 100% !important;
@@ -112,20 +113,19 @@ const PRINT_STYLE = `
       flex-shrink: 0 !important;
       width: 100% !important;
       height: 65mm !important;
-      border: 1px solid #111111ed !important;
-      border-radius: 12px !important;
-      background: #dcdcdc !important;
+      border: 1px solid #111 !important;
+      border-radius: 13px !important;
+      background: #fff !important;
       display: flex !important;
       align-items: center !important;
       justify-content: center !important;
       overflow: hidden !important;
       box-sizing: border-box !important;
-      padding: 3mm !important;
     }
 
     #invoice-print-root .invoice-image {
       max-width: 100% !important;
-      max-height: 54mm !important;
+      max-height: 57mm !important;
       width: auto !important;
       height: auto !important;
       object-fit: contain !important;
@@ -289,16 +289,16 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
           <div>
             <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", padding: "0px 3px" }}>
-                <span style={{ fontWeight: 400, color: "#111827" }}>Outstanding</span>
-                <span style={{ fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" }}>{formatNumbers(outstandingBalance, 2)}</span>
+                <span style={{ fontWeight: 400, color: "#111" }}>Outstanding</span>
+                <span style={{ fontWeight: 600, color: "#111", fontVariantNumeric: "tabular-nums" }}>{formatNumbers(outstandingBalance, 2)}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", padding: "0px 3px" }}>
-                <span style={{ fontWeight: 400, color: "#111827" }}>Sub Total</span>
-                <span style={{ fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" }}>{formatNumbers(totalAmt, 2)}</span>
+                <span style={{ fontWeight: 400, color: "#111" }}>Sub Total</span>
+                <span style={{ fontWeight: 600, color: "#111", fontVariantNumeric: "tabular-nums" }}>{formatNumbers(totalAmt, 2)}</span>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1.5px solid #111111ed", padding: "5px 3px 0 3px" }}>
-                <span style={{ fontWeight: 700, color: "#111827", fontSize: "11px" }}>New Balance</span>
-                <span style={{ fontWeight: 700, fontSize: "14px", fontVariantNumeric: "tabular-nums", color: "#111827" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #111", padding: "5px 3px 0 3px" }}>
+                <span style={{ fontWeight: 700, color: "#111", fontSize: "11px" }}>New Balance</span>
+                <span style={{ fontWeight: 700, fontSize: "14px", fontVariantNumeric: "tabular-nums", color: "#111" }}>
                   {formatNumbers(newBalance, 2)}
                 </span>
               </div>
@@ -314,15 +314,13 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
               flexShrink: 0,
               width: "100%",
               height: "200px",
-              border: "1px solid #111111ed",
-              borderRadius: "12px",
-              background: "#dcdcdc",
+              border: "1px solid #111",
+              borderRadius: "13px",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               overflow: "hidden",
               boxSizing: "border-box",
-              padding: "8px",
             }}
           >
             {invoice.image_data && invoice.image_data.trim() !== "" && (
