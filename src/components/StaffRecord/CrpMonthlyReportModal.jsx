@@ -15,6 +15,15 @@ function getPaymentInHistory(payment, prevMonthKey, prevMonthEnd) {
   return false;
 }
 
+function getPaymentInMonth(payment, monthKey, monthFrom, monthTo) {
+  if (typeof payment.month === "string" && payment.month) return payment.month === monthKey;
+  if (payment.date) {
+    const d = new Date(payment.date);
+    return d >= new Date(monthFrom) && d <= new Date(monthTo);
+  }
+  return false;
+}
+
 function openPrintWindow({ staffName, monthLabel, summary, rows }) {
   const genDate = new Date().toLocaleDateString("en-GB", {
     day: "2-digit", month: "short", year: "numeric",
@@ -24,8 +33,8 @@ function openPrintWindow({ staffName, monthLabel, summary, rows }) {
     { l: "Staff", v: staffName },
     { l: "Month", v: monthLabel },
     { l: "Arrears", v: formatNumbers(summary.arrears, 2) },
-    { l: "Total Records", v: formatNumbers(summary.total_records, 0) },
     { l: "Total Amount", v: formatNumbers(summary.total_amount, 2) },
+    { l: "Deduction", v: formatNumbers(summary.this_month_deduction, 2) },
     { l: "Balance", v: formatNumbers(summary.balance, 2) },
   ];
 
@@ -93,7 +102,7 @@ function openPrintWindow({ staffName, monthLabel, summary, rows }) {
   }
   .ic:nth-child(3n) { border-right: none; }
   .ic:nth-last-child(-n+3) { border-bottom: none; }
-  .ic-lbl { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.06em; color: #555; white-space: nowrap; }
+  .ic-lbl { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.06em; color: #111; white-space: nowrap; }
   .ic-val { font-weight: 600; color: #111; font-variant-numeric: tabular-nums; }
 
   .tbl-wrap {
@@ -131,7 +140,7 @@ function openPrintWindow({ staffName, monthLabel, summary, rows }) {
   }
   td.r { text-align: right; }
   td.bold { font-weight: 600; }
-  td.td-num { font-size: 7.5pt; color: #555; }
+  td.td-num { font-size: 7.5pt; color: #111; }
   td.td-date { white-space: nowrap; font-weight: 500; }
 
   tr.row-even { background: #fff; }
@@ -150,7 +159,7 @@ function openPrintWindow({ staffName, monthLabel, summary, rows }) {
     display: flex;
     justify-content: space-between;
     font-size: 7pt;
-    color: #555;
+    color: #111;
     margin-top: 10pt;
     border-top: 0.5pt solid #111;
     padding-top: 5pt;
@@ -265,6 +274,7 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
     if (!selectedStaff || !selectedMonth) return;
     setLoadingReport(true);
     try {
+      const monthMeta = toMonthWindow(selectedMonth);
       const prevMonthKey = getPreviousMonthKey(selectedMonth);
       const prevMonthMeta = toMonthWindow(prevMonthKey);
 
@@ -298,6 +308,15 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
         if (p.type === "advance" || p.type === "payment") historyClosing -= amt;
       });
 
+      const thisMonthDeduction = historyPayments.reduce((sum, p) => {
+        if (!getPaymentInMonth(p, selectedMonth, monthMeta.from, monthMeta.to)) return sum;
+        const amt = Number(p.amount) || 0;
+        if (p.type === "advance" || p.type === "payment" || p.type === "adjustment") {
+          return sum + amt;
+        }
+        return sum;
+      }, 0);
+
       const sorted = [...currentFiltered].sort(
         (a, b) => new Date(a?.order_date || 0) - new Date(b?.order_date || 0)
       );
@@ -307,11 +326,11 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
 
       setRows(sorted);
       setSummary({
-        total_records: sorted.length,
         total_quantity_dzn,
         total_amount,
         arrears: historyClosing,
-        balance: historyClosing - total_amount,
+        this_month_deduction: thisMonthDeduction,
+        balance: historyClosing + total_amount - thisMonthDeduction,
       });
       setGenerated(true);
     } finally {
@@ -392,8 +411,8 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
                     { l: "Staff", v: selectedStaffLabel },
                     { l: "Month", v: selectedMonth },
                     { l: "Arrears", v: formatNumbers(summary.arrears, 2) },
-                    { l: "Total Records", v: formatNumbers(summary.total_records, 0) },
                     { l: "Total Amount", v: formatNumbers(summary.total_amount, 2) },
+                    { l: "Deduction", v: formatNumbers(summary.this_month_deduction, 2) },
                     { l: "Balance", v: formatNumbers(summary.balance, 2) },
                   ].map(({ l, v }) => (
                     <div key={l} className="px-4 py-3 flex items-center gap-1.5 border-r border-b border-gray-200 last:border-r-0">
