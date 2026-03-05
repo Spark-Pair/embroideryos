@@ -119,7 +119,9 @@ export default function StaffRecordDetailsModal({ isOpen, onClose, initialData, 
   const targetMet    = totals && targetAmount != null
     ? totals.on_target_amt >= targetAmount
     : false;
-  const forceAfter   = Boolean(initialData.force_after_target_for_non_target);
+  const forceAfter =
+    Boolean(initialData.force_after_target_for_non_target) ||
+    Boolean(initialData.force_full_target_for_non_target);
 
   const effectivePct = isFixed ? null : (targetMet || forceAfter) ? snapshot?.after_target_pct : snapshot?.on_target_pct;
   const effectiveAmt = (targetMet || forceAfter) ? totals?.after_target_amt : totals?.on_target_amt;

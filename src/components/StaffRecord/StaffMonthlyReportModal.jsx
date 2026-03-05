@@ -432,7 +432,9 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
       const afterTarget = (rec.production || []).reduce((s, r) => s + (Number(r.after_target_amt) || 0), 0);
       const cfg         = rec.config_snapshot || {};
       const targetAmt   = Number(cfg.target_amount) || 0;
-      const forceAfter  = Boolean(rec.force_after_target_for_non_target);
+      const forceAfter =
+        Boolean(rec.force_after_target_for_non_target) ||
+        Boolean(rec.force_full_target_for_non_target);
       const ratePct =
         onTarget > 0
           ? (targetAmt > 0 && onTarget >= targetAmt) || forceAfter

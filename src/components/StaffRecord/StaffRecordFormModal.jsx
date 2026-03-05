@@ -223,6 +223,7 @@ export default function StaffRecordFormModal({
   const [bonusRate,     setBonusRate]     = useState("");
   const [fixAmount,     setFixAmount]     = useState("");
   const [forceAfterTargetForNonTarget, setForceAfterTargetForNonTarget] = useState(false);
+  const [forceFullTargetForNonTarget, setForceFullTargetForNonTarget] = useState(false);
   const [submitting,    setSubmitting]    = useState(false);
   const [staffList,     setStaffList]     = useState([]);
   const [staffLoading,  setStaffLoading]  = useState(false);
@@ -264,6 +265,7 @@ export default function StaffRecordFormModal({
       setBonusRate("");
       setFixAmount("");
       setForceAfterTargetForNonTarget(false);
+      setForceFullTargetForNonTarget(false);
       setCfg(DEFAULT_CONFIG);
       autoSelectedRef.current = false;
     }
@@ -329,6 +331,7 @@ export default function StaffRecordFormModal({
     setBonusRate(initialData.bonus_rate  ? String(initialData.bonus_rate)  : "");
     setFixAmount(initialData.fix_amount != null ? String(initialData.fix_amount) : "");
     setForceAfterTargetForNonTarget(Boolean(initialData.force_after_target_for_non_target));
+    setForceFullTargetForNonTarget(Boolean(initialData.force_full_target_for_non_target));
     setRows(
       initialData.production?.length
         ? initialData.production.map((r) => ({
@@ -434,10 +437,23 @@ export default function StaffRecordFormModal({
     totals.on_target_amt > 0 &&
     !targetMet &&
     (attendance === "Day" || attendance === "Night" || attendance === "Half");
+  const canForceFullTargetForNonTarget =
+    canForceAfterTargetForNonTarget &&
+    Number(cfg.on_target_pct ?? DEFAULT_CONFIG.on_target_pct) > 0;
+  const fullTargetAfterAmount =
+    Number(cfg.on_target_pct ?? DEFAULT_CONFIG.on_target_pct) > 0
+      ? ((cfg.target_amount ?? DEFAULT_CONFIG.target_amount) /
+          (cfg.on_target_pct ?? DEFAULT_CONFIG.on_target_pct)) *
+        (cfg.after_target_pct ?? DEFAULT_CONFIG.after_target_pct)
+      : (cfg.target_amount ?? DEFAULT_CONFIG.target_amount);
   const productionAmt = showProduction
-    ? ((targetMet || (canForceAfterTargetForNonTarget && forceAfterTargetForNonTarget))
+    ? (
+        (canForceFullTargetForNonTarget && forceFullTargetForNonTarget)
+      ? fullTargetAfterAmount
+      : (targetMet || (canForceAfterTargetForNonTarget && forceAfterTargetForNonTarget))
       ? totals.after_target_amt
-      : totals.on_target_amt)
+      : totals.on_target_amt
+      )
     : 0;
 
   let previewBase = 0;
@@ -494,7 +510,13 @@ export default function StaffRecordFormModal({
         bonus_rate: bonusRate ? parseFloat(bonusRate)  : null,
         bonus_rate_override: bonusRate ? parseFloat(bonusRate) : null,
         fix_amount: fixAmount ? parseFloat(fixAmount)  : null,
-        force_after_target_for_non_target: canForceAfterTargetForNonTarget && forceAfterTargetForNonTarget,
+        force_after_target_for_non_target:
+          canForceAfterTargetForNonTarget &&
+          forceAfterTargetForNonTarget &&
+          !(canForceFullTargetForNonTarget && forceFullTargetForNonTarget),
+        force_full_target_for_non_target:
+          canForceFullTargetForNonTarget &&
+          forceFullTargetForNonTarget,
       };
       await onAction(isEdit ? "edit" : "add", isEdit ? { id: initialData._id, ...payload } : payload);
       onClose();
@@ -685,11 +707,34 @@ export default function StaffRecordFormModal({
                 <input
                   type="checkbox"
                   checked={forceAfterTargetForNonTarget}
-                  onChange={(e) => setForceAfterTargetForNonTarget(e.target.checked)}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setForceAfterTargetForNonTarget(checked);
+                    if (checked) setForceFullTargetForNonTarget(false);
+                  }}
                   className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-400"
                 />
                 <span>
                   Use <span className="font-semibold text-emerald-700">After Target ({cfg.after_target_pct}%)</span> amount even if target is not met
+                </span>
+              </label>
+            )}
+
+            {canForceFullTargetForNonTarget && (
+              <label className="mt-1 inline-flex items-center gap-2 text-xs text-gray-700 select-none">
+                <input
+                  type="checkbox"
+                  checked={forceFullTargetForNonTarget}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setForceFullTargetForNonTarget(checked);
+                    if (checked) setForceAfterTargetForNonTarget(false);
+                  }}
+                  className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-400"
+                />
+                <span>
+                  Complete full target and apply <span className="font-semibold text-emerald-700">After Target ({cfg.after_target_pct}%)</span>{" "}
+                  amount: <span className="font-semibold">{formatNumbers(fullTargetAfterAmount, 2)}</span>
                 </span>
               </label>
             )}
