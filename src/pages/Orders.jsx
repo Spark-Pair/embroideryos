@@ -47,6 +47,7 @@ export default function Orders() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [filters, setFilters] = useState({
     customer_name: "",
+    description: "",
     machine_no: "",
     date_from: "",
     date_to: "",
@@ -104,7 +105,7 @@ export default function Orders() {
     setIsFilterOpen(false);
   };
   const handleResetFilters = () => {
-    const reset = { customer_name: "", machine_no: "", date_from: "", date_to: "" };
+    const reset = { customer_name: "", description: "", machine_no: "", date_from: "", date_to: "" };
     setFilters(reset);
     loadOrders(1, reset);
     setIsFilterOpen(false);
@@ -148,6 +149,13 @@ export default function Orders() {
       type: "text",
       value: filters.customer_name,
       onChange: (e) => setFilters((prev) => ({ ...prev, customer_name: e.target.value })),
+    },
+    {
+      label: "Description",
+      placeholder: "Search by description",
+      type: "text",
+      value: filters.description,
+      onChange: (e) => setFilters((prev) => ({ ...prev, description: e.target.value })),
     },
     {
       label: "Machine No",
@@ -213,6 +221,7 @@ export default function Orders() {
                   <th className="px-5 py-3.5 font-medium">Customer</th>
                   <th className="px-5 py-3.5 font-medium">Date</th>
                   <th className="px-5 py-3.5 font-medium">Lot No</th>
+                  <th className="px-5 py-3.5 font-medium">Description</th>
                   <th className="px-5 py-3.5 font-medium">Machine No</th>
                   <th className="px-5 py-3.5 font-medium">Quantity</th>
                   <th className="px-5 py-3.5 font-medium">Rate</th>
@@ -222,12 +231,12 @@ export default function Orders() {
               </thead>
 
               {loading ? (
-                <TableSkeleton rows={30} columns={9} />
+                <TableSkeleton rows={30} columns={10} />
               ) : (
                 <tbody className="divide-y divide-gray-200">
                   {orders.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-7 py-16 text-center text-sm text-gray-400">
+                      <td colSpan={10} className="px-7 py-16 text-center text-sm text-gray-400">
                         No orders found.
                       </td>
                     </tr>

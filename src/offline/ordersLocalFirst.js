@@ -94,12 +94,16 @@ const inDateRange = (value, from, to) => {
 const applyFilters = (rows = [], params = {}) => {
   let data = [...rows];
   const customerName = String(params?.customer_name || "").trim().toLowerCase();
+  const description = String(params?.description || "").trim().toLowerCase();
   const machineNo = String(params?.machine_no || "").trim().toLowerCase();
   const dateFrom = params?.date_from;
   const dateTo = params?.date_to;
 
   if (customerName) {
     data = data.filter((row) => String(row?.customer_name || "").toLowerCase().includes(customerName));
+  }
+  if (description) {
+    data = data.filter((row) => String(row?.description || "").toLowerCase().includes(description));
   }
   if (machineNo) {
     data = data.filter((row) => String(row?.machine_no || "").toLowerCase().includes(machineNo));

@@ -12,6 +12,9 @@ export default function OrderRow({ item, index, startIndex, onView, onEdit, onRe
       <td className="px-5 py-4 font-semibold text-gray-800">{item.customer_name}</td>
       <td className="px-5 py-4 text-sm text-gray-500">{formatDate(item.date, "DD MMM yyyy")}</td>
       <td className="px-5 py-4 text-sm text-gray-600">{item.lot_no || "---"}</td>
+      <td className="px-5 py-4 text-sm text-gray-600 max-w-[260px] truncate" title={item.description || "---"}>
+        {item.description || "---"}
+      </td>
       <td className="px-5 py-4 text-sm text-gray-600">{item.machine_no || "---"}</td>
       <td className="px-5 py-4 text-sm text-gray-600">
         {formatNumbers(item.quantity, 0)} {item.unit || ""}
