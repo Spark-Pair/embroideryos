@@ -23,7 +23,7 @@ const todayInput = () => new Date().toISOString().slice(0, 10);
 const monthFromDate = (dateValue) => (dateValue || todayInput()).slice(0, 7);
 
 const needsReference = (method) => method === "online" || method === "cheque" || method === "slip";
-const needsBank = (method) => method === "online" || method === "cheque";
+const needsBank = (method) => method === "cheque";
 const needsParty = (method) => method === "slip";
 const needsChequeDates = (method) => method === "cheque" || method === "slip";
 
@@ -69,8 +69,8 @@ export default function CustomerPaymentFormModal({ isOpen, onClose, onAction, in
     if (needsParty(formData.method) && !formData.party_name.trim()) return false;
 
     if (needsChequeDates(formData.method)) {
-      if (!formData.cheque_date || !formData.clear_date) return false;
-      if (new Date(formData.clear_date) < new Date(formData.cheque_date)) return false;
+      if (!formData.cheque_date) return false;
+      if (formData.clear_date && new Date(formData.clear_date) < new Date(formData.cheque_date)) return false;
     }
 
     return true;
@@ -120,7 +120,11 @@ export default function CustomerPaymentFormModal({ isOpen, onClose, onAction, in
       return;
     }
 
-    if (needsChequeDates(formData.method) && new Date(formData.clear_date) < new Date(formData.cheque_date)) {
+    if (
+      needsChequeDates(formData.method) &&
+      formData.clear_date &&
+      new Date(formData.clear_date) < new Date(formData.cheque_date)
+    ) {
       const message = "Clear date must be greater than or equal to cheque/slip date.";
       setError(message);
       showToast({ type: "warning", message });
@@ -342,7 +346,7 @@ export default function CustomerPaymentFormModal({ isOpen, onClose, onAction, in
 
         {needsChequeDates(formData.method) && (
           <Input
-            label="Clear Date"
+            label="Clear Date (Optional)"
             type="date"
             min={formData.cheque_date || undefined}
             value={formData.clear_date}

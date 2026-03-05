@@ -86,7 +86,7 @@ const PRINT_STYLE = `
       flex-shrink: 0 !important;
       width: 100% !important;
       line-height: 0 !important;
-      margin-bottom: 2mm !important;
+      margin-bottom: 0 !important;
     }
 
     #invoice-print-root .invoice-banner {
@@ -181,7 +181,7 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
       {hasBanner && (
         <div
           className="invoice-banner-wrap"
-          style={{ width: "100%", flexShrink: 0, marginBottom: "5px", lineHeight: 0 }}
+          style={{ width: "100%", flexShrink: 0, marginBottom: "0px", lineHeight: 0 }}
         >
           <img
             src={bannerUrl}
@@ -205,21 +205,59 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
         )}
 
         {/* ── Meta ── */}
-        <div style={{ flexShrink: 0, padding: "0px 7px 4px 7px", borderBottom: "1px solid #111111ed" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "2px" }}>
-            <span style={{ fontSize: "13px", fontWeight: 700, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "60%" }}>
-              {invoice.customer_name || "-"}
+        <div style={{
+          flexShrink: 0,
+          padding: "5px 8px 7px 8px",
+          marginBottom: "2px",
+          borderBottom: "1px solid #111",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "stretch",
+          gap: "8px",
+        }}>
+          {/* LEFT: Customer info */}
+          <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", gap: "2px", minWidth: 0 }}>
+            <span style={{
+              fontSize: "8px", fontWeight: 600, color: "#111",
+              textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: "1px"
+            }}>
+              Bill To
             </span>
-            <span style={{ fontSize: "10px", fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}>
+            <span style={{
+              fontSize: "14px", fontWeight: 700, color: "#111",
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              lineHeight: 1.15, letterSpacing: "-0.02em"
+            }}>
+              {invoice.customer_name || "—"}
+            </span>
+            {invoice.customer_person && (
+              <span style={{
+                fontSize: "10px", fontWeight: 400, color: "#111", lineHeight: 1.3,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
+              }}>
+                {invoice.customer_person}
+              </span>
+            )}
+          </div>
+          {/* RIGHT: Invoice no + date — stacked, right-aligned */}
+          <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "flex-end", gap: "2px", flexShrink: 0 }}>
+            <span style={{
+              fontSize: "8px", fontWeight: 600, color: "#111",
+              textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: "1px"
+            }}>
+              Invoice
+            </span>
+            <span style={{
+              fontSize: "13px", fontWeight: 700, color: "#111",
+              lineHeight: 1.15, letterSpacing: "-0.01em", fontVariantNumeric: "tabular-nums"
+            }}>
               {invoiceNo}
             </span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-            <span style={{ fontSize: "10px", fontWeight: 400, color: "#111827" }}>
-              {invoice.customer_person || "-"}
-            </span>
-            <span style={{ fontSize: "10px", fontWeight: 400, color: "#111827" }}>
-              {formatDate(invoice.invoice_date, "DD MMM yyyy") || "-"}
+            <span style={{
+              fontSize: "10px", fontWeight: 400, color: "#111", lineHeight: 1.3,
+              whiteSpace: "nowrap"
+            }}>
+              {formatDate(invoice.invoice_date, "DD MMM yyyy") || "—"}
             </span>
           </div>
         </div>
