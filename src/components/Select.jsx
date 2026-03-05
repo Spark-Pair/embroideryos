@@ -132,6 +132,9 @@ const Select = forwardRef(function Select(
       <div
         ref={triggerRef}
         onFocus={handleTriggerFocus}
+        onClick={() => {
+          if (!isOpen) openDropdown();
+        }}
         tabIndex={disabled ? -1 : 0}
         data-focusable="select"
         onKeyDown={(e) => {
@@ -199,9 +202,19 @@ const Select = forwardRef(function Select(
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                onFocus={(e) => {
+                  const val = String(e.target.value || "");
+                  if (!val) return;
+                  e.target.setSelectionRange(0, val.length);
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const val = String(e.target.value || "");
+                  if (!val) return;
+                  e.currentTarget.setSelectionRange(0, val.length);
+                }}
                 placeholder="Search..."
                 className="w-full pl-8 pr-4 py-2.5 text-sm border border-gray-400 outline-none focus:ring-0 rounded-xl"
-                onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => {
                   if (e.key === "Escape") {
                     e.preventDefault();

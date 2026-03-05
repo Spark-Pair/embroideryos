@@ -82,6 +82,64 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const NON_SELECTABLE_INPUT_TYPES = new Set([
+      "checkbox",
+      "radio",
+      "file",
+      "date",
+      "month",
+      "time",
+      "datetime-local",
+      "color",
+      "range",
+      "button",
+      "submit",
+      "reset",
+      "image",
+      "hidden",
+    ]);
+
+    const canAutoSelect = (el) => {
+      if (!el) return false;
+      if (el.hasAttribute("data-no-auto-select")) return false;
+      if (el.disabled || el.readOnly) return false;
+      if (el instanceof HTMLTextAreaElement) return true;
+      if (el instanceof HTMLInputElement) {
+        return !NON_SELECTABLE_INPUT_TYPES.has(String(el.type || "").toLowerCase());
+      }
+      return false;
+    };
+
+    const selectFieldValue = (el) => {
+      if (!canAutoSelect(el)) return;
+      const value = String(el.value || "");
+      if (!value) return;
+      try {
+        el.select();
+      } catch {
+        if (typeof el.setSelectionRange === "function") {
+          el.setSelectionRange(0, value.length);
+        }
+      }
+    };
+
+    const handleFocusIn = (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return;
+      requestAnimationFrame(() => {
+        if (document.activeElement === target) {
+          selectFieldValue(target);
+        }
+      });
+    };
+
+    document.addEventListener("focusin", handleFocusIn, true);
+    return () => {
+      document.removeEventListener("focusin", handleFocusIn, true);
+    };
+  }, []);
+
   const routeFallback = (
     <div className="min-h-screen flex items-center justify-center text-sm text-gray-500">
       Loading...
