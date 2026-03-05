@@ -21,6 +21,7 @@ import {
   mergeAndSortMonths,
   toMonthWindow,
 } from "../utils/salarySlip";
+import { formatNumbers } from "../utils";
 
 const DEFAULT_ALLOWANCE = 1500;
 
@@ -364,7 +365,22 @@ export default function SalarySlipsPage() {
     );
   };
 
-  const grandTotal = slips.reduce((sum, slip) => sum + slip.total, 0);
+  const totals = useMemo(
+    () =>
+      slips.reduce(
+        (acc, slip) => {
+          acc.amount += Number(slip?.amount || 0);
+          acc.allowance += Number(slip?.allowance || 0);
+          acc.bonus += Number(slip?.bonusAmt || 0);
+          acc.arrears += Number(slip?.arrears || 0);
+          acc.advance += Number(slip?.advance || 0);
+          acc.grandTotal += Number(slip?.total || 0);
+          return acc;
+        },
+        { amount: 0, allowance: 0, bonus: 0, arrears: 0, advance: 0, grandTotal: 0 }
+      ),
+    [slips]
+  );
 
   return (
     <div className="relative z-10 max-w-7xl mx-auto h-full flex flex-col">
@@ -447,10 +463,30 @@ export default function SalarySlipsPage() {
           </div>
 
           <div className="mt-5 p-4 sm:p-5 bg-white border border-gray-300 rounded-3xl shadow-sm">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+              {[
+                { label: "Total Amount", value: totals.amount, cls: "text-gray-800" },
+                { label: "Total Allowance", value: totals.allowance, cls: "text-emerald-700" },
+                { label: "Total Bonus", value: totals.bonus, cls: "text-indigo-700" },
+                { label: "Total Arrears", value: totals.arrears, cls: totals.arrears < 0 ? "text-red-600" : "text-gray-800" },
+                { label: "Total Advance", value: totals.advance, cls: "text-red-600" },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-xl border border-gray-300 bg-gray-50 px-4 py-2.5"
+                >
+                  <p className="text-xs uppercase tracking-wider text-gray-500">{item.label}</p>
+                  <p className={`text-base font-semibold tabular-nums ${item.cls}`}>
+                    {formatNumbers(item.value, 2)}
+                  </p>
+                </div>
+              ))}
+            </div>
+
             <div className="flex items-center justify-between bg-white border border-gray-400 px-4 py-2 rounded-xl">
               <label className="text-gray-700 tracking-wide">Grand Total Payable Amount</label>
-              <div className="text-lg font-bold text-teal-600">
-                {grandTotal.toLocaleString()}
+              <div className="text-lg font-bold text-teal-600 tabular-nums">
+                {formatNumbers(totals.grandTotal, 2)}
               </div>
             </div>
           </div>
