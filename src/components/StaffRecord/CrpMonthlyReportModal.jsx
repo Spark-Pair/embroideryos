@@ -25,8 +25,8 @@ function openPrintWindow({ staffName, monthLabel, summary, rows }) {
     { l: "Month", v: monthLabel },
     { l: "Arrears", v: formatNumbers(summary.arrears, 2) },
     { l: "Total Records", v: formatNumbers(summary.total_records, 0) },
-    { l: "Total Qty (Dzn)", v: formatNumbers(summary.total_quantity_dzn, 2) },
     { l: "Total Amount", v: formatNumbers(summary.total_amount, 2) },
+    { l: "Balance", v: formatNumbers(summary.balance, 2) },
   ];
 
   const infoHtml = infoItems.map(({ l, v }) => `
@@ -311,6 +311,7 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
         total_quantity_dzn,
         total_amount,
         arrears: historyClosing,
+        balance: historyClosing - total_amount,
       });
       setGenerated(true);
     } finally {
@@ -392,8 +393,8 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
                     { l: "Month", v: selectedMonth },
                     { l: "Arrears", v: formatNumbers(summary.arrears, 2) },
                     { l: "Total Records", v: formatNumbers(summary.total_records, 0) },
-                    { l: "Total Qty (Dzn)", v: formatNumbers(summary.total_quantity_dzn, 2) },
                     { l: "Total Amount", v: formatNumbers(summary.total_amount, 2) },
+                    { l: "Balance", v: formatNumbers(summary.balance, 2) },
                   ].map(({ l, v }) => (
                     <div key={l} className="px-4 py-3 flex items-center gap-1.5 border-r border-b border-gray-200 last:border-r-0">
                       <p className="text-xs uppercase tracking-wide text-gray-600 shrink-0">{l}:</p>
