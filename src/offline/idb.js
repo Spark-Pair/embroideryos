@@ -5,6 +5,7 @@ const DB_VERSION = 1;
 const OFFLINE_UNLOCK_KEY = "offlineUnlocked";
 
 let dbPromise = null;
+let sessionMetaCache = null;
 
 const openDb = () =>
   new Promise((resolve, reject) => {
@@ -67,21 +68,27 @@ export const initOfflineForUser = async ({ userId, businessId }) => {
   await runTx("meta", "readwrite", (store) => {
     store.put({ key: "session", userId, businessId, updatedAt: Date.now() });
   });
+  sessionMetaCache = { userId, businessId, updatedAt: Date.now() };
   logDataSource("IDB", "offline.init", { userId, businessId });
 };
 
 export const getOfflineSessionMeta = async () => {
+  if (sessionMetaCache) return sessionMetaCache;
   const db = await getDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction("meta", "readonly");
     const store = tx.objectStore("meta");
     const req = store.get("session");
-    req.onsuccess = () => resolve(req.result || null);
+    req.onsuccess = () => {
+      sessionMetaCache = req.result || null;
+      resolve(sessionMetaCache);
+    };
     req.onerror = () => reject(req.error || new Error("Failed to read offline session meta"));
   });
 };
 
 export const clearOfflineData = async () => {
+  sessionMetaCache = null;
   const db = await getDb();
   db.close();
   dbPromise = null;
@@ -95,8 +102,11 @@ export const clearOfflineData = async () => {
 };
 
 export const queueSyncAction = async (action) => {
+  const session = await getOfflineSessionMeta().catch(() => null);
+  const scopedBusinessId = String(action?.businessId || session?.businessId || "").trim();
   const item = {
     ...action,
+    businessId: scopedBusinessId || undefined,
     status: action?.status || "pending",
     createdAt: Date.now(),
     updatedAt: Date.now(),
@@ -109,6 +119,8 @@ export const queueSyncAction = async (action) => {
 };
 
 export const getPendingSyncActions = async (entity = null) => {
+  const session = await getOfflineSessionMeta().catch(() => null);
+  const activeBusinessId = String(session?.businessId || "").trim();
   const db = await getDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction("sync_queue", "readonly");
@@ -119,6 +131,11 @@ export const getPendingSyncActions = async (entity = null) => {
       const pending = all
         .filter((item) => item?.status === "pending")
         .filter((item) => (entity ? item?.entity === entity : true))
+        .filter((item) =>
+          activeBusinessId
+            ? String(item?.businessId || "").trim() === activeBusinessId
+            : true
+        )
         .sort((a, b) => Number(a?.createdAt || 0) - Number(b?.createdAt || 0));
       resolve(pending);
     };
@@ -128,12 +145,36 @@ export const getPendingSyncActions = async (entity = null) => {
 
 export const completeSyncAction = async (id) => {
   if (!id) return;
-  await runTx("sync_queue", "readwrite", (store) => store.delete(id));
+  const session = await getOfflineSessionMeta().catch(() => null);
+  const activeBusinessId = String(session?.businessId || "").trim();
+  const db = await getDb();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction("sync_queue", "readwrite");
+    const store = tx.objectStore("sync_queue");
+    const getReq = store.get(id);
+    getReq.onsuccess = () => {
+      const row = getReq.result;
+      if (!row) return;
+      if (
+        activeBusinessId &&
+        String(row?.businessId || "").trim() !== activeBusinessId
+      ) {
+        return;
+      }
+      store.delete(id);
+    };
+    getReq.onerror = () => reject(getReq.error || new Error("Failed to complete sync action"));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error("Failed to complete sync action"));
+    tx.onabort = () => reject(tx.error || new Error("Sync action completion aborted"));
+  });
   logDataSource("IDB", "sync_queue.complete", { id });
 };
 
 export const failSyncAction = async (id, errorMessage = "") => {
   if (!id) return;
+  const session = await getOfflineSessionMeta().catch(() => null);
+  const activeBusinessId = String(session?.businessId || "").trim();
   const db = await getDb();
   await new Promise((resolve, reject) => {
     const tx = db.transaction("sync_queue", "readwrite");
@@ -142,6 +183,12 @@ export const failSyncAction = async (id, errorMessage = "") => {
     getReq.onsuccess = () => {
       const existing = getReq.result;
       if (!existing) return;
+      if (
+        activeBusinessId &&
+        String(existing?.businessId || "").trim() !== activeBusinessId
+      ) {
+        return;
+      }
       store.put({
         ...existing,
         status: "pending",
@@ -163,6 +210,8 @@ export const remapPendingSyncEntityId = async (entity, fromId, toId) => {
   const targetId = String(toId || "").trim();
   const entityName = String(entity || "").trim();
   if (!entityName || !sourceId || !targetId || sourceId === targetId) return 0;
+  const session = await getOfflineSessionMeta().catch(() => null);
+  const activeBusinessId = String(session?.businessId || "").trim();
 
   const db = await getDb();
   const changed = await new Promise((resolve, reject) => {
@@ -175,6 +224,12 @@ export const remapPendingSyncEntityId = async (entity, fromId, toId) => {
       const rows = Array.isArray(req.result) ? req.result : [];
       rows.forEach((item) => {
         if (item?.status !== "pending" || item?.entity !== entityName) return;
+        if (
+          activeBusinessId &&
+          String(item?.businessId || "").trim() !== activeBusinessId
+        ) {
+          return;
+        }
 
         const metaId = String(item?.meta?.id || "");
         const url = String(item?.url || "");
@@ -214,27 +269,41 @@ export const remapPendingSyncEntityId = async (entity, fromId, toId) => {
   return changed;
 };
 
+const resolveScopedEntityKey = async (key) => {
+  const raw = String(key || "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("b:")) return raw;
+  const session = await getOfflineSessionMeta().catch(() => null);
+  const businessId = String(session?.businessId || "").trim();
+  if (!businessId) return raw;
+  return `b:${businessId}:${raw}`;
+};
+
 export const upsertEntitySnapshot = async (key, data) => {
   if (!key) return;
+  const scopedKey = await resolveScopedEntityKey(key);
+  if (!scopedKey) return;
   await runTx("entities", "readwrite", (store) =>
     store.put({
-      key,
+      key: scopedKey,
       data,
       updatedAt: Date.now(),
     })
   );
-  logDataSource("IDB", "entity.upsert", { key });
+  logDataSource("IDB", "entity.upsert", { key: scopedKey });
 };
 
 export const getEntitySnapshot = async (key) => {
   if (!key) return null;
+  const scopedKey = await resolveScopedEntityKey(key);
+  if (!scopedKey) return null;
   const db = await getDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction("entities", "readonly");
     const store = tx.objectStore("entities");
-    const req = store.get(key);
+    const req = store.get(scopedKey);
     req.onsuccess = () => {
-      logDataSource("IDB", "entity.get", { key });
+      logDataSource("IDB", "entity.get", { key: scopedKey });
       resolve(req.result?.data ?? null);
     };
     req.onerror = () => reject(req.error || new Error("Failed to read entity snapshot"));
@@ -242,6 +311,10 @@ export const getEntitySnapshot = async (key) => {
 };
 
 export const listEntitySnapshots = async (prefix = "") => {
+  const scopedPrefix = await resolveScopedEntityKey(prefix || "");
+  const session = await getOfflineSessionMeta().catch(() => null);
+  const businessId = String(session?.businessId || "").trim();
+  const businessPrefix = businessId ? `b:${businessId}:` : "";
   const db = await getDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction("entities", "readonly");
@@ -249,9 +322,11 @@ export const listEntitySnapshots = async (prefix = "") => {
     const req = store.getAll();
     req.onsuccess = () => {
       const all = Array.isArray(req.result) ? req.result : [];
-      const filtered = prefix
-        ? all.filter((item) => String(item?.key || "").startsWith(prefix))
-        : all;
+      const filtered = scopedPrefix
+        ? all.filter((item) => String(item?.key || "").startsWith(scopedPrefix))
+        : businessPrefix
+          ? all.filter((item) => String(item?.key || "").startsWith(businessPrefix))
+          : all;
       resolve(filtered);
     };
     req.onerror = () => reject(req.error || new Error("Failed to list entity snapshots"));
