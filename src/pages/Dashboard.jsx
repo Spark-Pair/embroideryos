@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Activity, Banknote, Building2, CreditCard, FileText, Receipt, RefreshCcw, Users, Users2, } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, } from "recharts";
@@ -6,6 +6,8 @@ import useAuth from "../hooks/useAuth";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 import StatCard from "../components/StatCard";
+import Select from "../components/Select";
+import Input from "../components/Input";
 import TargetCalculatorModal from "../components/TargetCalculatorModal";
 import { useToast } from "../context/ToastContext";
 import { formatDate, formatNumbers } from "../utils";
@@ -251,6 +253,9 @@ export default function Dashboard() {
     return formatYmdLocal(d);
   });
   const [customDateTo, setCustomDateTo] = useState(() => formatYmdLocal(new Date()));
+  const [monthSummaryType, setMonthSummaryType] = useState("staff");
+  const [monthSummarySearch, setMonthSummarySearch] = useState("");
+  const lastLoadRef = useRef({ month: "", at: 0 });
 
   const [ops, setOps] = useState({
     todayOrdersCount: 0,
@@ -292,6 +297,37 @@ export default function Dashboard() {
       deduction_advance_amount: 0,
       deduction_payment_amount: 0,
       deduction_adjustment_amount: 0,
+      balance_amount: 0,
+      by_staff: [],
+    },
+    monthCustomerSummary: {
+      customer_count: 0,
+      active_customer_count: 0,
+      customer_with_activity: 0,
+      billed_amount: 0,
+      received_amount: 0,
+      opening_amount: 0,
+      balance_amount: 0,
+      by_customer: [],
+    },
+    monthSupplierSummary: {
+      supplier_count: 0,
+      active_supplier_count: 0,
+      supplier_with_activity: 0,
+      expense_amount: 0,
+      paid_amount: 0,
+      opening_amount: 0,
+      balance_amount: 0,
+      by_supplier: [],
+    },
+    monthCrpStaffSummary: {
+      staff_count: 0,
+      active_staff_count: 0,
+      staff_with_activity: 0,
+      record_count: 0,
+      work_amount: 0,
+      arrears_amount: 0,
+      deduction_amount: 0,
       balance_amount: 0,
       by_staff: [],
     },
@@ -451,6 +487,68 @@ export default function Dashboard() {
               }))
               : [],
           },
+          monthCustomerSummary: {
+            customer_count: Number(data?.month?.customer_summary?.customer_count || 0),
+            active_customer_count: Number(data?.month?.customer_summary?.active_customer_count || 0),
+            customer_with_activity: Number(data?.month?.customer_summary?.customer_with_activity || 0),
+            billed_amount: Number(data?.month?.customer_summary?.billed_amount || 0),
+            received_amount: Number(data?.month?.customer_summary?.received_amount || 0),
+            opening_amount: Number(data?.month?.customer_summary?.opening_amount || 0),
+            balance_amount: Number(data?.month?.customer_summary?.balance_amount || 0),
+            by_customer: Array.isArray(data?.month?.customer_summary?.by_customer)
+              ? data.month.customer_summary.by_customer.map((row) => ({
+                customer_id: String(row?.customer_id || ""),
+                customer_name: row?.customer_name || "-",
+                is_active: Boolean(row?.is_active),
+                opening_amount: Number(row?.opening_amount || 0),
+                billed_amount: Number(row?.billed_amount || 0),
+                received_amount: Number(row?.received_amount || 0),
+                balance_amount: Number(row?.balance_amount || 0),
+              }))
+              : [],
+          },
+          monthSupplierSummary: {
+            supplier_count: Number(data?.month?.supplier_summary?.supplier_count || 0),
+            active_supplier_count: Number(data?.month?.supplier_summary?.active_supplier_count || 0),
+            supplier_with_activity: Number(data?.month?.supplier_summary?.supplier_with_activity || 0),
+            expense_amount: Number(data?.month?.supplier_summary?.expense_amount || 0),
+            paid_amount: Number(data?.month?.supplier_summary?.paid_amount || 0),
+            opening_amount: Number(data?.month?.supplier_summary?.opening_amount || 0),
+            balance_amount: Number(data?.month?.supplier_summary?.balance_amount || 0),
+            by_supplier: Array.isArray(data?.month?.supplier_summary?.by_supplier)
+              ? data.month.supplier_summary.by_supplier.map((row) => ({
+                supplier_id: String(row?.supplier_id || ""),
+                supplier_name: row?.supplier_name || "-",
+                is_active: Boolean(row?.is_active),
+                opening_amount: Number(row?.opening_amount || 0),
+                expense_amount: Number(row?.expense_amount || 0),
+                paid_amount: Number(row?.paid_amount || 0),
+                balance_amount: Number(row?.balance_amount || 0),
+              }))
+              : [],
+          },
+          monthCrpStaffSummary: {
+            staff_count: Number(data?.month?.crp_staff_summary?.staff_count || 0),
+            active_staff_count: Number(data?.month?.crp_staff_summary?.active_staff_count || 0),
+            staff_with_activity: Number(data?.month?.crp_staff_summary?.staff_with_activity || 0),
+            record_count: Number(data?.month?.crp_staff_summary?.record_count || 0),
+            work_amount: Number(data?.month?.crp_staff_summary?.work_amount || 0),
+            arrears_amount: Number(data?.month?.crp_staff_summary?.arrears_amount || 0),
+            deduction_amount: Number(data?.month?.crp_staff_summary?.deduction_amount || 0),
+            balance_amount: Number(data?.month?.crp_staff_summary?.balance_amount || 0),
+            by_staff: Array.isArray(data?.month?.crp_staff_summary?.by_staff)
+              ? data.month.crp_staff_summary.by_staff.map((row) => ({
+                staff_id: String(row?.staff_id || ""),
+                staff_name: row?.staff_name || "-",
+                is_active: Boolean(row?.is_active),
+                records: Number(row?.records || 0),
+                arrears_amount: Number(row?.arrears_amount || 0),
+                work_amount: Number(row?.work_amount || 0),
+                deduction_amount: Number(row?.deduction_amount || 0),
+                balance_amount: Number(row?.balance_amount || 0),
+              }))
+              : [],
+          },
 
           customersActive: Number(data?.active?.customers || 0),
           suppliersActive: Number(data?.active?.suppliers || 0),
@@ -469,8 +567,16 @@ export default function Dashboard() {
   }, [isDeveloper, loadTrend, selectedMonth, showToast]);
 
   useEffect(() => {
+    const now = Date.now();
+    if (
+      lastLoadRef.current.month === selectedMonth &&
+      now - lastLoadRef.current.at < 1000
+    ) {
+      return;
+    }
+    lastLoadRef.current = { month: selectedMonth, at: now };
     loadDashboard();
-  }, [loadDashboard]);
+  }, [loadDashboard, selectedMonth]);
 
   const title = useMemo(() => (isDeveloper ? "System Dashboard" : "Dashboard"), [isDeveloper]);
 
@@ -497,6 +603,20 @@ export default function Dashboard() {
     }
     await loadTrend({ range: "custom", date_from: customDateFrom, date_to: customDateTo }, "modal");
   };
+
+  const summarySearch = monthSummarySearch.trim().toLowerCase();
+  const filteredStaffSummaryRows = (ops.monthStaffSummary.by_staff || []).filter((row) =>
+    String(row?.staff_name || "").toLowerCase().includes(summarySearch)
+  );
+  const filteredCustomerSummaryRows = (ops.monthCustomerSummary.by_customer || []).filter((row) =>
+    String(row?.customer_name || "").toLowerCase().includes(summarySearch)
+  );
+  const filteredSupplierSummaryRows = (ops.monthSupplierSummary.by_supplier || []).filter((row) =>
+    String(row?.supplier_name || "").toLowerCase().includes(summarySearch)
+  );
+  const filteredCrpSummaryRows = (ops.monthCrpStaffSummary.by_staff || []).filter((row) =>
+    String(row?.staff_name || "").toLowerCase().includes(summarySearch)
+  );
 
   return (
     <>
@@ -577,21 +697,25 @@ export default function Dashboard() {
             <h1 className="text-3xl font-medium tracking-tight">{title}</h1>
             <p className="text-gray-400 text-sm">Welcome back, {user?.name?.split(" ")[0] || "User"}.</p>
           </div>
-          <div className="flex gap-2.5">
-            <input
-              type="month"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="rounded-2xl border border-gray-400 bg-white px-4 py-3 font-medium text-gray-700 outline-none focus:border-teal-400 cursor-pointer"
-            />
+          <div className="flex items-center gap-3">
+            <div className="w-[180px]">
+              <Input
+                type="month"
+                name="selected_month"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="py-2.5"
+                rounded="2xl"
+              />
+            </div>
             {!isDeveloper && (
               <>
-                <Button size="md" variant="secondary" outline icon={CreditCard} onClick={() => setOpenTarget(true)}>
+                <Button size="md" className="" variant="secondary" outline icon={CreditCard} onClick={() => setOpenTarget(true)}>
                   Target
                 </Button>
               </>
             )}
-            <Button size="md" icon={RefreshCcw} onClick={loadDashboard}>Refresh</Button>
+            <Button size="md" className="" icon={RefreshCcw} onClick={loadDashboard}>Refresh</Button>
           </div>
         </div>
 
@@ -743,67 +867,226 @@ export default function Dashboard() {
 
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
               <div className="rounded-3xl border border-gray-300 bg-white overflow-hidden xl:col-span-12">
-                <div className="px-5 py-4 border-b border-gray-300 bg-gray-100 flex items-center justify-between gap-3">
-                  <p className="text-sm font-medium text-gray-800">Staff Month Summary ({selectedMonth})</p>
-                  <p className="text-xs text-gray-500">
-                    Employees: {ops.monthStaffSummary.staff_count} · Active: {ops.monthStaffSummary.active_staff_count} · Worked: {ops.monthStaffSummary.staff_with_records}
-                  </p>
+                <div className="px-5 py-4 border-b border-gray-300 bg-gray-100 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">Month Summary ({selectedMonth})</p>
+                    <p className="text-xs text-gray-500">
+                      {monthSummaryType === "staff" && `Employees: ${ops.monthStaffSummary.staff_count} · Active: ${ops.monthStaffSummary.active_staff_count}`}
+                      {monthSummaryType === "customer" && `Customers: ${ops.monthCustomerSummary.customer_count} · Active: ${ops.monthCustomerSummary.active_customer_count}`}
+                      {monthSummaryType === "supplier" && `Suppliers: ${ops.monthSupplierSummary.supplier_count} · Active: ${ops.monthSupplierSummary.active_supplier_count}`}
+                      {monthSummaryType === "crp" && `CRP Staff: ${ops.monthCrpStaffSummary.staff_count} · Active: ${ops.monthCrpStaffSummary.active_staff_count}`}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="w-[220px]">
+                      <Input
+                        name="month_summary_search"
+                        required={false}
+                        value={monthSummarySearch}
+                        onChange={(e) => setMonthSummarySearch(e.target.value)}
+                        placeholder="Search by name"
+                        showClear
+                        className="py-2"
+                      />
+                    </div>
+                    <div className="w-[180px]">
+                      <Select
+                        value={monthSummaryType}
+                        onChange={setMonthSummaryType}
+                        options={[
+                          { label: "Staff", value: "staff" },
+                          { label: "Customer", value: "customer" },
+                          { label: "Supplier", value: "supplier" },
+                          { label: "CRP Staff", value: "crp" },
+                        ]}
+                        placeholder="Select Summary"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <div className="overflow-auto">
+
+                <div className="max-h-[460px] overflow-auto">
+                  {monthSummaryType === "staff" && (
                     <table className="w-full text-left border-collapse font-medium">
-                      <thead className="bg-gray-200/85 boder-t border-b border-gray-300">
+                      <thead className="sticky top-0 z-10 bg-gray-200/95 boder-t border-b border-gray-300">
                         <tr className="text-xs uppercase tracking-wide text-gray-500">
-                          <th className="px-2.5 py-2.5 font-semibold">Staff</th>
-                          <th className="px-2.5 py-2.5 font-semibold text-right">Records</th>
-                          <th className="px-2.5 py-2.5 font-semibold text-right">Work</th>
-                          <th className="px-2.5 py-2.5 font-semibold text-right">Arrears</th>
-                          <th className="px-2.5 py-2.5 font-semibold text-right">Allowance</th>
-                          <th className="px-2.5 py-2.5 font-semibold text-right">Bonus</th>
-                          <th className="px-2.5 py-2.5 font-semibold text-right">Deductions</th>
-                          <th className="px-2.5 py-2.5 font-semibold text-right">Balance</th>
+                          <th className="px-4 py-2.5 font-semibold">Staff</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Records</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Work</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Arrears</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Allowance</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Bonus</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Deductions</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Balance</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-300">
-                        {ops.monthStaffSummary.by_staff.length === 0 ? (
+                        {filteredStaffSummaryRows.length === 0 ? (
                           <tr>
-                            <td colSpan={8} className="px-2.5 py-8 text-center text-sm text-gray-400">
-                              No staff summary available for selected month.
+                            <td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-400">
+                              {ops.monthStaffSummary.by_staff.length === 0 ? "No staff summary available for selected month." : "No matching records found."}
                             </td>
                           </tr>
                         ) : (
-                          ops.monthStaffSummary.by_staff.map((row) => (
+                          filteredStaffSummaryRows.map((row) => (
                             <tr key={row.staff_id || row.staff_name} className="hover:bg-gray-50/70">
-                              <td className="px-2.5 py-2.5">{row.staff_name}</td>
-                              <td className="px-2.5 py-2.5 text-sm text-right tabular-nums text-gray-700">{formatNumbers(row.records, 0)}</td>
-                              <td className="px-2.5 py-2.5 text-sm text-right tabular-nums text-gray-800">{formatNumbers(row.work_amount, 2)}</td>
-                              <td className="px-2.5 py-2.5 text-sm text-right tabular-nums">{formatNumbers(row.arrears_amount, 2)}</td>
-                              <td className="px-2.5 py-2.5 text-sm text-right tabular-nums text-indigo-700">{formatNumbers(row.allowance_amount)}</td>
-                              <td className="px-2.5 py-2.5 text-sm text-right tabular-nums text-emerald-700">
-                                {formatNumbers(row.bonus_amount)} ({formatNumbers(row.bonus_qty, 1)})
-                              </td>
-                              <td className="px-2.5 py-2.5 text-xs text-right tabular-nums text-rose-600">{formatNumbers(row.deduction_amount, 2)}</td>
-                              <td className="px-2.5 py-2.5 text-sm text-right tabular-nums font-semibold text-teal-700">{formatNumbers(row.balance_amount, 2)}</td>
+                              <td className="px-4 py-2.5">{row.staff_name}</td>
+                              <td className="px-4 py-2.5 text-sm text-right tabular-nums text-gray-700">{formatNumbers(row.records, 0)}</td>
+                              <td className="px-4 py-2.5 text-sm text-right tabular-nums text-gray-800">{formatNumbers(row.work_amount, 2)}</td>
+                              <td className="px-4 py-2.5 text-sm text-right tabular-nums">{formatNumbers(row.arrears_amount, 2)}</td>
+                              <td className="px-4 py-2.5 text-sm text-right tabular-nums text-indigo-700">{formatNumbers(row.allowance_amount)}</td>
+                              <td className="px-4 py-2.5 text-sm text-right tabular-nums text-emerald-700">{formatNumbers(row.bonus_amount)} ({formatNumbers(row.bonus_qty, 1)})</td>
+                              <td className="px-4 py-2.5 text-xs text-right tabular-nums text-rose-600">{formatNumbers(row.deduction_amount, 2)}</td>
+                              <td className="px-4 py-2.5 text-sm text-right tabular-nums font-semibold text-teal-700">{formatNumbers(row.balance_amount, 2)}</td>
                             </tr>
                           ))
                         )}
                       </tbody>
-                      <tfoot>
-                        <tr className="bg-gray-200/85 border-t border-gray-300">
-                          <td className="px-2.5 py-3 text-sm font-semibold text-gray-900">Total</td>
-                          <td className="px-2.5 py-3 text-sm text-right font-semibold tabular-nums text-gray-800">{formatNumbers(ops.monthStaffSummary.record_count, 0)}</td>
-                          <td className="px-2.5 py-3 text-sm text-right font-semibold tabular-nums text-gray-900">{formatNumbers(ops.monthStaffSummary.work_amount, 2)}</td>
-                          <td className="px-2.5 py-3 text-sm text-right font-semibold tabular-nums text-amber-700">{formatNumbers(ops.monthStaffSummary.arrears_amount, 2)}</td>
-                          <td className="px-2.5 py-3 text-sm text-right font-semibold tabular-nums text-indigo-700">{formatNumbers(ops.monthStaffSummary.allowance_amount)}</td>
-                          <td className="px-2.5 py-3 text-sm text-right font-semibold tabular-nums text-emerald-700">
+                      <tfoot className="sticky bottom-0 z-10">
+                        <tr className="bg-gray-200/95 border-t border-gray-300">
+                          <td className="px-4 py-3 text-sm font-semibold text-gray-900">Total</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-gray-800">{formatNumbers(ops.monthStaffSummary.record_count, 0)}</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-gray-900">{formatNumbers(ops.monthStaffSummary.work_amount, 2)}</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-amber-700">{formatNumbers(ops.monthStaffSummary.arrears_amount, 2)}</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-indigo-700">{formatNumbers(ops.monthStaffSummary.allowance_amount)}</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-emerald-700">
                             {formatNumbers(ops.monthStaffSummary.bonus_amount)} ({formatNumbers(ops.monthStaffSummary.bonus_qty, 1)})
                           </td>
-                          <td className="px-2.5 py-3 text-xs text-right font-semibold tabular-nums text-rose-600">{formatNumbers(ops.monthStaffSummary.deduction_amount, 2)}</td>
-                          <td className="px-2.5 py-3 text-sm text-right font-semibold tabular-nums text-teal-700">{formatNumbers(ops.monthStaffSummary.balance_amount, 2)}</td>
+                          <td className="px-4 py-3 text-xs text-right font-semibold tabular-nums text-rose-600">{formatNumbers(ops.monthStaffSummary.deduction_amount, 2)}</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-teal-700">{formatNumbers(ops.monthStaffSummary.balance_amount, 2)}</td>
                         </tr>
                       </tfoot>
                     </table>
-                  </div>
+                  )}
+
+                  {monthSummaryType === "customer" && (
+                    <table className="w-full text-left border-collapse font-medium">
+                      <thead className="sticky top-0 z-10 bg-gray-200/95 boder-t border-b border-gray-300">
+                        <tr className="text-xs uppercase tracking-wide text-gray-500">
+                          <th className="px-4 py-2.5 font-semibold">Customer</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Opening</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Billed</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Received</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Balance</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-300">
+                        {filteredCustomerSummaryRows.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400">
+                              {ops.monthCustomerSummary.by_customer.length === 0 ? "No customer summary available for selected month." : "No matching records found."}
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredCustomerSummaryRows.map((row) => (
+                            <tr key={row.customer_id || row.customer_name} className="hover:bg-gray-50/70">
+                              <td className="px-4 py-2.5">{row.customer_name}</td>
+                              <td className="px-4 py-2.5 text-sm text-right tabular-nums">{formatNumbers(row.opening_amount, 2)}</td>
+                              <td className="px-4 py-2.5 text-sm text-right tabular-nums text-indigo-700">{formatNumbers(row.billed_amount, 2)}</td>
+                              <td className="px-4 py-2.5 text-sm text-right tabular-nums text-emerald-700">{formatNumbers(row.received_amount, 2)}</td>
+                              <td className={`px-4 py-2.5 text-sm text-right tabular-nums font-semibold ${row.balance_amount < 0 ? "text-rose-600" : "text-teal-700"}`}>{formatNumbers(row.balance_amount, 2)}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                      <tfoot className="sticky bottom-0 z-10">
+                        <tr className="bg-gray-200/95 border-t border-gray-300">
+                          <td className="px-4 py-3 text-sm font-semibold text-gray-900">Total</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums">{formatNumbers(ops.monthCustomerSummary.opening_amount, 2)}</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-indigo-700">{formatNumbers(ops.monthCustomerSummary.billed_amount, 2)}</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-emerald-700">{formatNumbers(ops.monthCustomerSummary.received_amount, 2)}</td>
+                          <td className={`px-4 py-3 text-sm text-right font-semibold tabular-nums ${ops.monthCustomerSummary.balance_amount < 0 ? "text-rose-600" : "text-teal-700"}`}>{formatNumbers(ops.monthCustomerSummary.balance_amount, 2)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  )}
+
+                  {monthSummaryType === "supplier" && (
+                    <table className="w-full text-left border-collapse font-medium">
+                      <thead className="sticky top-0 z-10 bg-gray-200/95 boder-t border-b border-gray-300">
+                        <tr className="text-xs uppercase tracking-wide text-gray-500">
+                          <th className="px-4 py-2.5 font-semibold">Supplier</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Opening</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Expense</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Paid</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Balance</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-300">
+                        {filteredSupplierSummaryRows.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400">
+                              {ops.monthSupplierSummary.by_supplier.length === 0 ? "No supplier summary available for selected month." : "No matching records found."}
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredSupplierSummaryRows.map((row) => (
+                            <tr key={row.supplier_id || row.supplier_name} className="hover:bg-gray-50/70">
+                              <td className="px-4 py-2.5">{row.supplier_name}</td>
+                              <td className="px-4 py-2.5 text-sm text-right tabular-nums">{formatNumbers(row.opening_amount, 2)}</td>
+                              <td className="px-4 py-2.5 text-sm text-right tabular-nums text-rose-600">{formatNumbers(row.expense_amount, 2)}</td>
+                              <td className="px-4 py-2.5 text-sm text-right tabular-nums text-emerald-700">{formatNumbers(row.paid_amount, 2)}</td>
+                              <td className={`px-4 py-2.5 text-sm text-right tabular-nums font-semibold ${row.balance_amount < 0 ? "text-rose-600" : "text-teal-700"}`}>{formatNumbers(row.balance_amount, 2)}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                      <tfoot className="sticky bottom-0 z-10">
+                        <tr className="bg-gray-200/95 border-t border-gray-300">
+                          <td className="px-4 py-3 text-sm font-semibold text-gray-900">Total</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums">{formatNumbers(ops.monthSupplierSummary.opening_amount, 2)}</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-rose-600">{formatNumbers(ops.monthSupplierSummary.expense_amount, 2)}</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-emerald-700">{formatNumbers(ops.monthSupplierSummary.paid_amount, 2)}</td>
+                          <td className={`px-4 py-3 text-sm text-right font-semibold tabular-nums ${ops.monthSupplierSummary.balance_amount < 0 ? "text-rose-600" : "text-teal-700"}`}>{formatNumbers(ops.monthSupplierSummary.balance_amount, 2)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  )}
+
+                  {monthSummaryType === "crp" && (
+                    <table className="w-full text-left border-collapse font-medium">
+                      <thead className="sticky top-0 z-10 bg-gray-200/95 boder-t border-b border-gray-300">
+                        <tr className="text-xs uppercase tracking-wide text-gray-500">
+                          <th className="px-4 py-2.5 font-semibold">Staff</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Records</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Arrears</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Work</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Deduction</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Balance</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-300">
+                        {filteredCrpSummaryRows.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">
+                              {ops.monthCrpStaffSummary.by_staff.length === 0 ? "No CRP staff summary available for selected month." : "No matching records found."}
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredCrpSummaryRows.map((row) => (
+                            <tr key={row.staff_id || row.staff_name} className="hover:bg-gray-50/70">
+                              <td className="px-4 py-2.5">{row.staff_name}</td>
+                              <td className="px-4 py-2.5 text-sm text-right tabular-nums text-gray-700">{formatNumbers(row.records, 0)}</td>
+                              <td className="px-4 py-2.5 text-sm text-right tabular-nums">{formatNumbers(row.arrears_amount, 2)}</td>
+                              <td className="px-4 py-2.5 text-sm text-right tabular-nums text-indigo-700">{formatNumbers(row.work_amount, 2)}</td>
+                              <td className="px-4 py-2.5 text-sm text-right tabular-nums text-rose-600">{formatNumbers(row.deduction_amount, 2)}</td>
+                              <td className={`px-4 py-2.5 text-sm text-right tabular-nums font-semibold ${row.balance_amount < 0 ? "text-rose-600" : "text-teal-700"}`}>{formatNumbers(row.balance_amount, 2)}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                      <tfoot className="sticky bottom-0 z-10">
+                        <tr className="bg-gray-200/95 border-t border-gray-300">
+                          <td className="px-4 py-3 text-sm font-semibold text-gray-900">Total</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums">{formatNumbers(ops.monthCrpStaffSummary.record_count, 0)}</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums">{formatNumbers(ops.monthCrpStaffSummary.arrears_amount, 2)}</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-indigo-700">{formatNumbers(ops.monthCrpStaffSummary.work_amount, 2)}</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-rose-600">{formatNumbers(ops.monthCrpStaffSummary.deduction_amount, 2)}</td>
+                          <td className={`px-4 py-3 text-sm text-right font-semibold tabular-nums ${ops.monthCrpStaffSummary.balance_amount < 0 ? "text-rose-600" : "text-teal-700"}`}>{formatNumbers(ops.monthCrpStaffSummary.balance_amount, 2)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  )}
                 </div>
               </div>
             </div>
@@ -881,3 +1164,4 @@ export default function Dashboard() {
     </>
   );
 }
+

@@ -18,6 +18,7 @@ const Input = forwardRef(
       iconPosition = 'left', // 'left' or 'right'
       shortcutKey,  // e.g., 's' -> Alt+S
       showClear = false, // show clear button when there's a value
+      rounded = 'xl', // border radius
       ...props
     },
     ref
@@ -108,7 +109,7 @@ const Input = forwardRef(
             onChange={handleLocalChange}
             disabled={disabled}
             className={`
-              w-full border border-gray-400 px-4 py-2 rounded-xl
+              w-full border border-gray-400 px-4 py-2 rounded-${rounded}
               focus:ring-2 focus:ring-teal-300 focus:outline-none
               transition ${disabled ? 'cursor-not-allowed opacity-55' : ''}
               bg-gray-50

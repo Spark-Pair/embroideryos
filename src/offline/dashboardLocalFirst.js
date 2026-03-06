@@ -3,6 +3,9 @@ import { getEntitySnapshot, offlineAccess } from "./idb";
 import { logDataSource } from "./logger";
 
 const DEFAULT_ALLOWANCE = 1500;
+const SNAPSHOT_CACHE_TTL_MS = 1200;
+const mergedSnapshotInFlight = new Map();
+const mergedSnapshotCache = new Map();
 
 const getMergedSnapshot = async (allKey, overlayKey) => {
   const base = await getEntitySnapshot(allKey);
@@ -21,6 +24,30 @@ const getMergedSnapshot = async (allKey, overlayKey) => {
     map.set(id, { ...prev, ...item, _id: id });
   });
   return Array.from(map.values());
+};
+
+const getMergedSnapshotCached = async (allKey, overlayKey) => {
+  const cacheKey = `${allKey}::${overlayKey}`;
+  const now = Date.now();
+  const cached = mergedSnapshotCache.get(cacheKey);
+  if (cached && now - cached.ts < SNAPSHOT_CACHE_TTL_MS) {
+    return cached.rows;
+  }
+
+  const inFlight = mergedSnapshotInFlight.get(cacheKey);
+  if (inFlight) return inFlight;
+
+  const promise = getMergedSnapshot(allKey, overlayKey)
+    .then((rows) => {
+      mergedSnapshotCache.set(cacheKey, { ts: Date.now(), rows });
+      return rows;
+    })
+    .finally(() => {
+      mergedSnapshotInFlight.delete(cacheKey);
+    });
+
+  mergedSnapshotInFlight.set(cacheKey, promise);
+  return promise;
 };
 
 const toMillis = (value) => {
@@ -109,6 +136,246 @@ const ensureRange = (range, date_from, date_to) => {
 };
 
 const sumBy = (rows, key) => rows.reduce((sum, row) => sum + Number(row?.[key] || 0), 0);
+
+const buildCustomerMonthlySummaryLocal = ({ customers, invoices, customerPayments, monthFrom, monthTo }) => {
+  const rows = Array.isArray(customers) ? customers : [];
+  if (!rows.length) {
+    return {
+      customer_count: 0,
+      active_customer_count: 0,
+      customer_with_activity: 0,
+      billed_amount: 0,
+      received_amount: 0,
+      opening_amount: 0,
+      balance_amount: 0,
+      by_customer: [],
+    };
+  }
+
+  const byCustomer = new Map(
+    rows.map((row) => [
+      String(row?._id || ""),
+      {
+        customer_id: String(row?._id || ""),
+        customer_name: row?.name || "",
+        is_active: Boolean(row?.isActive),
+        opening_amount: Number(row?.opening_balance || 0),
+        billed_amount: 0,
+        received_amount: 0,
+      },
+    ])
+  );
+
+  (invoices || []).forEach((row) => {
+    if (!inDateRange(row?.invoice_date, monthFrom, monthTo)) return;
+    const id = String(row?.customer_id?._id || row?.customer_id || "");
+    const current = byCustomer.get(id);
+    if (!current) return;
+    current.billed_amount += Number(row?.total_amount || 0);
+  });
+
+  (customerPayments || []).forEach((row) => {
+    if (!inDateRange(row?.date, monthFrom, monthTo)) return;
+    const id = String(row?.customer_id?._id || row?.customer_id || "");
+    const current = byCustomer.get(id);
+    if (!current) return;
+    current.received_amount += Number(row?.amount || 0);
+  });
+
+  const total = {
+    customer_count: rows.length,
+    active_customer_count: rows.filter((row) => Boolean(row?.isActive)).length,
+    customer_with_activity: 0,
+    billed_amount: 0,
+    received_amount: 0,
+    opening_amount: 0,
+    balance_amount: 0,
+    by_customer: [],
+  };
+
+  byCustomer.forEach((row) => {
+    const balanceAmount = row.opening_amount + row.billed_amount - row.received_amount;
+    if (row.billed_amount > 0 || row.received_amount > 0) total.customer_with_activity += 1;
+    total.billed_amount += row.billed_amount;
+    total.received_amount += row.received_amount;
+    total.opening_amount += row.opening_amount;
+    total.balance_amount += balanceAmount;
+    total.by_customer.push({
+      customer_id: row.customer_id,
+      customer_name: row.customer_name,
+      is_active: row.is_active,
+      opening_amount: row.opening_amount,
+      billed_amount: row.billed_amount,
+      received_amount: row.received_amount,
+      balance_amount: balanceAmount,
+    });
+  });
+
+  total.by_customer.sort((a, b) => String(a?.customer_name || "").localeCompare(String(b?.customer_name || "")));
+  return total;
+};
+
+const buildSupplierMonthlySummaryLocal = ({ suppliers, expenses, supplierPayments, monthFrom, monthTo }) => {
+  const rows = Array.isArray(suppliers) ? suppliers : [];
+  if (!rows.length) {
+    return {
+      supplier_count: 0,
+      active_supplier_count: 0,
+      supplier_with_activity: 0,
+      expense_amount: 0,
+      paid_amount: 0,
+      opening_amount: 0,
+      balance_amount: 0,
+      by_supplier: [],
+    };
+  }
+
+  const bySupplier = new Map(
+    rows.map((row) => [
+      String(row?._id || ""),
+      {
+        supplier_id: String(row?._id || ""),
+        supplier_name: row?.name || "",
+        is_active: Boolean(row?.isActive),
+        opening_amount: Number(row?.opening_balance || 0),
+        expense_amount: 0,
+        paid_amount: 0,
+      },
+    ])
+  );
+
+  (expenses || []).forEach((row) => {
+    if (!inDateRange(row?.date, monthFrom, monthTo)) return;
+    const id = String(row?.supplier_id?._id || row?.supplier_id || "");
+    const current = bySupplier.get(id);
+    if (!current) return;
+    current.expense_amount += Number(row?.amount || 0);
+  });
+
+  (supplierPayments || []).forEach((row) => {
+    if (!inDateRange(row?.date, monthFrom, monthTo)) return;
+    const id = String(row?.supplier_id?._id || row?.supplier_id || "");
+    const current = bySupplier.get(id);
+    if (!current) return;
+    current.paid_amount += Number(row?.amount || 0);
+  });
+
+  const total = {
+    supplier_count: rows.length,
+    active_supplier_count: rows.filter((row) => Boolean(row?.isActive)).length,
+    supplier_with_activity: 0,
+    expense_amount: 0,
+    paid_amount: 0,
+    opening_amount: 0,
+    balance_amount: 0,
+    by_supplier: [],
+  };
+
+  bySupplier.forEach((row) => {
+    const balanceAmount = row.opening_amount + row.expense_amount - row.paid_amount;
+    if (row.expense_amount > 0 || row.paid_amount > 0) total.supplier_with_activity += 1;
+    total.expense_amount += row.expense_amount;
+    total.paid_amount += row.paid_amount;
+    total.opening_amount += row.opening_amount;
+    total.balance_amount += balanceAmount;
+    total.by_supplier.push({
+      supplier_id: row.supplier_id,
+      supplier_name: row.supplier_name,
+      is_active: row.is_active,
+      opening_amount: row.opening_amount,
+      expense_amount: row.expense_amount,
+      paid_amount: row.paid_amount,
+      balance_amount: balanceAmount,
+    });
+  });
+
+  total.by_supplier.sort((a, b) => String(a?.supplier_name || "").localeCompare(String(b?.supplier_name || "")));
+  return total;
+};
+
+const buildCrpStaffMonthlySummaryLocal = ({ staff, crpRecords, staffPayments, monthFrom, monthTo }) => {
+  const crpStaff = (staff || []).filter((row) => String(row?.category || "").toLowerCase() === "cropping");
+  if (!crpStaff.length) {
+    return {
+      staff_count: 0,
+      active_staff_count: 0,
+      staff_with_activity: 0,
+      record_count: 0,
+      work_amount: 0,
+      arrears_amount: 0,
+      deduction_amount: 0,
+      balance_amount: 0,
+      by_staff: [],
+    };
+  }
+
+  const byStaff = new Map(
+    crpStaff.map((row) => [
+      String(row?._id || ""),
+      {
+        staff_id: String(row?._id || ""),
+        staff_name: row?.name || "",
+        is_active: Boolean(row?.isActive),
+        arrears_amount: Number(row?.opening_balance || 0),
+        records: 0,
+        work_amount: 0,
+        deduction_amount: 0,
+      },
+    ])
+  );
+
+  (crpRecords || []).forEach((row) => {
+    if (!inDateRange(row?.order_date, monthFrom, monthTo)) return;
+    const id = String(row?.staff_id?._id || row?.staff_id || "");
+    const current = byStaff.get(id);
+    if (!current) return;
+    current.records += 1;
+    current.work_amount += Number(row?.total_amount || 0);
+  });
+
+  (staffPayments || []).forEach((row) => {
+    if (!inDateRange(row?.date, monthFrom, monthTo)) return;
+    const id = String(row?.staff_id?._id || row?.staff_id || "");
+    const current = byStaff.get(id);
+    if (!current) return;
+    current.deduction_amount += Number(row?.amount || 0);
+  });
+
+  const total = {
+    staff_count: crpStaff.length,
+    active_staff_count: crpStaff.filter((row) => Boolean(row?.isActive)).length,
+    staff_with_activity: 0,
+    record_count: 0,
+    work_amount: 0,
+    arrears_amount: 0,
+    deduction_amount: 0,
+    balance_amount: 0,
+    by_staff: [],
+  };
+
+  byStaff.forEach((row) => {
+    const balanceAmount = row.arrears_amount + row.work_amount - row.deduction_amount;
+    if (row.records > 0 || row.deduction_amount > 0) total.staff_with_activity += 1;
+    total.record_count += row.records;
+    total.work_amount += row.work_amount;
+    total.arrears_amount += row.arrears_amount;
+    total.deduction_amount += row.deduction_amount;
+    total.balance_amount += balanceAmount;
+    total.by_staff.push({
+      staff_id: row.staff_id,
+      staff_name: row.staff_name,
+      is_active: row.is_active,
+      records: row.records,
+      arrears_amount: row.arrears_amount,
+      work_amount: row.work_amount,
+      deduction_amount: row.deduction_amount,
+      balance_amount: balanceAmount,
+    });
+  });
+
+  total.by_staff.sort((a, b) => String(a?.staff_name || "").localeCompare(String(b?.staff_name || "")));
+  return total;
+};
 
 const buildStaffMonthlySummaryLocal = ({ staff, staffRecords, staffPayments, selectedMonth }) => {
   const prevMonthKey = previousMonth(selectedMonth);
@@ -319,17 +586,17 @@ export const fetchDashboardSummaryLocalFirst = async (params = {}) => {
   const monthRange = toMonthRange(selectedMonth);
   const today = formatYmdLocal(new Date());
 
-  const orders = await getMergedSnapshot("orders:all", "orders:overlay");
-  const invoices = await getMergedSnapshot("invoices:all", "invoices:overlay");
-  const expenses = await getMergedSnapshot("expenses:all", "expenses:overlay");
-  const customerPayments = await getMergedSnapshot("customerPayments:all", "customerPayments:overlay");
-  const supplierPayments = await getMergedSnapshot("supplierPayments:all", "supplierPayments:overlay");
-  const staffPayments = await getMergedSnapshot("staffPayments:all", "staffPayments:overlay");
-  const staffRecords = await getMergedSnapshot("staffRecords:all", "staffRecords:overlay");
-  const crpRecords = await getMergedSnapshot("crpStaffRecords:all", "crpStaffRecords:overlay");
-  const customers = await getMergedSnapshot("customers:all", "customers:overlay");
-  const suppliers = await getMergedSnapshot("suppliers:all", "suppliers:overlay");
-  const staff = await getMergedSnapshot("staffs:all", "staffs:overlay");
+  const orders = await getMergedSnapshotCached("orders:all", "orders:overlay");
+  const invoices = await getMergedSnapshotCached("invoices:all", "invoices:overlay");
+  const expenses = await getMergedSnapshotCached("expenses:all", "expenses:overlay");
+  const customerPayments = await getMergedSnapshotCached("customerPayments:all", "customerPayments:overlay");
+  const supplierPayments = await getMergedSnapshotCached("supplierPayments:all", "supplierPayments:overlay");
+  const staffPayments = await getMergedSnapshotCached("staffPayments:all", "staffPayments:overlay");
+  const staffRecords = await getMergedSnapshotCached("staffRecords:all", "staffRecords:overlay");
+  const crpRecords = await getMergedSnapshotCached("crpStaffRecords:all", "crpStaffRecords:overlay");
+  const customers = await getMergedSnapshotCached("customers:all", "customers:overlay");
+  const suppliers = await getMergedSnapshotCached("suppliers:all", "suppliers:overlay");
+  const staff = await getMergedSnapshotCached("staffs:all", "staffs:overlay");
 
   const todayOrders = orders.filter((row) => inDateRange(row?.date, today, today));
   const todayInvoices = invoices.filter((row) => inDateRange(row?.invoice_date, today, today));
@@ -364,6 +631,27 @@ export const fetchDashboardSummaryLocalFirst = async (params = {}) => {
       expenses: { count: monthExpenses.length, amount: sumBy(monthExpenses, "amount") },
       staff_records: { count: monthStaffRecords.length, amount: sumBy(monthStaffRecords, "final_amount") },
       crp_records: { count: monthCrpRecords.length, amount: sumBy(monthCrpRecords, "total_amount") },
+      customer_summary: buildCustomerMonthlySummaryLocal({
+        customers,
+        invoices,
+        customerPayments,
+        monthFrom: monthRange.from,
+        monthTo: monthRange.to,
+      }),
+      supplier_summary: buildSupplierMonthlySummaryLocal({
+        suppliers,
+        expenses,
+        supplierPayments,
+        monthFrom: monthRange.from,
+        monthTo: monthRange.to,
+      }),
+      crp_staff_summary: buildCrpStaffMonthlySummaryLocal({
+        staff,
+        crpRecords,
+        staffPayments,
+        monthFrom: monthRange.from,
+        monthTo: monthRange.to,
+      }),
       staff_summary: buildStaffMonthlySummaryLocal({
         staff,
         staffRecords,
@@ -411,11 +699,11 @@ export const fetchDashboardTrendLocalFirst = async (params = {}) => {
   const trend = buildTrendDays(from, to);
   const trendMap = new Map(trend.map((row) => [row.day, row]));
 
-  const orders = await getMergedSnapshot("orders:all", "orders:overlay");
-  const expenses = await getMergedSnapshot("expenses:all", "expenses:overlay");
-  const customerPayments = await getMergedSnapshot("customerPayments:all", "customerPayments:overlay");
-  const supplierPayments = await getMergedSnapshot("supplierPayments:all", "supplierPayments:overlay");
-  const staffPayments = await getMergedSnapshot("staffPayments:all", "staffPayments:overlay");
+  const orders = await getMergedSnapshotCached("orders:all", "orders:overlay");
+  const expenses = await getMergedSnapshotCached("expenses:all", "expenses:overlay");
+  const customerPayments = await getMergedSnapshotCached("customerPayments:all", "customerPayments:overlay");
+  const supplierPayments = await getMergedSnapshotCached("supplierPayments:all", "supplierPayments:overlay");
+  const staffPayments = await getMergedSnapshotCached("staffPayments:all", "staffPayments:overlay");
 
   orders.forEach((row) => {
     if (!inDateRange(row?.date, from, to)) return;
