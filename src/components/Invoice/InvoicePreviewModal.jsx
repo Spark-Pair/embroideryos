@@ -263,21 +263,23 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
         </div>
 
         {/* ── Orders table ── */}
-        <div style={{ border: "1px solid #111111ed", borderRadius: "10px", overflow: "hidden", flexShrink: 0 }}>
+        <div style={{ border: "1px solid #111111ed", borderRadius: "9px", overflow: "hidden", flexShrink: 0 }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", tableLayout: "fixed" }}>
             <colgroup>
-              <col style={{ width: "5%" }} />
-              <col style={{ width: "16%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "32%" }} />
-              <col style={{ width: "13%" }} />
+              <col style={{ width: "3%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "26%" }} />
               <col style={{ width: "11%" }} />
-              <col style={{ width: "13%" }} />
+              <col style={{ width: "5%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "11%" }} />
             </colgroup>
             <thead>
               <tr style={{ background: "#1e293b" }}>
-                {["#", "Date", "Lot", "Description", "Qty (Pcs)", "Rate", "Amount"].map((h, i) => (
-                  <th key={h} style={{ padding: "6px 7.5px", fontWeight: 700, textAlign: i >= 4 ? "right" : "left", fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#fff", whiteSpace: "nowrap" }}>
+                {["#", "Date", "Lot", "Description", "Stitch", "Apq", "PCS", "Rate", "Amount"].map((h, i, arr) => (
+                  <th key={h} style={{ padding: i === 0 || i === arr.length - 1 ? "6px 6px" : "6px 3.5px", fontWeight: 700, textAlign: i >= 4 ? "right" : "left", fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#fff", whiteSpace: "nowrap" }} >
                     {h}
                   </th>
                 ))}
@@ -286,24 +288,30 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
             <tbody>
               {orders.map((order, idx) => (
                 <tr key={order._id ?? idx} style={{ background: idx % 2 === 0 ? "#fff" : "#dcdcdc", borderTop: "1px solid #111111ed" }}>
-                  <td style={{ padding: "6px 7.5px", color: "#111827", fontWeight: 400 }}>{idx + 1}</td>
-                  <td style={{ padding: "6px 7.5px", fontWeight: 600, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <td style={{ padding: "6px 6px", color: "#111827", fontWeight: 400 }}>{idx + 1}.</td>
+                  <td style={{ padding: "6px 3.5px", fontWeight: 600, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {formatDate(order.date, "DD MMM yyyy")}
                   </td>
-                  <td style={{ padding: "6px 7.5px", fontWeight: 400, color: "#111827", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <td style={{ padding: "6px 3.5px", fontWeight: 400, color: "#111827", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {order.lot_no || "-"}
                   </td>
-                  <td style={{ padding: "6px 7.5px", fontWeight: 400, color: "#111827", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <td style={{ padding: "6px 3.5px", fontWeight: 400, color: "#111827", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {order.description || "-"}
                   </td>
-                  <td style={{ padding: "6px 7.5px", textAlign: "right", fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
-                    {formatNumbers(getQuantityInPcs(order), 0)} Pcs
+                  <td style={{ padding: "6px 3.5px", textAlign: "right", fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
+                    {Number(order.design_stitches || 0) === 0 ? "-" : formatNumbers(order.design_stitches, 0)}
                   </td>
-                  <td style={{ padding: "6px 7.5px", textAlign: "right", fontWeight: 400, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
-                    {formatNumbers(order.rate, 2)}
+                  <td style={{ padding: "6px 3.5px", textAlign: "right", fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
+                    {Number(order.apq || 0) === 0 ? "-" : formatNumbers(order.apq, 0)}
                   </td>
-                  <td style={{ padding: "6px 7.5px", textAlign: "right", fontWeight: 700, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
-                    {formatNumbers(order.total_amount, 2)}
+                  <td style={{ padding: "6px 3.5px", textAlign: "right", fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
+                    {formatNumbers(getQuantityInPcs(order), 0)}
+                  </td>
+                  <td style={{ padding: "6px 3.5px", textAlign: "right", fontWeight: 400, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
+                    {formatNumbers(order.rate, 1)}
+                  </td>
+                  <td style={{ padding: "6px 6px", textAlign: "right", fontWeight: 700, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
+                    {formatNumbers(order.total_amount, 1)}
                   </td>
                 </tr>
               ))}
@@ -328,16 +336,16 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
             <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", padding: "0px 3px" }}>
                 <span style={{ fontWeight: 400, color: "#111" }}>Outstanding</span>
-                <span style={{ fontWeight: 600, color: "#111", fontVariantNumeric: "tabular-nums" }}>{formatNumbers(outstandingBalance, 2)}</span>
+                <span style={{ fontWeight: 600, color: "#111", fontVariantNumeric: "tabular-nums" }}>{formatNumbers(outstandingBalance, 1)}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", padding: "0px 3px" }}>
                 <span style={{ fontWeight: 400, color: "#111" }}>Sub Total</span>
-                <span style={{ fontWeight: 600, color: "#111", fontVariantNumeric: "tabular-nums" }}>{formatNumbers(totalAmt, 2)}</span>
+                <span style={{ fontWeight: 600, color: "#111", fontVariantNumeric: "tabular-nums" }}>{formatNumbers(totalAmt, 1)}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #111", padding: "5px 3px 0 3px" }}>
                 <span style={{ fontWeight: 700, color: "#111", fontSize: "11px" }}>New Balance</span>
                 <span style={{ fontWeight: 700, fontSize: "14px", fontVariantNumeric: "tabular-nums", color: "#111" }}>
-                  {formatNumbers(newBalance, 2)}
+                  {formatNumbers(newBalance, 1)}
                 </span>
               </div>
             </div>
