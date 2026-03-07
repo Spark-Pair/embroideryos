@@ -133,6 +133,17 @@ const PRINT_STYLE = `
       display: block !important;
     }
 
+    #invoice-print-root .invoice-brand-footer {
+      flex-shrink: 0 !important;
+      width: 100% !important;
+      margin-top: 0mm !important;
+      text-align: center !important;
+      font-size: 8.5px !important;
+      font-weight: 500 !important;
+      letter-spacing: 0.06em !important;
+      color: #111 !important;
+    }
+
     #invoice-print-root * {
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
@@ -381,6 +392,25 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
             )}
           </div>
         )}
+
+        <div
+          className="invoice-brand-footer"
+          style={{
+            flexShrink: 0,
+            width: "100%",
+            marginTop: "0px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            fontSize: "9px",
+            fontWeight: 500,
+            letterSpacing: "0.06em",
+            color: "#111",
+          }}
+        >
+          <span>Generated with EmbroideryOS by SparkPair</span>
+          <span>www.sparkpair.dev</span>
+        </div>
       </div>
     </div>
   );
