@@ -25,6 +25,21 @@ const toMillis = (value) => {
   const d = new Date(value).getTime();
   return Number.isFinite(d) ? d : 0;
 };
+const toDateInput = (value = new Date()) => {
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+const startOfDay = (value) => {
+  const d = new Date(value);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+const throwLocalError = (message) => {
+  const error = new Error(message);
+  error.response = { data: { message } };
+  throw error;
+};
 const objectIdToMillis = (id) => {
   const raw = String(id || "");
   if (!/^[a-fA-F0-9]{24}$/.test(raw)) return 0;
@@ -334,8 +349,20 @@ export const fetchInvoiceOrderGroupsLocalFirst = async (params = {}) => {
   });
 
   const data = Array.from(grouped.values()).sort((a, b) => toMillis(a.oldest_order_date) - toMillis(b.oldest_order_date));
+  const allInvoices = withOverlayList(await getAllBaseInvoices(), await getOverlay());
+  const lastInvoiceDateMs = allInvoices.reduce((latest, row) => {
+    const ts = toMillis(row?.invoice_date);
+    if (!ts) return latest;
+    return ts > latest ? ts : latest;
+  }, 0);
   logDataSource("IDB", "invoices.order_groups.local", { count: data.length });
-  return { success: true, data };
+  return {
+    success: true,
+    data,
+    meta: {
+      last_invoice_date: lastInvoiceDateMs ? toDateInput(new Date(lastInvoiceDateMs)) : "",
+    },
+  };
 };
 
 export const fetchInvoiceLocalFirst = async (id) => {
@@ -421,8 +448,32 @@ export const createInvoiceLocalFirst = async (payload) => {
   const orderMap = new Map(orders.map((row) => [String(row?._id || ""), row]));
   const orderIds = Array.isArray(payload?.order_ids) ? payload.order_ids : [];
   const selectedOrders = orderIds.map((oid) => orderMap.get(String(oid))).filter(Boolean);
+  if (!selectedOrders.length || selectedOrders.length !== orderIds.length) {
+    throwLocalError("Some selected orders are missing or already invoiced");
+  }
   const totalAmount = selectedOrders.reduce((sum, row) => sum + Number(row?.total_amount || 0), 0);
   const invoiceDate = payload?.invoice_date || new Date().toISOString();
+  const invoiceDateObj = new Date(invoiceDate);
+  if (Number.isNaN(invoiceDateObj.getTime())) throwLocalError("Invalid invoice date");
+  const invoiceDay = startOfDay(invoiceDateObj);
+  const todayDay = startOfDay(new Date());
+  if (invoiceDay > todayDay) throwLocalError("Invoice date cannot be after today");
+  const lastInvoiceDateMs = allExisting.reduce((latest, row) => {
+    const ts = toMillis(row?.invoice_date);
+    if (!ts) return latest;
+    return ts > latest ? ts : latest;
+  }, 0);
+  if (lastInvoiceDateMs && invoiceDay < startOfDay(new Date(lastInvoiceDateMs))) {
+    throwLocalError(`Invoice date cannot be before last invoice date (${toDateInput(new Date(lastInvoiceDateMs))})`);
+  }
+  const latestOrderDateMs = selectedOrders.reduce((latest, row) => {
+    const ts = toMillis(row?.date);
+    if (!ts) return latest;
+    return ts > latest ? ts : latest;
+  }, 0);
+  if (latestOrderDateMs && invoiceDay < startOfDay(new Date(latestOrderDateMs))) {
+    throwLocalError(`Invoice date cannot be before selected order date (${toDateInput(new Date(latestOrderDateMs))})`);
+  }
   const invoiceYear = new Date(invoiceDate).getFullYear();
   const counterSnapshot = await getEntitySnapshot("business:invoice_counter");
   const counterLastSeq =

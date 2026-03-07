@@ -19,6 +19,12 @@ function toDateInput(value = new Date()) {
   return `${y}-${m}-${day}`;
 }
 
+function maxDateStr(...values) {
+  const valid = values.filter((v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || "")));
+  if (!valid.length) return "";
+  return valid.sort().at(-1) || "";
+}
+
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -43,6 +49,7 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [selectedOrderIds, setSelectedOrderIds] = useState([]);
   const [invoiceDate, setInvoiceDate] = useState(toDateInput());
+  const [lastInvoiceDate, setLastInvoiceDate] = useState("");
   const [nextInvoiceNumber, setNextInvoiceNumber] = useState("");
   const [loadingInvoiceCounter, setLoadingInvoiceCounter] = useState(false);
   const [note, setNote] = useState("");
@@ -54,6 +61,7 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
     try {
       const res = await fetchInvoiceOrderGroups();
       setOrderGroups(res?.data || []);
+      setLastInvoiceDate(String(res?.meta?.last_invoice_date || ""));
     } catch (err) {
       const message = err.response?.data?.message || "Failed to load grouped orders";
       setError(message);
@@ -159,6 +167,35 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
     };
   }, [orderGroups, selectedCustomerId, selectedOrderIds]);
 
+  const selectedLatestOrderDate = useMemo(() => {
+    if (!selectedCustomerId || selectedOrderIds.length === 0) return "";
+    const group = orderGroups.find((g) => g.customer_id === selectedCustomerId);
+    if (!group) return "";
+    const selectedSet = new Set(selectedOrderIds);
+    const latestTs = (group.orders || []).reduce((latest, order) => {
+      if (!selectedSet.has(order?._id)) return latest;
+      const ts = new Date(order?.date || "").getTime();
+      if (!Number.isFinite(ts)) return latest;
+      return ts > latest ? ts : latest;
+    }, 0);
+    return latestTs ? toDateInput(new Date(latestTs)) : "";
+  }, [orderGroups, selectedCustomerId, selectedOrderIds]);
+
+  const todayDate = toDateInput();
+  const minInvoiceDate = maxDateStr(lastInvoiceDate, selectedLatestOrderDate);
+  const maxInvoiceDate = todayDate;
+
+  useEffect(() => {
+    if (!invoiceDate) return;
+    if (minInvoiceDate && invoiceDate < minInvoiceDate) {
+      setInvoiceDate(minInvoiceDate);
+      return;
+    }
+    if (maxInvoiceDate && invoiceDate > maxInvoiceDate) {
+      setInvoiceDate(maxInvoiceDate);
+    }
+  }, [invoiceDate, maxInvoiceDate, minInvoiceDate]);
+
   const toggleOrder = (group, orderId) => {
     if (!selectedCustomerId) setSelectedCustomerId(group.customer_id);
     if (selectedCustomerId && selectedCustomerId !== group.customer_id) {
@@ -204,6 +241,20 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
     }
     if (selectedOrderIds.length > MAX_INVOICE_ORDERS) {
       const message = `Maximum ${MAX_INVOICE_ORDERS} orders allowed in one invoice.`;
+      setError(message);
+      showToast({ type: "warning", message });
+      return;
+    }
+    if (invoiceDate && minInvoiceDate && invoiceDate < minInvoiceDate) {
+      const message = selectedLatestOrderDate && selectedLatestOrderDate > (lastInvoiceDate || "")
+        ? `Invoice date cannot be before selected order date (${selectedLatestOrderDate}).`
+        : `Invoice date cannot be before last invoice date (${lastInvoiceDate}).`;
+      setError(message);
+      showToast({ type: "warning", message });
+      return;
+    }
+    if (invoiceDate && maxInvoiceDate && invoiceDate > maxInvoiceDate) {
+      const message = "Invoice date cannot be after today.";
       setError(message);
       showToast({ type: "warning", message });
       return;
@@ -354,7 +405,17 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
               readOnly
               required={false}
             />
-            <Input label="Invoice Date" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+            <Input
+              label="Invoice Date"
+              type="date"
+              value={invoiceDate}
+              min={minInvoiceDate || undefined}
+              max={maxInvoiceDate || undefined}
+              onChange={(e) => setInvoiceDate(e.target.value)}
+            />
+            <p className="text-[11px] text-gray-500 -mt-2">
+              Allowed range: {minInvoiceDate || "—"} to {maxInvoiceDate || "—"}
+            </p>
             <Input label="Note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional note" required={false} />
             <div>
               <label className="block mb-1.5 text-sm text-gray-700">Invoice Image (Optional)</label>
