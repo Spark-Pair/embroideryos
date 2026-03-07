@@ -6,6 +6,7 @@ import {
   getPendingSyncActions,
   offlineAccess,
   queueSyncAction,
+  remapPendingSyncEntityId,
   upsertEntitySnapshot,
 } from "./idb";
 import { logDataSource } from "./logger";
@@ -37,6 +38,11 @@ const sortLatestFirst = (rows = []) =>
     const bTime = toMillis(b?.date) || toMillis(b?.createdAt) || objectIdToMillis(normalizeId(b));
     return bTime - aTime;
   });
+
+const extractStaffPaymentIdFromUrl = (url = "") => {
+  const match = String(url || "").match(/\/staff-payments\/([^/?#]+)/i);
+  return match?.[1] ? String(match[1]) : "";
+};
 
 const uniqueById = (rows = []) => {
   const map = new Map();
@@ -169,13 +175,24 @@ const refreshAllSnapshotFromCloud = async () => {
 
 const syncCreateSuccess = async (action, serverPayment) => {
   const localId = String(action?.meta?.localId || "");
+  const localIds = Array.isArray(action?.meta?.localIds) ? action.meta.localIds : [];
   const realId = normalizeId(serverPayment);
 
   await patchOverlay((overlay) => {
     if (localId) delete overlay[localId];
+    localIds.forEach((id) => {
+      if (overlay[id]) delete overlay[id];
+    });
     if (realId) overlay[realId] = { ...serverPayment, _id: realId };
     return overlay;
   });
+  const idsToRemap = [localId, ...localIds].filter(Boolean);
+  if (realId) {
+    for (const srcId of idsToRemap) {
+      if (!srcId || srcId === realId) continue;
+      await remapPendingSyncEntityId("staffPayments", srcId, realId);
+    }
+  }
 };
 
 const syncUpdateSuccess = async (action, serverPayment) => {
@@ -207,9 +224,26 @@ const processStaffPaymentQueue = async () => {
           const serverPayment = res?.data?.data || res?.data;
           await syncCreateSuccess(action, serverPayment);
         } else if (action.method === "PUT") {
-          const res = await apiClient.put(action.url, action.payload);
-          const serverPayment = res?.data?.data || res?.data;
-          await syncUpdateSuccess(action, serverPayment);
+          const queuedId = extractStaffPaymentIdFromUrl(action.url);
+          if (queuedId.startsWith("local-staff-payment-")) {
+            const res = await apiClient.post(STAFF_PAYMENTS_URL, action.payload);
+            const serverPayment = res?.data?.data || res?.data;
+            await syncCreateSuccess(
+              {
+                ...action,
+                meta: {
+                  ...(action?.meta || {}),
+                  localId: queuedId,
+                  localIds: [queuedId],
+                },
+              },
+              serverPayment
+            );
+          } else {
+            const res = await apiClient.put(action.url, action.payload);
+            const serverPayment = res?.data?.data || res?.data;
+            await syncUpdateSuccess(action, serverPayment);
+          }
         }
 
         await completeSyncAction(action.id);

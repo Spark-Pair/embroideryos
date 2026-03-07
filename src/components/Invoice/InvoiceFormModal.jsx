@@ -227,7 +227,7 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
             <div>
               <h3 className="text-sm font-semibold text-gray-800">Orders Grouped by Customer</h3>
-              <p className="text-xs text-gray-500">Sorted by date (latest first)</p>
+              <p className="text-xs text-gray-500">Sorted by date (oldest first)</p>
             </div>
             <Button variant="secondary" outline size="sm" icon={RefreshCcw} onClick={loadGroups} disabled={loadingGroups}>
               Refresh
@@ -263,29 +263,36 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
                       {(group.orders || []).map((order) => (
                         <label
                           key={order._id}
-                          className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 cursor-pointer transition ${
+                          className={`block rounded-xl border px-3.5 py-2.5 cursor-pointer transition ${
                             selectedSet.has(order._id) ? "border-teal-300 bg-teal-50" : "border-gray-200 bg-white"
                           }`}
                         >
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-3 min-w-0">
                             <input
                               type="checkbox"
                               checked={selectedSet.has(order._id)}
                               onChange={() => toggleOrder(group, order._id)}
-                              className="h-4 w-4"
+                              className="h-4 w-4 mt-0.5 shrink-0"
                             />
-                            <div>
-                              <p className="text-sm font-medium text-gray-800">{formatDate(order.date, "DD MMM yyyy")}</p>
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-gray-900 leading-tight truncate">
+                                  {order.description || "No description"}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                  Date: {formatDate(order.date, "DD MMM yyyy")} • Customer: {group.customer_name || "---"}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                  Lot: {order.lot_no || "---"} • Machine: {order.machine_no || "---"}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="text-sm font-semibold text-emerald-700">{formatNumbers(order.total_amount, 2)}</p>
                               <p className="text-xs text-gray-500">
-                                Lot: {order.lot_no || "---"} • {order.machine_no || "---"}
+                                Qty: {formatNumbers(order.quantity, 0)} {order.unit}
                               </p>
                             </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-sm font-semibold text-emerald-700">{formatNumbers(order.total_amount, 2)}</p>
-                            <p className="text-xs text-gray-500">
-                              {formatNumbers(order.quantity, 0)} {order.unit}
-                            </p>
                           </div>
                         </label>
                       ))}

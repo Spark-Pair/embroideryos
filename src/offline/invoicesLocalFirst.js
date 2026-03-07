@@ -286,9 +286,14 @@ export const fetchInvoiceOrderGroupsLocalFirst = async (params = {}) => {
   const filtered = customerName
     ? orders.filter((order) => String(order?.customer_name || "").toLowerCase().includes(customerName))
     : orders;
+  const sortedFiltered = [...filtered].sort((a, b) => {
+    const aTime = toMillis(a?.date) || toMillis(a?.createdAt) || objectIdToMillis(normalizeId(a));
+    const bTime = toMillis(b?.date) || toMillis(b?.createdAt) || objectIdToMillis(normalizeId(b));
+    return aTime - bTime;
+  });
 
   const grouped = new Map();
-  filtered.forEach((order) => {
+  sortedFiltered.forEach((order) => {
     const key = String(order?.customer_id || "");
     if (!key) return;
     const existing = grouped.get(key);
@@ -296,19 +301,22 @@ export const fetchInvoiceOrderGroupsLocalFirst = async (params = {}) => {
       grouped.set(key, {
         customer_id: order.customer_id,
         customer_name: order.customer_name,
-        latest_order_date: order.date,
+        oldest_order_date: order.date,
         total_orders: 1,
         total_amount: Number(order.total_amount || 0),
         orders: [order],
       });
       return;
     }
+    if (toMillis(order.date) < toMillis(existing.oldest_order_date)) {
+      existing.oldest_order_date = order.date;
+    }
     existing.total_orders += 1;
     existing.total_amount += Number(order.total_amount || 0);
     existing.orders.push(order);
   });
 
-  const data = Array.from(grouped.values()).sort((a, b) => toMillis(b.latest_order_date) - toMillis(a.latest_order_date));
+  const data = Array.from(grouped.values()).sort((a, b) => toMillis(a.oldest_order_date) - toMillis(b.oldest_order_date));
   logDataSource("IDB", "invoices.order_groups.local", { count: data.length });
   return { success: true, data };
 };
