@@ -8,7 +8,7 @@ import { fetchMyInvoiceCounter } from "../../api/business";
 import { formatDate, formatNumbers } from "../../utils";
 import { useToast } from "../../context/ToastContext";
 
-const MAX_INVOICE_ORDERS = 8;
+const MAX_INVOICE_ORDERS = 7;
 
 function toDateInput(value = new Date()) {
   const d = value instanceof Date ? value : new Date(value);

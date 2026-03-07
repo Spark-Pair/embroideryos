@@ -9,9 +9,9 @@ import { formatDate, formatNumbers } from "../../utils";
  * Each copy = 148.5mm wide, 5mm padding all sides
  * Content = 138.5mm × 200mm
  * After cut: all 4 sides = 5mm equal ✓
- * MAX ORDERS = 8
+ * MAX ORDERS = 7
  */
-export const MAX_INVOICE_ORDERS = 8;
+export const MAX_INVOICE_ORDERS = 7;
 
 const PRINT_STYLE = `
   @media print {
