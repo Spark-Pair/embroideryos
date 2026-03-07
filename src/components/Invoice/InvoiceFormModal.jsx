@@ -49,6 +49,7 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [selectedOrderIds, setSelectedOrderIds] = useState([]);
   const [invoiceDate, setInvoiceDate] = useState(toDateInput());
+  const [invoiceDateTouched, setInvoiceDateTouched] = useState(false);
   const [lastInvoiceDate, setLastInvoiceDate] = useState("");
   const [nextInvoiceNumber, setNextInvoiceNumber] = useState("");
   const [loadingInvoiceCounter, setLoadingInvoiceCounter] = useState(false);
@@ -87,7 +88,8 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
   const resetForm = () => {
     setSelectedCustomerId("");
     setSelectedOrderIds([]);
-    setInvoiceDate(toDateInput());
+    setInvoiceDate("");
+    setInvoiceDateTouched(false);
     setNote("");
     setInvoiceImageData("");
     setError("");
@@ -186,6 +188,16 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
   const maxInvoiceDate = todayDate;
 
   useEffect(() => {
+    if (!invoiceDateTouched) {
+      if (minInvoiceDate) {
+        if (invoiceDate !== minInvoiceDate) setInvoiceDate(minInvoiceDate);
+        return;
+      }
+      if (maxInvoiceDate && !invoiceDate) {
+        setInvoiceDate(maxInvoiceDate);
+        return;
+      }
+    }
     if (!invoiceDate) return;
     if (minInvoiceDate && invoiceDate < minInvoiceDate) {
       setInvoiceDate(minInvoiceDate);
@@ -194,7 +206,7 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
     if (maxInvoiceDate && invoiceDate > maxInvoiceDate) {
       setInvoiceDate(maxInvoiceDate);
     }
-  }, [invoiceDate, maxInvoiceDate, minInvoiceDate]);
+  }, [invoiceDate, invoiceDateTouched, maxInvoiceDate, minInvoiceDate]);
 
   const toggleOrder = (group, orderId) => {
     if (!selectedCustomerId) setSelectedCustomerId(group.customer_id);
@@ -411,7 +423,10 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
               value={invoiceDate}
               min={minInvoiceDate || undefined}
               max={maxInvoiceDate || undefined}
-              onChange={(e) => setInvoiceDate(e.target.value)}
+              onChange={(e) => {
+                setInvoiceDateTouched(true);
+                setInvoiceDate(e.target.value);
+              }}
             />
             <p className="text-[11px] text-gray-500 -mt-2">
               Allowed range: {minInvoiceDate || "—"} to {maxInvoiceDate || "—"}

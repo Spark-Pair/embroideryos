@@ -121,11 +121,12 @@ const PRINT_STYLE = `
       justify-content: center !important;
       overflow: hidden !important;
       box-sizing: border-box !important;
+      padding: 2.5mm !important;
     }
 
     #invoice-print-root .invoice-image {
       max-width: 100% !important;
-      max-height: 57mm !important;
+      max-height: 100% !important;
       width: auto !important;
       height: auto !important;
       object-fit: contain !important;
@@ -367,6 +368,7 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
               justifyContent: "center",
               overflow: "hidden",
               boxSizing: "border-box",
+              padding: "2.5mm",
             }}
           >
             {invoice.image_data && invoice.image_data.trim() !== "" && (
@@ -374,7 +376,7 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
                 src={invoice.image_data}
                 alt=""
                 className="invoice-image"
-                style={{ maxWidth: "100%", maxHeight: "174px", width: "auto", height: "auto", objectFit: "contain", display: "block" }}
+                style={{ maxWidth: "100%", maxHeight: "100%", width: "auto", height: "auto", objectFit: "contain", display: "block" }}
               />
             )}
           </div>
