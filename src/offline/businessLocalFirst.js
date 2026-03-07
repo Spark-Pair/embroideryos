@@ -130,15 +130,16 @@ export const updateMyInvoiceBannerLocalFirst = async (invoice_banner_data) => {
   return { invoice_banner_data };
 };
 
-export const fetchMyInvoiceCounterLocalFirst = async () => {
+export const fetchMyInvoiceCounterLocalFirst = async (params = {}) => {
+  const year = Number(params?.year) || new Date().getFullYear();
   if (!offlineAccess.isUnlocked()) {
-    const res = await apiClient.get("/businesses/me/invoice-counter");
+    const res = await apiClient.get("/businesses/me/invoice-counter", { params: { year } });
     return res.data;
   }
 
   if (navigator.onLine) {
     try {
-      const res = await apiClient.get("/businesses/me/invoice-counter");
+      const res = await apiClient.get("/businesses/me/invoice-counter", { params: { year } });
       if (res?.data) {
         await upsertEntitySnapshot(INVOICE_COUNTER_KEY, res.data);
         return res.data;
@@ -155,7 +156,7 @@ export const fetchMyInvoiceCounterLocalFirst = async () => {
   }
 
   return {
-    year: new Date().getFullYear(),
+    year,
     last_invoice_no: 0,
     next_invoice_no: 1,
     can_update: true,

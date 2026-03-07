@@ -25,8 +25,25 @@ export default function Invoices() {
     const d = new Date(value).getTime();
     return Number.isFinite(d) ? d : 0;
   };
+  const parseInvoiceNumber = (invoiceNumber = "") => {
+    const raw = String(invoiceNumber || "").trim();
+    const m = raw.match(/^(\d{4})-(\d{4,})$/);
+    if (!m) return null;
+    const year = Number(m[1]);
+    const seq = Number(m[2]);
+    if (!Number.isFinite(year) || !Number.isFinite(seq)) return null;
+    return { year, seq };
+  };
   const sortLatestFirst = (rows = []) =>
     [...rows].sort((a, b) => {
+      const aInvoice = parseInvoiceNumber(a?.invoice_number);
+      const bInvoice = parseInvoiceNumber(b?.invoice_number);
+      if (aInvoice && bInvoice) {
+        if (aInvoice.year !== bInvoice.year) return bInvoice.year - aInvoice.year;
+        if (aInvoice.seq !== bInvoice.seq) return bInvoice.seq - aInvoice.seq;
+      }
+      if (aInvoice && !bInvoice) return -1;
+      if (!aInvoice && bInvoice) return 1;
       const aTime = toMillis(a?.invoice_date) || toMillis(a?.createdAt);
       const bTime = toMillis(b?.invoice_date) || toMillis(b?.createdAt);
       return bTime - aTime;

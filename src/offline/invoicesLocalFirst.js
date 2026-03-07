@@ -30,9 +30,26 @@ const objectIdToMillis = (id) => {
   if (!/^[a-fA-F0-9]{24}$/.test(raw)) return 0;
   return parseInt(raw.slice(0, 8), 16) * 1000;
 };
+const parseInvoiceNumber = (invoiceNumber = "") => {
+  const raw = String(invoiceNumber || "").trim();
+  const m = raw.match(/^(\d{4})-(\d{4,})$/);
+  if (!m) return null;
+  const year = Number(m[1]);
+  const seq = Number(m[2]);
+  if (!Number.isFinite(year) || !Number.isFinite(seq)) return null;
+  return { year, seq };
+};
 
 const sortLatestFirst = (rows = []) =>
   [...rows].sort((a, b) => {
+    const aInvoice = parseInvoiceNumber(a?.invoice_number);
+    const bInvoice = parseInvoiceNumber(b?.invoice_number);
+    if (aInvoice && bInvoice) {
+      if (aInvoice.year !== bInvoice.year) return bInvoice.year - aInvoice.year;
+      if (aInvoice.seq !== bInvoice.seq) return bInvoice.seq - aInvoice.seq;
+    }
+    if (aInvoice && !bInvoice) return -1;
+    if (!aInvoice && bInvoice) return 1;
     const aTime = toMillis(a?.invoice_date) || toMillis(a?.createdAt) || objectIdToMillis(normalizeId(a));
     const bTime = toMillis(b?.invoice_date) || toMillis(b?.createdAt) || objectIdToMillis(normalizeId(b));
     return bTime - aTime;
@@ -407,11 +424,17 @@ export const createInvoiceLocalFirst = async (payload) => {
   const totalAmount = selectedOrders.reduce((sum, row) => sum + Number(row?.total_amount || 0), 0);
   const invoiceDate = payload?.invoice_date || new Date().toISOString();
   const invoiceYear = new Date(invoiceDate).getFullYear();
+  const counterSnapshot = await getEntitySnapshot("business:invoice_counter");
+  const counterLastSeq =
+    Number(counterSnapshot?.year) === Number(invoiceYear)
+      ? Number(counterSnapshot?.last_invoice_no || 0)
+      : 0;
   const maxSeq = allExisting.reduce((acc, row) => {
     const seq = parseInvoiceSeq(row?.invoice_number, invoiceYear);
     return seq > acc ? seq : acc;
   }, 0);
-  const invoiceNumber = `${invoiceYear}-${String(maxSeq + 1).padStart(4, "0")}`;
+  const nextSeq = Math.max(maxSeq, counterLastSeq) + 1;
+  const invoiceNumber = `${invoiceYear}-${String(nextSeq).padStart(4, "0")}`;
 
   const localInvoice = {
     _id: localId,
@@ -443,6 +466,15 @@ export const createInvoiceLocalFirst = async (payload) => {
     url: INVOICES_URL,
     payload,
     meta: { localId, orderIds },
+  });
+
+  await upsertEntitySnapshot("business:invoice_counter", {
+    year: invoiceYear,
+    last_invoice_no: nextSeq,
+    next_invoice_no: nextSeq + 1,
+    can_update: false,
+    has_invoices: true,
+    invoice_count: Number(counterSnapshot?.invoice_count || 0) + 1,
   });
 
   processInvoiceQueue().catch(() => null);

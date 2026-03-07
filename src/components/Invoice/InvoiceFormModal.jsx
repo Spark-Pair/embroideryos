@@ -4,6 +4,7 @@ import Modal from "../Modal";
 import Button from "../Button";
 import Input from "../Input";
 import { fetchInvoiceOrderGroups } from "../../api/invoice";
+import { fetchMyInvoiceCounter } from "../../api/business";
 import { formatDate, formatNumbers } from "../../utils";
 import { useToast } from "../../context/ToastContext";
 
@@ -27,6 +28,12 @@ function readFileAsDataUrl(file) {
   });
 }
 
+function formatInvoiceNumber(year, nextInvoiceNo) {
+  const y = Number(year) || new Date().getFullYear();
+  const seq = Number(nextInvoiceNo) || 1;
+  return `${y}-${String(Math.max(1, seq)).padStart(4, "0")}`;
+}
+
 export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadInvoiceImage = false }) {
   const { showToast } = useToast();
   const [orderGroups, setOrderGroups] = useState([]);
@@ -36,6 +43,8 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [selectedOrderIds, setSelectedOrderIds] = useState([]);
   const [invoiceDate, setInvoiceDate] = useState(toDateInput());
+  const [nextInvoiceNumber, setNextInvoiceNumber] = useState("");
+  const [loadingInvoiceCounter, setLoadingInvoiceCounter] = useState(false);
   const [note, setNote] = useState("");
   const [invoiceImageData, setInvoiceImageData] = useState("");
   const [error, setError] = useState("");
@@ -51,6 +60,19 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
       showToast({ type: "error", message });
     } finally {
       setLoadingGroups(false);
+    }
+  };
+
+  const loadInvoiceCounter = async (year) => {
+    setLoadingInvoiceCounter(true);
+    try {
+      const res = await fetchMyInvoiceCounter({ year });
+      const formatted = formatInvoiceNumber(res?.year || year, res?.next_invoice_no || 1);
+      setNextInvoiceNumber(formatted);
+    } catch {
+      setNextInvoiceNumber(formatInvoiceNumber(year, 1));
+    } finally {
+      setLoadingInvoiceCounter(false);
     }
   };
 
@@ -103,6 +125,12 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
     resetForm();
     loadGroups();
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const selectedYear = new Date(invoiceDate || new Date()).getFullYear();
+    loadInvoiceCounter(selectedYear);
+  }, [isOpen, invoiceDate]);
 
   useEffect(() => {
     if (!canUploadInvoiceImage && invoiceImageData) {
@@ -285,6 +313,9 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
                                 <p className="text-xs text-gray-500 mt-0.5">
                                   Lot: {order.lot_no || "---"} • Machine: {order.machine_no || "---"}
                                 </p>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                  Design Stitch: {Number(order.design_stitches || 0) > 0 ? formatNumbers(order.design_stitches, 0) : "-"}
+                                </p>
                               </div>
                             </div>
                             <div className="text-right shrink-0">
@@ -306,6 +337,13 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
         <div className="rounded-2xl border border-gray-300 bg-white p-4 h-fit">
           <h3 className="text-sm font-semibold text-gray-800 mb-3">Invoice Details</h3>
           <div className="space-y-3">
+            <Input
+              label="New Invoice No"
+              value={loadingInvoiceCounter ? "Loading..." : nextInvoiceNumber}
+              placeholder="—"
+              readOnly
+              required={false}
+            />
             <Input label="Customer" value={selectedSummary.customerName || ""} placeholder="Select orders first" readOnly required={false} />
             <Input label="Selected Orders" value={selectedSummary.orderCount ? String(selectedSummary.orderCount) : ""} placeholder="0" readOnly required={false} />
             <p className="text-[11px] text-gray-500 -mt-2">Max {MAX_INVOICE_ORDERS} orders per invoice</p>
