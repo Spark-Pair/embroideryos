@@ -187,6 +187,24 @@ function ExpenseItemFormModal({
   generalItemOptions = [],
 }) {
   const mode = initialData ? "edit" : "add";
+  const evaluateMathExpression = (value) => {
+    const raw = String(value ?? "").trim();
+    if (!raw) return null;
+    if (!/^[\d+\-*/().\s]+$/.test(raw)) return null;
+    try {
+      // eslint-disable-next-line no-new-func
+      const result = Function(`"use strict"; return (${raw})`)();
+      if (!Number.isFinite(result)) return null;
+      return Number(result);
+    } catch {
+      return null;
+    }
+  };
+
+  const normalizeNumberString = (value) => {
+    if (!Number.isFinite(value)) return "";
+    return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(6)));
+  };
   const [formData, setFormData] = useState({
     id: "",
     name: "",
@@ -341,11 +359,21 @@ function ExpenseItemFormModal({
 
             <Input
               label="Quantity"
-              type="number"
+              type="text"
               value={formData.default_quantity}
               onChange={(e) =>
                 setFormData((p) => ({ ...p, default_quantity: e.target.value }))
               }
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" && e.key !== "=") return;
+                e.preventDefault();
+                const calculated = evaluateMathExpression(formData.default_quantity);
+                if (calculated === null) return;
+                setFormData((p) => ({
+                  ...p,
+                  default_quantity: normalizeNumberString(calculated),
+                }));
+              }}
             />
             <Input
               label="Rate"

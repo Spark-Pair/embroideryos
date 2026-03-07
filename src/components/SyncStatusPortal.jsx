@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { RefreshCcw, WifiOff, X, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getPendingSyncActions, offlineAccess } from "../offline/idb";
-import { subscribeBootstrapSyncState } from "../offline/bootstrapSyncState";
+import {
+  discardSyncAction,
+  getPendingSyncActions,
+  getSyncQueueSnapshot,
+  offlineAccess,
+  resetFailedSyncActions,
+  retrySyncAction,
+} from "../offline/idb";
+import { resetBootstrapSync, subscribeBootstrapSyncState } from "../offline/bootstrapSyncState";
 import { runFullBootstrapSeed } from "../offline/bootstrapSeed";
 import { logDataSource } from "../offline/logger";
 import useAuth from "../hooks/useAuth";
@@ -84,6 +91,14 @@ export default function SyncStatusPortal() {
     failedSteps: 0, currentStepLabel: "", startedAt: 0,
   });
   const [manualSyncing, setManualSyncing] = useState(false);
+  const [rowActionBusyId, setRowActionBusyId] = useState(null);
+  const [queueSnapshot, setQueueSnapshot] = useState({
+    pendingCount: 0,
+    delayedCount: 0,
+    failedCount: 0,
+    nextAction: null,
+    latestErrors: [],
+  });
 
   const bootstrapInProgress = bootstrap.phase === "syncing";
   const bootstrapPercent = useMemo(() => {
@@ -93,7 +108,10 @@ export default function SyncStatusPortal() {
 
   const hasPendingQueue = pendingCount > 0;
   const isBusy          = bootstrapInProgress || hasPendingQueue || manualSyncing;
-  const hasError        = bootstrap.phase === "done" && bootstrap.failedSteps > 0;
+  const hasBootstrapError = bootstrap.phase === "done" && bootstrap.failedSteps > 0;
+  const hasQueueError = Number(queueSnapshot?.failedCount || 0) > 0;
+  const hasError = hasBootstrapError || hasQueueError;
+  const latestQueueError = queueSnapshot?.latestErrors?.[0] || null;
 
   const statusKey = !isOnline        ? "offline"
     : (bootstrapInProgress || manualSyncing) ? "syncing"
@@ -116,9 +134,13 @@ export default function SyncStatusPortal() {
     let active = true, tid = null;
     const poll = async () => {
       try {
-        const p = await getPendingSyncActions();
+        const [p, details] = await Promise.all([
+          getPendingSyncActions(),
+          getSyncQueueSnapshot().catch(() => null),
+        ]);
         if (!active) return;
         setPendingCount(p.length); setPollError(false); setLastCheckedAt(Date.now());
+        if (details) setQueueSnapshot(details);
       } catch {
         if (!active) return;
         setPollError(true); setLastCheckedAt(Date.now());
@@ -132,7 +154,10 @@ export default function SyncStatusPortal() {
   }, [bootstrapInProgress, hasPendingQueue, isOnline, user]);
 
   useEffect(() => {
-    if (!user || !offlineAccess.isUnlocked()) return;
+    if (!user || !offlineAccess.isUnlocked()) {
+      resetBootstrapSync();
+      return;
+    }
     return subscribeBootstrapSyncState((s) => setBootstrap(s));
   }, [user]);
 
@@ -171,6 +196,7 @@ export default function SyncStatusPortal() {
     setManualSyncing(true);
     setPollError(false);
     try {
+      await resetFailedSyncActions().catch(() => 0);
       await warmSyncWorkers();
       triggerQueueWorkers();
       const drained = await waitUntilQueueDrained(90000);
@@ -195,6 +221,47 @@ export default function SyncStatusPortal() {
       setLastCheckedAt(Date.now());
       const actions = await getPendingSyncActions().catch(() => []);
       setPendingCount(Array.isArray(actions) ? actions.length : 0);
+    }
+  };
+
+  const refreshQueueState = async () => {
+    const [actions, details] = await Promise.all([
+      getPendingSyncActions().catch(() => []),
+      getSyncQueueSnapshot().catch(() => null),
+    ]);
+    setPendingCount(Array.isArray(actions) ? actions.length : 0);
+    if (details) setQueueSnapshot(details);
+    setLastCheckedAt(Date.now());
+  };
+
+  const handleRetryOne = async (id) => {
+    if (!id || rowActionBusyId) return;
+    setRowActionBusyId(String(id));
+    try {
+      const ok = await retrySyncAction(id);
+      if (!ok) throw new Error("Unable to retry this action");
+      triggerQueueWorkers();
+      await refreshQueueState();
+      showToast({ type: "success", message: "Sync action moved to retry queue." });
+    } catch (error) {
+      showToast({ type: "error", message: error?.message || "Failed to retry action." });
+    } finally {
+      setRowActionBusyId(null);
+    }
+  };
+
+  const handleDiscardOne = async (id) => {
+    if (!id || rowActionBusyId) return;
+    setRowActionBusyId(String(id));
+    try {
+      const ok = await discardSyncAction(id);
+      if (!ok) throw new Error("Unable to discard this action");
+      await refreshQueueState();
+      showToast({ type: "warning", message: "Failed action discarded from queue." });
+    } catch (error) {
+      showToast({ type: "error", message: error?.message || "Failed to discard action." });
+    } finally {
+      setRowActionBusyId(null);
     }
   };
 
@@ -311,9 +378,17 @@ export default function SyncStatusPortal() {
                     exit={{    opacity: 0, height: 0 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <p className="text-xs font-medium text-rose-600">
-                      {bootstrap.failedSteps} step{bootstrap.failedSteps > 1 ? "s" : ""} failed — retrying in background.
-                    </p>
+                    {hasBootstrapError && (
+                      <p className="text-xs font-medium text-rose-600">
+                        {bootstrap.failedSteps} step{bootstrap.failedSteps > 1 ? "s" : ""} failed during cloud refresh.
+                      </p>
+                    )}
+                    {hasQueueError && (
+                      <p className="mt-1 text-xs font-medium text-rose-700">
+                        {queueSnapshot.failedCount} pending change{queueSnapshot.failedCount > 1 ? "s" : ""} stopped.
+                        {latestQueueError?.message ? ` Latest: ${latestQueueError.message}` : ""}
+                      </p>
+                    )}
                   </motion.div>
 
                   <div className="h-px bg-gray-300" />
@@ -321,14 +396,74 @@ export default function SyncStatusPortal() {
               )}
             </AnimatePresence>
 
+            <AnimatePresence>
+              {hasQueueError && Array.isArray(queueSnapshot?.latestErrors) && queueSnapshot.latestErrors.length > 0 && (
+                <>
+                  <motion.div
+                    className="max-h-40 overflow-auto px-3 py-2"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    {queueSnapshot.latestErrors.map((err) => {
+                      const rowId = String(err?.id || "");
+                      const busy = rowActionBusyId === rowId;
+                      return (
+                        <div key={rowId || `${err?.entity}-${err?.method}-${err?.url}`} className="mb-2 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1.5 last:mb-0">
+                          <p className="truncate text-[10px] font-semibold text-rose-700">
+                            {err?.entity || "Unknown"} {err?.method || ""}
+                          </p>
+                          <p className="truncate text-[10px] text-rose-700/90">
+                            {err?.message || "Sync failed"}
+                          </p>
+                          <div className="mt-1 flex items-center gap-1">
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => handleRetryOne(err?.id)}
+                              className={`rounded border px-2 py-0.5 text-[10px] font-semibold ${busy ? "border-gray-200 text-gray-400" : "border-teal-300 text-teal-700 hover:bg-teal-50 cursor-pointer"}`}
+                            >
+                              Retry
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => handleDiscardOne(err?.id)}
+                              className={`rounded border px-2 py-0.5 text-[10px] font-semibold ${busy ? "border-gray-200 text-gray-400" : "border-rose-300 text-rose-700 hover:bg-rose-100 cursor-pointer"}`}
+                            >
+                              Discard
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </motion.div>
+                  <div className="h-px bg-gray-300" />
+                </>
+              )}
+            </AnimatePresence>
+
             {/* Footer */}
             <div className="flex items-center justify-between ps-4 p-2">
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-col items-start gap-0.5">
+                {queueSnapshot?.nextAction && (
+                  <p className="text-[10px] font-medium text-teal-700">
+                    Pushing: {String(queueSnapshot.nextAction.entity || "").replace(/([A-Z])/g, " $1").trim()} {queueSnapshot.nextAction.method}
+                  </p>
+                )}
+                {Number(queueSnapshot?.delayedCount || 0) > 0 && (
+                  <p className="text-[10px] text-amber-600">
+                    Retry queued: {queueSnapshot.delayedCount}
+                  </p>
+                )}
+                <div className="flex items-center gap-1.5">
                 {!isOnline && <WifiOff size={12} className="text-rose-400" />}
                 <p className="text-xs text-gray-400">
                   {pollError ? "Read failed" : relativeTime(lastCheckedAt)}
                 </p>
                 <span className="hidden">{clockTick}</span>
+                </div>
               </div>
               <button
                 type="button"

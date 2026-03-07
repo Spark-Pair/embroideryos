@@ -76,3 +76,18 @@ export const completeBootstrapSync = () => {
     finishedAt: Date.now(),
   });
 };
+
+export const resetBootstrapSync = () => {
+  state = {
+    phase: "idle",
+    totalSteps: 0,
+    completedSteps: 0,
+    failedSteps: 0,
+    currentStepId: "",
+    currentStepLabel: "",
+    lastError: "",
+    startedAt: 0,
+    finishedAt: 0,
+  };
+  emit();
+};

@@ -681,7 +681,11 @@ export const seedCrpStaffRecordsCache = async ({ forceRefresh = false } = {}) =>
 };
 
 export const runFullBootstrapSeed = async ({ forceRefresh = false } = {}) => {
-  if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    startBootstrapSync(0);
+    completeBootstrapSync();
+    return;
+  }
 
   const steps = [
     { id: "customers", label: "Customers", run: () => seedCustomersCache({ forceRefresh }) },

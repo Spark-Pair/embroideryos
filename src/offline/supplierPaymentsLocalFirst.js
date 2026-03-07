@@ -225,7 +225,7 @@ const processSupplierPaymentQueue = async () => {
           url: action.url,
         });
       } catch (error) {
-        await failSyncAction(action.id, error?.response?.data?.message || error?.message || "sync failed");
+        await failSyncAction(action.id, error?.response?.data?.message || error?.message || "sync failed", { statusCode: error?.response?.status });
         logDataSource("IDB", "sync.supplierPayments.failed", {
           id: action.id,
           method: action.method,
@@ -302,6 +302,7 @@ export const fetchSupplierPaymentStatsLocalFirst = async () => {
       if (method === "cash") acc.cash += 1;
       if (method === "cheque") acc.cheque += 1;
       if (method === "online") acc.online += 1;
+      if (method === "goods_return") acc.goods_return += 1;
       return acc;
     },
     {
@@ -309,6 +310,7 @@ export const fetchSupplierPaymentStatsLocalFirst = async () => {
       cash: 0,
       cheque: 0,
       online: 0,
+      goods_return: 0,
       total_amount: 0,
     }
   );

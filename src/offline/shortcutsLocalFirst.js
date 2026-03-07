@@ -48,7 +48,7 @@ const processShortcutQueue = async () => {
           setCachedUser({ ...cached, shortcuts: res.data.shortcuts });
         }
       } catch (error) {
-        await failSyncAction(action.id, error?.response?.data?.message || error?.message || "sync failed");
+        await failSyncAction(action.id, error?.response?.data?.message || error?.message || "sync failed", { statusCode: error?.response?.status });
         logDataSource("IDB", "sync.shortcuts.failed", {
           id: action.id,
           method: action.method,

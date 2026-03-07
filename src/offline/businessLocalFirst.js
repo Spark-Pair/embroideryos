@@ -35,7 +35,7 @@ const processBannerQueue = async () => {
           await upsertEntitySnapshot(BANNER_KEY, res.data.invoice_banner_data);
         }
       } catch (error) {
-        await failSyncAction(action.id, error?.response?.data?.message || error?.message || "sync failed");
+        await failSyncAction(action.id, error?.response?.data?.message || error?.message || "sync failed", { statusCode: error?.response?.status });
         logDataSource("IDB", "sync.invoiceBanner.failed", {
           id: action.id,
           method: action.method,
@@ -63,7 +63,7 @@ const processBannerQueue = async () => {
           await upsertEntitySnapshot(INVOICE_COUNTER_KEY, res.data);
         }
       } catch (error) {
-        await failSyncAction(action.id, error?.response?.data?.message || error?.message || "sync failed");
+        await failSyncAction(action.id, error?.response?.data?.message || error?.message || "sync failed", { statusCode: error?.response?.status });
         logDataSource("IDB", "sync.invoiceCounter.failed", {
           id: action.id,
           method: action.method,

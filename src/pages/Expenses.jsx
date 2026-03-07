@@ -3,12 +3,14 @@ import {
   Banknote,
   Building2,
   Calendar,
+  Edit3,
+  ListTree,
   MoreVertical,
   Plus,
   Receipt,
   Trash2,
 } from "lucide-react";
-import { createExpense, deleteExpense, fetchExpenses, fetchExpenseStats } from "../api/expense";
+import { createExpense, deleteExpense, fetchExpenses, fetchExpenseStats, updateExpense } from "../api/expense";
 import { fetchExpenseItems } from "../api/expenseItem";
 import { fetchSuppliers } from "../api/supplier";
 import PageHeader from "../components/PageHeader";
@@ -23,34 +25,65 @@ import Select from "../components/Select";
 import Button from "../components/Button";
 import ConfirmModal from "../components/ConfirmModal";
 import { useToast } from "../context/ToastContext";
+import { useFormKeyboard } from "../hooks/useFormKeyboard";
+import { useShortcut } from "../hooks/useShortcuts";
 import { formatDate, formatNumbers } from "../utils";
+import { isEventMatchingShortcut } from "../utils/shortcuts";
 
 const EXPENSE_TYPE_OPTIONS = [
-  { label: "Expense (Cash)", value: "cash" },
   { label: "Expense (Supplier)", value: "supplier" },
+  { label: "Expense (Cash)", value: "cash" },
   { label: "Fixed Expense", value: "fixed" },
 ];
 
 const EXPENSE_TYPE_LABEL = {
-  cash: "Cash",
   supplier: "Supplier",
+  cash: "Cash",
   fixed: "Fixed",
 };
 
 const TYPE_BADGE_CLASS = {
-  cash: "bg-emerald-100 text-emerald-700",
   supplier: "bg-sky-100 text-sky-700",
+  cash: "bg-emerald-100 text-emerald-700",
   fixed: "bg-violet-100 text-violet-700",
 };
 
-function ExpenseEntryModal({ isOpen, onClose, onAction }) {
+const evaluateMathExpression = (raw) => {
+  const expr = String(raw || "").trim();
+  if (!expr) return null;
+  if (!/^[0-9+\-*/().\s]+$/.test(expr)) return null;
+  try {
+    const result = Function(`"use strict"; return (${expr});`)();
+    if (!Number.isFinite(result)) return null;
+    return result;
+  } catch {
+    return null;
+  }
+};
+
+const toCleanNumberString = (value) => {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "";
+  if (Number.isInteger(num)) return String(num);
+  return String(Number(num.toFixed(6))).replace(/\.0+$/, "");
+};
+
+function ExpenseEntryModal({ isOpen, onClose, onAction, initialExpense = null }) {
+  const expenseTypeRef = useRef(null);
+  const supplierRef = useRef(null);
+  const dateRef = useRef(null);
+  const monthRef = useRef(null);
+  const referenceRef = useRef(null);
+  const itemRefs = useRef({});
+  const qtyRefs = useRef({});
+  const addRowShortcut = useShortcut("production_add_row");
   const [expenseItems, setExpenseItems] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [loadingOptions, setLoadingOptions] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [formData, setFormData] = useState({
-    expense_type: "cash",
+    expense_type: "supplier",
     fixed_source: "cash",
     supplier_id: "",
     date: new Date().toISOString().slice(0, 10),
@@ -59,24 +92,51 @@ function ExpenseEntryModal({ isOpen, onClose, onAction }) {
     remarks: "",
   });
   const [rows, setRows] = useState([{ id: 1, item_name: "", quantity: "", rate: "" }]);
+  const [pendingFocusItemRowId, setPendingFocusItemRowId] = useState(null);
 
   const isFixedMode = formData.expense_type === "fixed";
   const isSupplierMode = formData.expense_type === "supplier";
   const isFixedSupplierMode = isFixedMode && formData.fixed_source === "supplier";
+  const isEditMode = Boolean(initialExpense?._id);
 
   useEffect(() => {
     if (!isOpen) return;
 
+    const expenseDate = initialExpense?.date
+      ? new Date(initialExpense.date).toISOString().slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
+    const expenseMonth = initialExpense?.month || expenseDate.slice(0, 7);
+    const existingItems =
+      Array.isArray(initialExpense?.items) && initialExpense.items.length > 0
+        ? initialExpense.items
+        : initialExpense
+          ? [{
+              item_name: initialExpense.item_name || "",
+              quantity: initialExpense.total_quantity ?? initialExpense.quantity ?? "",
+              rate: initialExpense.rate ?? "",
+            }]
+          : [];
+
     setFormData({
-      expense_type: "cash",
-      fixed_source: "cash",
-      supplier_id: "",
-      date: new Date().toISOString().slice(0, 10),
-      month: new Date().toISOString().slice(0, 7),
-      reference_no: "",
-      remarks: "",
+      expense_type: initialExpense?.expense_type || "supplier",
+      fixed_source: initialExpense?.fixed_source || "cash",
+      supplier_id: initialExpense?.supplier_id || "",
+      date: expenseDate,
+      month: expenseMonth,
+      reference_no: initialExpense?.reference_no || "",
+      remarks: initialExpense?.remarks || "",
     });
-    setRows([{ id: 1, item_name: "", quantity: "", rate: "" }]);
+    setRows(
+      existingItems.length > 0
+        ? existingItems.map((row, idx) => ({
+            id: Date.now() + idx + 1,
+            item_name: row?.item_name || "",
+            quantity: row?.quantity ?? "",
+            rate: row?.rate ?? "",
+          }))
+        : [{ id: 1, item_name: "", quantity: "", rate: "" }]
+    );
+    setPendingFocusItemRowId(null);
     setError("");
 
     const load = async () => {
@@ -98,7 +158,10 @@ function ExpenseEntryModal({ isOpen, onClose, onAction }) {
     };
 
     load();
-  }, [isOpen]);
+    setTimeout(() => {
+      expenseTypeRef.current?.focus();
+    }, 120);
+  }, [isOpen, initialExpense]);
 
   const regularItems = useMemo(
     () => expenseItems.filter((item) => item.expense_type !== "fixed"),
@@ -110,18 +173,87 @@ function ExpenseEntryModal({ isOpen, onClose, onAction }) {
     [expenseItems]
   );
 
-  const itemOptions = (isFixedMode ? fixedItems : regularItems).map((item) => ({ label: item.name, value: item.name }));
-  const supplierOptions = suppliers.map((supplier) => ({ label: supplier.name, value: supplier._id }));
+  const selectedSupplierAssignedItems = useMemo(() => {
+    if (!isSupplierMode || !formData.supplier_id) return [];
+    const supplier = suppliers.find((s) => String(s?._id || "") === String(formData.supplier_id));
+    const assigned = Array.isArray(supplier?.assigned_expense_items)
+      ? supplier.assigned_expense_items
+      : [];
+    return assigned
+      .map((v) => String(v || "").trim())
+      .filter(Boolean);
+  }, [isSupplierMode, formData.supplier_id, suppliers]);
+
+  const allowedSupplierItemSet = useMemo(
+    () => new Set(selectedSupplierAssignedItems),
+    [selectedSupplierAssignedItems]
+  );
+
+  const itemOptions = useMemo(() => {
+    const base = (isFixedMode ? fixedItems : regularItems)
+      .filter((item) => {
+        if (!isSupplierMode || isFixedMode) return true;
+        return allowedSupplierItemSet.has(String(item?.name || "").trim());
+      })
+      .map((item) => ({
+        label: item.name,
+        value: item.name,
+      }));
+    const seen = new Set(base.map((opt) => opt.value));
+    rows.forEach((row) => {
+      const name = String(row?.item_name || "").trim();
+      if (!name || seen.has(name)) return;
+      seen.add(name);
+      base.unshift({ label: name, value: name });
+    });
+    return base;
+  }, [isFixedMode, fixedItems, regularItems, rows, isSupplierMode, allowedSupplierItemSet]);
+  const supplierOptions = useMemo(
+    () =>
+      [...suppliers]
+        .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), undefined, { sensitivity: "base" }))
+        .map((supplier) => ({ label: supplier.name, value: supplier._id })),
+    [suppliers]
+  );
   const selectedFixedSupplierName = useMemo(() => {
     if (!isFixedSupplierMode) return "";
     const supplier = suppliers.find((s) => String(s._id) === String(formData.supplier_id));
     return supplier?.name || "";
   }, [isFixedSupplierMode, suppliers, formData.supplier_id]);
 
-  const addRow = () => {
+  const addRow = ({ focusItem = false } = {}) => {
     if (isFixedMode) return;
-    setRows((prev) => [...prev, { id: Date.now(), item_name: "", quantity: "", rate: "" }]);
+    const newId = Date.now();
+    setRows((prev) => [...prev, { id: newId, item_name: "", quantity: "", rate: "" }]);
+    if (focusItem) setPendingFocusItemRowId(newId);
+    return newId;
   };
+
+  useEffect(() => {
+    if (!pendingFocusItemRowId) return;
+    let tries = 0;
+    const maxTries = 8;
+    const focusWhenReady = () => {
+      const el = itemRefs.current[pendingFocusItemRowId];
+      if (el && typeof el.focus === "function") {
+        const active = document.activeElement;
+        if (active && active !== document.body && typeof active.blur === "function") {
+          active.blur();
+        }
+        el.focus();
+        setTimeout(() => el.focus(), 0);
+        setPendingFocusItemRowId(null);
+        return;
+      }
+      tries += 1;
+      if (tries >= maxTries) {
+        setPendingFocusItemRowId(null);
+        return;
+      }
+      setTimeout(focusWhenReady, 60);
+    };
+    setTimeout(focusWhenReady, 0);
+  }, [pendingFocusItemRowId, rows]);
 
   const removeRow = (id) => {
     setRows((prev) => (prev.length === 1 ? prev : prev.filter((row) => row.id !== id)));
@@ -139,6 +271,9 @@ function ExpenseEntryModal({ isOpen, onClose, onAction }) {
         amount: quantity * rate,
       };
     });
+
+  const totalQuantity = payloadItems.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
+  const totalAmount = payloadItems.reduce((sum, row) => sum + Number(row.amount || 0), 0);
 
   const isValid =
     (!!formData.expense_type &&
@@ -166,7 +301,7 @@ function ExpenseEntryModal({ isOpen, onClose, onAction }) {
         reference_no: formData.reference_no,
         remarks: formData.remarks,
         items: payloadItems,
-      });
+      }, initialExpense?._id || null);
       onClose();
     } catch {
       // parent toast handles
@@ -175,39 +310,70 @@ function ExpenseEntryModal({ isOpen, onClose, onAction }) {
     }
   };
 
+  const focusAfterExpenseType = (nextType) => {
+    setTimeout(() => {
+      if (nextType === "supplier") {
+        supplierRef.current?.focus();
+        return;
+      }
+      if (nextType === "fixed") {
+        monthRef.current?.focus();
+        return;
+      }
+      dateRef.current?.focus();
+    }, 140);
+  };
+
+  useFormKeyboard({
+    onEnterSubmit: () => {
+      if (!isOpen) return;
+      handleSave();
+    },
+  });
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       maxWidth="max-w-4xl"
-      title="Add Expense"
-      subtitle="Record cash, supplier, or fixed expenses"
+      title={isEditMode ? "Edit Expense" : "Add Expense"}
+      subtitle={isEditMode ? "Update expense details and items" : "Record cash, supplier, or fixed expenses"}
       footer={
         <div className="w-full flex items-center justify-between gap-3">
           <p className="text-xs text-red-600">{error}</p>
           <div className="flex gap-2">
             <Button variant="secondary" outline onClick={onClose} disabled={submitting}>Cancel</Button>
-            <Button onClick={handleSave} loading={submitting} disabled={!isValid}>Save Expense</Button>
+            <Button onClick={handleSave} loading={submitting} disabled={!isValid}>
+              {isEditMode ? "Update Expense" : "Save Expense"}
+            </Button>
           </div>
         </div>
       }
     >
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-0.5">
         <Select
+          ref={expenseTypeRef}
           label="Expense Type"
           value={formData.expense_type}
           onChange={(value) => {
             setFormData((prev) => ({ ...prev, expense_type: value, fixed_source: "cash", supplier_id: "" }));
             setRows([{ id: 1, item_name: "", quantity: "", rate: "" }]);
+            focusAfterExpenseType(value);
           }}
           options={EXPENSE_TYPE_OPTIONS}
         />
 
         {isSupplierMode && (
           <Select
+            ref={supplierRef}
             label="Supplier"
             value={formData.supplier_id}
-            onChange={(value) => setFormData((prev) => ({ ...prev, supplier_id: value }))}
+            onChange={(value) => {
+              setFormData((prev) => ({ ...prev, supplier_id: value }));
+              setRows([{ id: 1, item_name: "", quantity: "", rate: "" }]);
+              setPendingFocusItemRowId(null);
+              setTimeout(() => dateRef.current?.focus(), 120);
+            }}
             options={supplierOptions}
             placeholder={loadingOptions ? "Loading suppliers..." : "Select supplier"}
           />
@@ -234,6 +400,7 @@ function ExpenseEntryModal({ isOpen, onClose, onAction }) {
 
         {!isFixedMode && (
           <Input
+            ref={dateRef}
             label="Date"
             type="date"
             value={formData.date}
@@ -243,6 +410,7 @@ function ExpenseEntryModal({ isOpen, onClose, onAction }) {
 
         {isFixedMode && (
           <Input
+            ref={monthRef}
             label="Month"
             type="month"
             value={formData.month}
@@ -253,6 +421,7 @@ function ExpenseEntryModal({ isOpen, onClose, onAction }) {
         {!isFixedMode && (
           <Input
             label="Reference No"
+            ref={referenceRef}
             required={false}
             value={formData.reference_no}
             onChange={(e) => setFormData((prev) => ({ ...prev, reference_no: e.target.value }))}
@@ -276,7 +445,14 @@ function ExpenseEntryModal({ isOpen, onClose, onAction }) {
             {isFixedMode ? "Fixed Expense Items" : "Expense Items"}
           </p>
           {!isFixedMode && (
-            <Button size="sm" variant="secondary" outline onClick={addRow}>Add Item</Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              outline
+              onClick={() => addRow({ focusItem: true })}
+            >
+              Add Item
+            </Button>
           )}
         </div>
 
@@ -289,6 +465,9 @@ function ExpenseEntryModal({ isOpen, onClose, onAction }) {
             <div key={row.id} className="grid grid-cols-12 gap-2 items-end border border-gray-200 rounded-xl px-3 py-2">
               <div className="col-span-5">
                 <Select
+                  ref={(el) => {
+                    itemRefs.current[row.id] = el;
+                  }}
                   label={index === 0 ? "Expense / Item" : ""}
                   value={row.item_name}
                   onChange={(value) => {
@@ -312,6 +491,7 @@ function ExpenseEntryModal({ isOpen, onClose, onAction }) {
                       }
                       return { ...r, item_name: value };
                     }));
+                    setTimeout(() => qtyRefs.current[row.id]?.focus(), 90);
                   }}
                   options={itemOptions}
                   placeholder={loadingOptions ? "Loading items..." : "Select expense item"}
@@ -319,10 +499,23 @@ function ExpenseEntryModal({ isOpen, onClose, onAction }) {
               </div>
               <div className="col-span-2">
                 <Input
+                  ref={(el) => {
+                    qtyRefs.current[row.id] = el;
+                  }}
                   label={index === 0 ? "Quantity" : ""}
-                  type="number"
+                  type="text"
                   value={row.quantity}
                   onChange={(e) => setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, quantity: e.target.value } : r)))}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter" && e.key !== "=") return;
+                    e.preventDefault();
+                    const answer = evaluateMathExpression(row.quantity);
+                    if (answer == null) return;
+                    const computed = toCleanNumberString(answer);
+                    setRows((prev) =>
+                      prev.map((r) => (r.id === row.id ? { ...r, quantity: computed } : r))
+                    );
+                  }}
                 />
               </div>
               <div className="col-span-2">
@@ -331,6 +524,12 @@ function ExpenseEntryModal({ isOpen, onClose, onAction }) {
                   type="number"
                   value={row.rate}
                   onChange={(e) => setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, rate: e.target.value } : r)))}
+                  onKeyDown={(e) => {
+                    if (!isEventMatchingShortcut(e, addRowShortcut)) return;
+                    if (isFixedMode) return;
+                    e.preventDefault();
+                    addRow({ focusItem: true });
+                  }}
                 />
               </div>
               <div className="col-span-2">
@@ -349,7 +548,87 @@ function ExpenseEntryModal({ isOpen, onClose, onAction }) {
             </div>
           ))}
         </div>
+        <div className="border-t border-gray-200 bg-gray-50 px-4 py-2.5 flex items-center justify-end gap-6">
+          <p className="text-sm text-gray-600">
+            Total Qty: <span className="font-semibold text-gray-900">{formatNumbers(totalQuantity, 2)}</span>
+          </p>
+          <p className="text-sm text-gray-600">
+            Total Amount: <span className="font-semibold text-gray-900">{formatNumbers(totalAmount, 2)}</span>
+          </p>
+        </div>
       </div>
+    </Modal>
+  );
+}
+
+function ExpenseDetailsModal({ isOpen, onClose, expense }) {
+  const items = Array.isArray(expense?.items) && expense.items.length > 0
+    ? expense.items
+    : [{
+        item_name: expense?.item_name || "",
+        quantity: expense?.total_quantity ?? expense?.quantity ?? 0,
+        rate: expense?.rate ?? 0,
+        amount: expense?.total_amount ?? expense?.amount ?? 0,
+      }];
+  const totalQuantity = items.reduce((sum, row) => sum + Number(row?.quantity || 0), 0);
+  const totalAmount = items.reduce((sum, row) => sum + Number(row?.amount || 0), 0);
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      maxWidth="max-w-3xl"
+      title="Expense Details"
+      subtitle="Item-wise breakdown"
+      footer={
+        <div className="w-full flex items-center justify-end">
+          <Button variant="secondary" outline onClick={onClose}>Close</Button>
+        </div>
+      }
+    >
+      {!expense ? (
+        <div className="py-10 text-center text-sm text-gray-400">No details available.</div>
+      ) : (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+            <div className="rounded-xl border border-gray-200 px-3 py-2"><span className="text-gray-500">Date</span><p className="font-semibold text-gray-800">{formatDate(expense.date, "DD MMM yyyy")}</p></div>
+            <div className="rounded-xl border border-gray-200 px-3 py-2"><span className="text-gray-500">Type</span><p className="font-semibold text-gray-800">{EXPENSE_TYPE_LABEL[expense.expense_type] || expense.expense_type}</p></div>
+            <div className="rounded-xl border border-gray-200 px-3 py-2"><span className="text-gray-500">Supplier</span><p className="font-semibold text-gray-800">{expense.supplier_name || "-"}</p></div>
+            <div className="rounded-xl border border-gray-200 px-3 py-2"><span className="text-gray-500">Ref No</span><p className="font-semibold text-gray-800">{expense.reference_no || "-"}</p></div>
+          </div>
+
+          <div className="rounded-2xl border border-gray-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-100 text-gray-600">
+                <tr>
+                  <th className="px-4 py-2 text-left font-medium">Item</th>
+                  <th className="px-4 py-2 text-right font-medium">Qty</th>
+                  <th className="px-4 py-2 text-right font-medium">Rate</th>
+                  <th className="px-4 py-2 text-right font-medium">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((row, idx) => (
+                  <tr key={`${row?.item_name || "item"}-${idx}`} className="border-t border-gray-200">
+                    <td className="px-4 py-2 text-gray-800">{row?.item_name || "-"}</td>
+                    <td className="px-4 py-2 text-right text-gray-700">{formatNumbers(row?.quantity || 0, 2)}</td>
+                    <td className="px-4 py-2 text-right text-gray-700">{formatNumbers(row?.rate || 0, 2)}</td>
+                    <td className="px-4 py-2 text-right font-semibold text-gray-900">{formatNumbers(row?.amount || 0, 2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-gray-50 border-t border-gray-200">
+                <tr>
+                  <td className="px-4 py-2 font-semibold text-gray-700">Total</td>
+                  <td className="px-4 py-2 text-right font-semibold text-gray-800">{formatNumbers(totalQuantity, 2)}</td>
+                  <td className="px-4 py-2" />
+                  <td className="px-4 py-2 text-right font-bold text-gray-900">{formatNumbers(totalAmount, 2)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
     </Modal>
   );
 }
@@ -363,8 +642,8 @@ export default function Expenses() {
   };
   const sortLatestFirst = (rows = []) =>
     [...rows].sort((a, b) => {
-      const aTime = toMillis(a?.date) || toMillis(a?.createdAt);
-      const bTime = toMillis(b?.date) || toMillis(b?.createdAt);
+      const aTime = toMillis(a?.createdAt) || toMillis(a?.date);
+      const bTime = toMillis(b?.createdAt) || toMillis(b?.date);
       return bTime - aTime;
     });
 
@@ -374,6 +653,7 @@ export default function Expenses() {
   const [loading, setLoading] = useState(false);
   const [formModal, setFormModal] = useState({ isOpen: false });
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: "", message: "", onConfirm: () => {}, variant: "danger" });
+  const [detailsModal, setDetailsModal] = useState({ isOpen: false, expense: null });
   const [activeMenu, setActiveMenu] = useState(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [filters, setFilters] = useState({ item_name: "", expense_type: "", month: "", date_from: "", date_to: "" });
@@ -437,10 +717,10 @@ export default function Expenses() {
                   <th className="px-5 py-3.5 font-medium">Type</th>
                   <th className="px-5 py-3.5 font-medium">Expense / Item</th>
                   <th className="px-5 py-3.5 font-medium">Supplier</th>
-                  <th className="px-5 py-3.5 font-medium">Qty</th>
-                  <th className="px-5 py-3.5 font-medium">Rate</th>
+                  <th className="px-5 py-3.5 font-medium">Rows</th>
+                  <th className="px-5 py-3.5 font-medium">Total Qty</th>
                   <th className="px-5 py-3.5 font-medium">Ref No</th>
-                  <th className="px-5 py-3.5 font-medium">Amount</th>
+                  <th className="px-5 py-3.5 font-medium">Total Amount</th>
                   <th className="px-5 py-3.5 font-medium">Remarks</th>
                   <th className="px-5 py-3.5 font-medium text-right">Actions</th>
                 </tr>
@@ -453,7 +733,11 @@ export default function Expenses() {
                   {expenses.length === 0 ? (
                     <tr><td colSpan={11} className="px-7 py-16 text-center text-sm text-gray-400">No expenses found.</td></tr>
                   ) : expenses.map((item, index) => (
-                    <tr key={item._id} className="hover:bg-gray-50/80 transition-colors">
+                    <tr
+                      key={item._id}
+                      className="hover:bg-gray-50/80 transition-colors cursor-pointer"
+                      onClick={() => setDetailsModal({ isOpen: true, expense: item })}
+                    >
                       <td className="px-5 py-4 text-sm text-gray-500">{(pagination.currentPage - 1) * pagination.itemsPerPage + index + 1}</td>
                       <td className="px-5 py-4 text-sm text-gray-600">{formatDate(item.date, "DD MMM yyyy")}</td>
                       <td className="px-5 py-4 text-sm">
@@ -463,12 +747,19 @@ export default function Expenses() {
                       </td>
                       <td className="px-5 py-4 text-sm font-semibold text-gray-800">{item.item_name || "-"}</td>
                       <td className="px-5 py-4 text-sm text-gray-600">{item.supplier_name || "-"}</td>
-                      <td className="px-5 py-4 text-sm text-gray-600">{formatNumbers(item.quantity || 0, 2)}</td>
-                      <td className="px-5 py-4 text-sm text-gray-600">{formatNumbers(item.rate || 0, 2)}</td>
+                      <td className="px-5 py-4 text-sm text-gray-600">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
+                          <ListTree size={12} /> {formatNumbers(item.items_count || (Array.isArray(item.items) ? item.items.length : 1), 0)}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-sm text-gray-600">{formatNumbers((item.total_quantity ?? item.quantity ?? 0), 2)}</td>
                       <td className="px-5 py-4 text-sm text-gray-600">{item.reference_no || "-"}</td>
-                      <td className="px-5 py-4 text-sm text-gray-600 font-semibold">{formatNumbers(item.amount, 2)}</td>
+                      <td className="px-5 py-4 text-sm text-gray-600 font-semibold">{formatNumbers((item.total_amount ?? item.amount ?? 0), 2)}</td>
                       <td className="px-5 py-4 text-sm text-gray-500 max-w-[220px] truncate" title={item.remarks || ""}>{item.remarks || "-"}</td>
-                      <td className="px-5 py-4 text-right relative">
+                      <td
+                        className="px-5 py-4 text-right relative"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <button
                           onClick={() => setActiveMenu(activeMenu === item._id ? null : item._id)}
                           className="p-2 text-gray-400 hover:text-gray-900 rounded-lg hover:bg-gray-100"
@@ -477,6 +768,16 @@ export default function Expenses() {
                           <MoreVertical size={18} />
                         </button>
                         <ContextMenu isOpen={activeMenu === item._id}>
+                          <button
+                            onClick={() => {
+                              setFormModal({ isOpen: true, expense: item });
+                              setActiveMenu(null);
+                            }}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl text-sky-600 hover:bg-sky-50 cursor-pointer"
+                          >
+                            <Edit3 size={16} strokeWidth={2.5} />
+                            Edit Expense
+                          </button>
                           <button
                             onClick={() => {
                               setConfirmModal({
@@ -510,17 +811,32 @@ export default function Expenses() {
 
       <ExpenseEntryModal
         isOpen={formModal.isOpen}
-        onClose={() => setFormModal({ isOpen: false })}
-        onAction={async (payload) => {
+        initialExpense={formModal.expense || null}
+        onClose={() => setFormModal({ isOpen: false, expense: null })}
+        onAction={async (payload, expenseId) => {
           try {
-            await createExpense(payload);
-            showToast({ type: "success", message: "Expense saved successfully" });
+            if (expenseId) {
+              await updateExpense(expenseId, payload);
+              showToast({ type: "success", message: "Expense updated successfully" });
+            } else {
+              await createExpense(payload);
+              showToast({ type: "success", message: "Expense saved successfully" });
+            }
             loadExpenses(pagination.currentPage, filters);
           } catch (err) {
-            showToast({ type: "error", message: err.response?.data?.message || "Failed to save expense" });
+            showToast({
+              type: "error",
+              message: err.response?.data?.message || (expenseId ? "Failed to update expense" : "Failed to save expense"),
+            });
             throw err;
           }
         }}
+      />
+
+      <ExpenseDetailsModal
+        isOpen={detailsModal.isOpen}
+        onClose={() => setDetailsModal({ isOpen: false, expense: null })}
+        expense={detailsModal.expense}
       />
 
       <FilterDrawer

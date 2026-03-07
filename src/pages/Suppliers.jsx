@@ -7,6 +7,7 @@ import {
   toggleSupplierStatus,
   updateSupplier,
 } from "../api/supplier";
+import { fetchExpenseItems } from "../api/expenseItem";
 import StatCard from "../components/StatCard";
 import TableToolbar from "../components/table/TableToolbar";
 import SupplierDetailsModal from "../components/Supplier/SupplierDetailsModal";
@@ -26,6 +27,7 @@ export default function Suppliers() {
     inactive: 0,
   });
   const [suppliers, setSuppliers] = useState([]);
+  const [expenseItemOptions, setExpenseItemOptions] = useState([]);
   const [pagination, setPagination] = useState({
     currentPage: 1,
     totalPages: 1,
@@ -87,8 +89,23 @@ export default function Suppliers() {
     }
   };
 
+  const loadExpenseItemOptions = async () => {
+    try {
+      const res = await fetchExpenseItems({ status: "active" });
+      const options = (res?.data || [])
+        .filter((item) => item?.expense_type !== "fixed")
+        .map((item) => String(item?.name || "").trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+      setExpenseItemOptions(Array.from(new Set(options)));
+    } catch {
+      setExpenseItemOptions([]);
+    }
+  };
+
   useEffect(() => {
     loadSuppliers();
+    loadExpenseItemOptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -159,6 +176,9 @@ export default function Suppliers() {
           data.opening_balance === "" || data.opening_balance == null
             ? 0
             : Number(data.opening_balance),
+        assigned_expense_items: Array.isArray(data.assigned_expense_items)
+          ? data.assigned_expense_items
+          : [],
       };
 
       if (action === "add") {
@@ -286,6 +306,7 @@ export default function Suppliers() {
       <SupplierFormModal
         isOpen={formModal.isOpen}
         initialData={formModal.data}
+        expenseItemOptions={expenseItemOptions}
         onClose={() => setFormModal({ ...formModal, isOpen: false })}
         onAction={handleSupplierFormActions}
       />

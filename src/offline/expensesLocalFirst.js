@@ -6,6 +6,7 @@ import {
   getPendingSyncActions,
   offlineAccess,
   queueSyncAction,
+  remapPendingSyncEntityId,
   upsertEntitySnapshot,
 } from "./idb";
 import { logDataSource } from "./logger";
@@ -32,10 +33,15 @@ const objectIdToMillis = (id) => {
 };
 const sortLatestFirst = (rows = []) =>
   [...rows].sort((a, b) => {
-    const aTime = toMillis(a?.date) || toMillis(a?.createdAt) || objectIdToMillis(normalizeId(a));
-    const bTime = toMillis(b?.date) || toMillis(b?.createdAt) || objectIdToMillis(normalizeId(b));
+    const aTime = toMillis(a?.createdAt) || toMillis(a?.date) || objectIdToMillis(normalizeId(a));
+    const bTime = toMillis(b?.createdAt) || toMillis(b?.date) || objectIdToMillis(normalizeId(b));
     return bTime - aTime;
   });
+
+const extractExpenseIdFromUrl = (url = "") => {
+  const match = String(url || "").match(/\/expenses\/([^/?#]+)/i);
+  return match?.[1] ? String(match[1]) : "";
+};
 
 const uniqueById = (rows = []) => {
   const map = new Map();
@@ -102,7 +108,13 @@ const applyFilters = (rows = [], params = {}) => {
   const dateTo = params?.date_to;
 
   if (itemName) {
-    data = data.filter((row) => String(row?.item_name || "").toLowerCase().includes(itemName));
+    data = data.filter((row) => {
+      const main = String(row?.item_name || "").toLowerCase().includes(itemName);
+      const detail = Array.isArray(row?.items)
+        ? row.items.some((it) => String(it?.item_name || "").toLowerCase().includes(itemName))
+        : false;
+      return main || detail;
+    });
   }
   if (expenseType) data = data.filter((row) => String(row?.expense_type || "") === expenseType);
   if (fixedSource) data = data.filter((row) => String(row?.fixed_source || "") === fixedSource);
@@ -157,20 +169,39 @@ const refreshAllSnapshotFromCloud = async () => {
 };
 
 const syncCreateSuccess = async (action, serverExpenses) => {
+  const localId = String(action?.meta?.localId || "");
   const localIds = Array.isArray(action?.meta?.localIds) ? action.meta.localIds : [];
   const items = Array.isArray(serverExpenses) ? serverExpenses : [serverExpenses].filter(Boolean);
+  const idsToRemap = [localId, ...localIds].filter(Boolean);
 
   await patchOverlay((overlay) => {
+    const localOverlayRows = idsToRemap
+      .map((id) => ({ id, row: overlay[id] }))
+      .filter((entry) => entry?.row && !entry.row?._deleted);
+
+    if (localId) delete overlay[localId];
     localIds.forEach((id) => {
       if (overlay[id]) delete overlay[id];
     });
-    items.forEach((row) => {
+    items.forEach((row, idx) => {
       const id = normalizeId(row);
       if (!id) return;
-      overlay[id] = { ...row, _id: id };
+      const localFallback = localOverlayRows[idx]?.row || localOverlayRows[0]?.row || {};
+      overlay[id] = { ...row, ...localFallback, _id: id };
+      delete overlay[id]._deleted;
+      delete overlay[id]._error;
+      overlay[id].__syncStatus = "pending";
     });
     return overlay;
   });
+
+  const serverId = normalizeId(items[0]);
+  if (serverId) {
+    for (const srcId of idsToRemap) {
+      if (!srcId || srcId === serverId) continue;
+      await remapPendingSyncEntityId("expenses", srcId, serverId);
+    }
+  }
 };
 
 const syncUpdateSuccess = async (action, serverExpense) => {
@@ -211,9 +242,28 @@ const processExpenseQueue = async () => {
           const serverExpenses = res?.data?.data || res?.data;
           await syncCreateSuccess(action, serverExpenses);
         } else if (action.method === "PUT") {
-          const res = await apiClient.put(action.url, action.payload);
-          const serverExpense = res?.data?.data || res?.data;
-          await syncUpdateSuccess(action, serverExpense);
+          const queuedId = extractExpenseIdFromUrl(action.url);
+          // Recovery path: old/broken queue rows may contain PUT on local ids.
+          // Those records are not present on cloud yet, so push as POST first.
+          if (queuedId.startsWith("local-expense-")) {
+            const res = await apiClient.post(EXPENSES_URL, action.payload);
+            const serverExpenses = res?.data?.data || res?.data;
+            await syncCreateSuccess(
+              {
+                ...action,
+                meta: {
+                  ...(action?.meta || {}),
+                  localId: queuedId,
+                  localIds: [queuedId],
+                },
+              },
+              serverExpenses
+            );
+          } else {
+            const res = await apiClient.put(action.url, action.payload);
+            const serverExpense = res?.data?.data || res?.data;
+            await syncUpdateSuccess(action, serverExpense);
+          }
         } else if (action.method === "DELETE") {
           await apiClient.delete(action.url);
           await syncDeleteSuccess(action);
@@ -226,7 +276,7 @@ const processExpenseQueue = async () => {
           url: action.url,
         });
       } catch (error) {
-        await failSyncAction(action.id, error?.response?.data?.message || error?.message || "sync failed");
+        await failSyncAction(action.id, error?.response?.data?.message || error?.message || "sync failed", { statusCode: error?.response?.status });
         logDataSource("IDB", "sync.expenses.failed", {
           id: action.id,
           method: action.method,
@@ -297,7 +347,7 @@ export const fetchExpenseStatsLocalFirst = async () => {
   const stats = merged.reduce(
     (acc, row) => {
       acc.total += 1;
-      acc.total_amount += Number(row?.amount || 0);
+      acc.total_amount += Number((row?.total_amount ?? row?.amount ?? 0));
       const type = String(row?.expense_type || "");
       if (type === "cash") acc.cash_count += 1;
       if (type === "supplier") acc.supplier_count += 1;
@@ -330,40 +380,48 @@ export const createExpenseLocalFirst = async (payload) => {
   const supplierRow = supplierList.find((row) => String(row?._id || "") === String(payload?.supplier_id || ""));
   const supplierName = supplierRow?.name || payload?.supplier_name || "";
   const groupKey = `local-expense-group-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const localIds = [];
-
-  const localItems = items.map((row) => {
+  const normalizedItems = items.map((row) => {
     const quantity = Number(row?.quantity || 0);
     const rate = Number(row?.rate || 0);
     const rawAmount = Number(row?.amount || 0);
     const derivedAmount = quantity > 0 && rate > 0 ? quantity * rate : rawAmount;
-    const localId = `local-expense-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${localIds.length}`;
-    localIds.push(localId);
     return {
-      _id: localId,
-      expense_type: payload?.expense_type || "cash",
-      fixed_source: payload?.fixed_source || "",
       item_name: row?.item_name || "",
       quantity,
       rate,
       amount: derivedAmount > 0 ? derivedAmount : rawAmount,
-      date: payload?.date || new Date().toISOString(),
-      month: payload?.month || String(payload?.date || new Date().toISOString()).slice(0, 7),
-      reference_no: payload?.reference_no || "",
-      remarks: payload?.remarks || "",
-      supplier_id: supplierRow ? supplierRow._id : payload?.supplier_id || null,
-      supplier_name: supplierName,
-      group_key: groupKey,
-      __syncStatus: "pending",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
     };
   });
 
+  const totalQuantity = normalizedItems.reduce((sum, row) => sum + Number(row?.quantity || 0), 0);
+  const totalAmount = normalizedItems.reduce((sum, row) => sum + Number(row?.amount || 0), 0);
+  const localId = `local-expense-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const localExpense = {
+    _id: localId,
+    expense_type: payload?.expense_type || "cash",
+    fixed_source: payload?.fixed_source || "",
+    item_name: normalizedItems.length > 1 ? `${normalizedItems.length} items` : normalizedItems[0]?.item_name || "Expense",
+    quantity: totalQuantity,
+    rate: totalQuantity > 0 ? totalAmount / totalQuantity : totalAmount,
+    amount: totalAmount,
+    total_quantity: totalQuantity,
+    total_amount: totalAmount,
+    items_count: normalizedItems.length || 1,
+    items: normalizedItems,
+    date: payload?.date || new Date().toISOString(),
+    month: payload?.month || String(payload?.date || new Date().toISOString()).slice(0, 7),
+    reference_no: payload?.reference_no || "",
+    remarks: payload?.remarks || "",
+    supplier_id: supplierRow ? supplierRow._id : payload?.supplier_id || null,
+    supplier_name: supplierName,
+    group_key: groupKey,
+    __syncStatus: "pending",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
   await patchOverlay((overlay) => {
-    localItems.forEach((item) => {
-      overlay[item._id] = item;
-    });
+    overlay[localId] = localExpense;
     return overlay;
   });
 
@@ -372,11 +430,11 @@ export const createExpenseLocalFirst = async (payload) => {
     method: "POST",
     url: EXPENSES_URL,
     payload,
-    meta: { localIds },
+    meta: { localId, localIds: [localId] },
   });
 
   processExpenseQueue().catch(() => null);
-  return { success: true, data: localItems };
+  return { success: true, data: localExpense };
 };
 
 export const updateExpenseLocalFirst = async (id, payload) => {
@@ -385,12 +443,48 @@ export const updateExpenseLocalFirst = async (id, payload) => {
     return res.data;
   }
 
-  const next = {
+  const items = Array.isArray(payload?.items) ? payload.items : null;
+  let next = {
     ...(payload || {}),
     _id: String(id),
     __syncStatus: "pending",
     updatedAt: new Date().toISOString(),
   };
+
+  if (items) {
+    const normalizedItems = items.map((row) => {
+      const quantity = Number(row?.quantity || 0);
+      const rate = Number(row?.rate || 0);
+      const rawAmount = Number(row?.amount || 0);
+      const derivedAmount = quantity > 0 && rate > 0 ? quantity * rate : rawAmount;
+      return {
+        item_name: row?.item_name || "",
+        quantity,
+        rate,
+        amount: derivedAmount > 0 ? derivedAmount : rawAmount,
+      };
+    });
+
+    const totalQuantity = normalizedItems.reduce((sum, row) => sum + Number(row?.quantity || 0), 0);
+    const totalAmount = normalizedItems.reduce((sum, row) => sum + Number(row?.amount || 0), 0);
+    const supplierList = await getSupplierSnapshot();
+    const supplierRow = supplierList.find((row) => String(row?._id || "") === String(payload?.supplier_id || ""));
+    const month = payload?.month || String(payload?.date || new Date().toISOString()).slice(0, 7);
+
+    next = {
+      ...next,
+      item_name: normalizedItems.length > 1 ? `${normalizedItems.length} items` : normalizedItems[0]?.item_name || "Expense",
+      quantity: totalQuantity,
+      rate: totalQuantity > 0 ? totalAmount / totalQuantity : totalAmount,
+      amount: totalAmount,
+      total_quantity: totalQuantity,
+      total_amount: totalAmount,
+      items_count: normalizedItems.length || 1,
+      items: normalizedItems,
+      month,
+      supplier_name: supplierRow?.name || "",
+    };
+  }
 
   await patchOverlay((overlay) => {
     overlay[String(id)] = { ...(overlay[String(id)] || {}), ...next };

@@ -46,12 +46,32 @@ const Select = forwardRef(function Select(
     setActiveIndex(-1);
   }, []);
 
-  const selectOption = useCallback((opt) => {
+  const focusNextField = useCallback(() => {
+    const current = triggerRef.current;
+    if (!current) return;
+    const FOCUSABLE = [
+      'input:not([disabled]):not([readonly])',
+      '[data-focusable]:not([disabled])',
+    ].join(", ");
+    const all = [...document.querySelectorAll(FOCUSABLE)].filter((el) => {
+      if (el.offsetParent === null) return false;
+      if (el.closest("[data-shortcut-capture='true']")) return false;
+      return true;
+    });
+    const idx = all.indexOf(current);
+    const next = all[idx + 1];
+    if (next) next.focus();
+  }, []);
+
+  const selectOption = useCallback((opt, options = {}) => {
     onChange(opt.value);
     closeDropdown();
     suppressNextFocusOpenRef.current = true;
     triggerRef.current?.focus();
-  }, [onChange, closeDropdown]);
+    if (options?.moveNext) {
+      setTimeout(() => focusNextField(), 0);
+    }
+  }, [onChange, closeDropdown, focusNextField]);
 
   // Expose focus on trigger via ref
   useEffect(() => {
@@ -232,7 +252,7 @@ const Select = forwardRef(function Select(
                     e.preventDefault();
                     e.stopPropagation();
                     if (activeIndex >= 0 && filteredOptions[activeIndex]) {
-                      selectOption(filteredOptions[activeIndex]);
+                      selectOption(filteredOptions[activeIndex], { moveNext: true });
                     }
                   }
                 }}

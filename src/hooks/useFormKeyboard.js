@@ -16,7 +16,6 @@ export function useFormKeyboard({ onEnterSubmit } = {}) {
       const all = [...document.querySelectorAll(FOCUSABLE)]
         .filter((el) => {
           if (el.offsetParent === null) return false;          // hidden
-          if (el.type === "date") return false;                // date picker skip
           if (el.closest("[data-shortcut-capture='true']")) return false; // shortcut modal skip
           return true;
         });

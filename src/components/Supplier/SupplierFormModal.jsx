@@ -8,6 +8,7 @@ export default function SupplierFormModal({
   isOpen,
   onClose,
   initialData,
+  expenseItemOptions = [],
   onAction,
 }) {
   const mode = initialData ? "edit" : "add";
@@ -18,8 +19,20 @@ export default function SupplierFormModal({
       id: initialData?._id || "",
       name: initialData?.name || "",
       opening_balance: initialData?.opening_balance ?? "",
+      assigned_expense_items: Array.isArray(initialData?.assigned_expense_items)
+        ? initialData.assigned_expense_items
+        : [],
     });
   }, [initialData]);
+
+  const toggleAssignedItem = (name) => {
+    setFormData((prev) => {
+      const set = new Set(Array.isArray(prev.assigned_expense_items) ? prev.assigned_expense_items : []);
+      if (set.has(name)) set.delete(name);
+      else set.add(name);
+      return { ...prev, assigned_expense_items: Array.from(set) };
+    });
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -71,6 +84,35 @@ export default function SupplierFormModal({
             setFormData((prev) => ({ ...prev, opening_balance: e.target.value }))
           }
         />
+
+        <div className="rounded-xl border border-gray-300 bg-gray-50 p-3">
+          <p className="text-sm text-gray-700 mb-2">Manage Category (Expense / Item)</p>
+          {expenseItemOptions.length === 0 ? (
+            <p className="text-xs text-gray-400">No active expense items found.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-52 overflow-auto pr-1">
+              {expenseItemOptions.map((name) => {
+                const checked = Array.isArray(formData.assigned_expense_items)
+                  ? formData.assigned_expense_items.includes(name)
+                  : false;
+                return (
+                  <label
+                    key={name}
+                    className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleAssignedItem(name)}
+                      className="h-4 w-4 rounded border-gray-400"
+                    />
+                    <span>{name}</span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </form>
     </Modal>
   );

@@ -304,7 +304,7 @@ const processSupplierQueue = async () => {
           url: action.url,
         });
       } catch (error) {
-        await failSyncAction(action.id, error?.response?.data?.message || error?.message || "sync failed");
+        await failSyncAction(action.id, error?.response?.data?.message || error?.message || "sync failed", { statusCode: error?.response?.status });
         logDataSource("IDB", "sync.suppliers.failed", {
           id: action.id,
           method: action.method,

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Banknote, Landmark, Plus, Smartphone } from "lucide-react";
+import { Banknote, Landmark, PackageCheck, Plus, Smartphone } from "lucide-react";
 import {
   createSupplierPayment,
   fetchSupplierPaymentStats,
@@ -22,12 +22,14 @@ const METHOD_BADGE_CLASS = {
   cash: "bg-emerald-100 text-emerald-700",
   cheque: "bg-amber-100 text-amber-700",
   online: "bg-indigo-100 text-indigo-700",
+  goods_return: "bg-cyan-100 text-cyan-700",
 };
 
 const METHOD_LABEL = {
   cash: "Cash",
   cheque: "Cheque",
   online: "Online",
+  goods_return: "Goods Return",
 };
 
 function SupplierPaymentFormModal({ isOpen, onClose, onAction }) {
@@ -143,6 +145,7 @@ function SupplierPaymentFormModal({ isOpen, onClose, onAction }) {
             { label: "Cash", value: "cash" },
             { label: "Cheque", value: "cheque" },
             { label: "Online", value: "online" },
+            { label: "Goods Return", value: "goods_return" },
           ]}
           placeholder="Select method"
         />
@@ -163,7 +166,7 @@ export default function SupplierPayments() {
 
   const [loading, setLoading] = useState(false);
   const [payments, setPayments] = useState([]);
-  const [stats, setStats] = useState({ total: 0, cash: 0, cheque: 0, online: 0 });
+  const [stats, setStats] = useState({ total: 0, cash: 0, cheque: 0, online: 0, goods_return: 0 });
   const [pagination, setPagination] = useState({ currentPage: 1, totalPages: 1, totalItems: 0, itemsPerPage: 30 });
   const [formModal, setFormModal] = useState({ isOpen: false });
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -174,7 +177,7 @@ export default function SupplierPayments() {
   const loadStats = async () => {
     try {
       const res = await fetchSupplierPaymentStats();
-      setStats(res.data || { total: 0, cash: 0, cheque: 0, online: 0 });
+      setStats(res.data || { total: 0, cash: 0, cheque: 0, online: 0, goods_return: 0 });
     } catch {
       showToast({ type: "error", message: "Failed to load supplier payment stats" });
     }
@@ -208,11 +211,12 @@ export default function SupplierPayments() {
       <div className="relative z-10 max-w-7xl mx-auto h-full flex flex-col">
         <PageHeader title="Supplier Payments" subtitle="Track payments made to suppliers." actionLabel="Add Payment" actionIcon={Plus} onAction={() => setFormModal({ isOpen: true })} />
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-6">
           <StatCard label="Total" value={stats.total} icon={Banknote} />
           <StatCard label="Cash" value={stats.cash} icon={Banknote} variant="success" />
           <StatCard label="Cheque" value={stats.cheque} icon={Landmark} variant="warning" />
           <StatCard label="Online" value={stats.online} icon={Smartphone} variant="normal" />
+          <StatCard label="Goods Return" value={stats.goods_return} icon={PackageCheck} variant="normal" />
         </div>
 
         <div className="rounded-3xl bg-white border border-gray-300 overflow-hidden flex-1 flex flex-col">
@@ -285,6 +289,7 @@ export default function SupplierPayments() {
               { label: "Cash", value: "cash" },
               { label: "Cheque", value: "cheque" },
               { label: "Online", value: "online" },
+              { label: "Goods Return", value: "goods_return" },
             ],
             onChange: (v) => setFilters((prev) => ({ ...prev, method: v })),
           },
