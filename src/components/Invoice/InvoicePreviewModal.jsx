@@ -345,16 +345,16 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
             )}
           </div>
           <div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10.5px", padding: "0px 3.5px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "3.5px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10.75px", padding: "0px 3.5px" }}>
                 <span style={{ fontWeight: 400, color: "#111" }}>Outstanding</span>
                 <span style={{ fontWeight: 600, color: "#111", fontVariantNumeric: "tabular-nums" }}>{formatNumbers(outstandingBalance, 1)}</span>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10.5px", padding: "0px 3.5px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10.75px", padding: "0px 3.5px" }}>
                 <span style={{ fontWeight: 400, color: "#111" }}>Sub Total</span>
                 <span style={{ fontWeight: 600, color: "#111", fontVariantNumeric: "tabular-nums" }}>{formatNumbers(totalAmt, 1)}</span>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #111", padding: "5px 3px 0 3px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #111", padding: "4px 3px 0 3px" }}>
                 <span style={{ fontWeight: 700, color: "#111", fontSize: "11px" }}>New Balance</span>
                 <span style={{ fontWeight: 700, fontSize: "14px", fontVariantNumeric: "tabular-nums", color: "#111" }}>
                   {formatNumbers(newBalance, 1)}
