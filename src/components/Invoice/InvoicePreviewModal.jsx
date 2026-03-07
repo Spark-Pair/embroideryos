@@ -289,29 +289,29 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
             <tbody>
               {orders.map((order, idx) => (
                 <tr key={order._id ?? idx} style={{ background: idx % 2 === 0 ? "#fff" : "#dcdcdc", borderTop: "1px solid #111111ed" }}>
-                  <td style={{ padding: "6px 6px", color: "#111827", fontWeight: 400 }}>{idx + 1}.</td>
-                  <td style={{ padding: "6px 3.5px", fontWeight: 600, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <td style={{ padding: "6px 6px", color: "#111", fontWeight: 500 }}>{idx + 1}.</td>
+                  <td style={{ padding: "6px 3.5px", fontWeight: 600, color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {formatDate(order.date, "DD MMM yyyy")}
                   </td>
-                  <td style={{ padding: "6px 3.5px", fontWeight: 400, color: "#111827", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <td style={{ padding: "6px 3.5px", fontWeight: 500, color: "#111", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {order.lot_no || "-"}
                   </td>
-                  <td style={{ padding: "6px 3.5px", fontWeight: 400, color: "#111827", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <td style={{ padding: "6px 3.5px", fontWeight: 500, color: "#111", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {order.description || "-"}
                   </td>
-                  <td style={{ padding: "6px 3.5px", textAlign: "right", fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
+                  <td style={{ padding: "6px 3.5px", textAlign: "right", fontWeight: 600, color: "#111", fontVariantNumeric: "tabular-nums" }}>
                     {Number(order.design_stitches || 0) === 0 ? "-" : formatNumbers(order.design_stitches, 0)}
                   </td>
-                  <td style={{ padding: "6px 3.5px", textAlign: "right", fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
+                  <td style={{ padding: "6px 3.5px", textAlign: "right", fontWeight: 600, color: "#111", fontVariantNumeric: "tabular-nums" }}>
                     {Number(order.apq || 0) === 0 ? "-" : formatNumbers(order.apq, 0)}
                   </td>
-                  <td style={{ padding: "6px 3.5px", textAlign: "right", fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
+                  <td style={{ padding: "6px 3.5px", textAlign: "right", fontWeight: 600, color: "#111", fontVariantNumeric: "tabular-nums" }}>
                     {formatNumbers(getQuantityInPcs(order), 0)}
                   </td>
-                  <td style={{ padding: "6px 3.5px", textAlign: "right", fontWeight: 400, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
+                  <td style={{ padding: "6px 3.5px", textAlign: "right", fontWeight: 500, color: "#111", fontVariantNumeric: "tabular-nums" }}>
                     {formatNumbers(order.rate, 1)}
                   </td>
-                  <td style={{ padding: "6px 6px", textAlign: "right", fontWeight: 700, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
+                  <td style={{ padding: "6px 6px", textAlign: "right", fontWeight: 700, color: "#111", fontVariantNumeric: "tabular-nums" }}>
                     {formatNumbers(order.total_amount, 1)}
                   </td>
                 </tr>
@@ -335,11 +335,11 @@ function InvoiceDocument({ invoice, businessName, bannerUrl }) {
           </div>
           <div>
             <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", padding: "0px 3px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10.5px", padding: "0px 3.5px" }}>
                 <span style={{ fontWeight: 400, color: "#111" }}>Outstanding</span>
                 <span style={{ fontWeight: 600, color: "#111", fontVariantNumeric: "tabular-nums" }}>{formatNumbers(outstandingBalance, 1)}</span>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", padding: "0px 3px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10.5px", padding: "0px 3.5px" }}>
                 <span style={{ fontWeight: 400, color: "#111" }}>Sub Total</span>
                 <span style={{ fontWeight: 600, color: "#111", fontVariantNumeric: "tabular-nums" }}>{formatNumbers(totalAmt, 1)}</span>
               </div>
