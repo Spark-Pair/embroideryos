@@ -306,7 +306,7 @@ export default function Dashboard() {
       customer_with_activity: 0,
       billed_amount: 0,
       received_amount: 0,
-      opening_amount: 0,
+      arrears_amount: 0,
       balance_amount: 0,
       by_customer: [],
     },
@@ -316,7 +316,7 @@ export default function Dashboard() {
       supplier_with_activity: 0,
       expense_amount: 0,
       paid_amount: 0,
-      opening_amount: 0,
+      arrears_amount: 0,
       balance_amount: 0,
       by_supplier: [],
     },
@@ -493,14 +493,14 @@ export default function Dashboard() {
             customer_with_activity: Number(data?.month?.customer_summary?.customer_with_activity || 0),
             billed_amount: Number(data?.month?.customer_summary?.billed_amount || 0),
             received_amount: Number(data?.month?.customer_summary?.received_amount || 0),
-            opening_amount: Number(data?.month?.customer_summary?.opening_amount || 0),
+            arrears_amount: Number((data?.month?.customer_summary?.arrears_amount ?? data?.month?.customer_summary?.opening_amount) || 0),
             balance_amount: Number(data?.month?.customer_summary?.balance_amount || 0),
             by_customer: Array.isArray(data?.month?.customer_summary?.by_customer)
               ? data.month.customer_summary.by_customer.map((row) => ({
                 customer_id: String(row?.customer_id || ""),
                 customer_name: row?.customer_name || "-",
                 is_active: Boolean(row?.is_active),
-                opening_amount: Number(row?.opening_amount || 0),
+                arrears_amount: Number((row?.arrears_amount ?? row?.opening_amount) || 0),
                 billed_amount: Number(row?.billed_amount || 0),
                 received_amount: Number(row?.received_amount || 0),
                 balance_amount: Number(row?.balance_amount || 0),
@@ -513,14 +513,14 @@ export default function Dashboard() {
             supplier_with_activity: Number(data?.month?.supplier_summary?.supplier_with_activity || 0),
             expense_amount: Number(data?.month?.supplier_summary?.expense_amount || 0),
             paid_amount: Number(data?.month?.supplier_summary?.paid_amount || 0),
-            opening_amount: Number(data?.month?.supplier_summary?.opening_amount || 0),
+            arrears_amount: Number((data?.month?.supplier_summary?.arrears_amount ?? data?.month?.supplier_summary?.opening_amount) || 0),
             balance_amount: Number(data?.month?.supplier_summary?.balance_amount || 0),
             by_supplier: Array.isArray(data?.month?.supplier_summary?.by_supplier)
               ? data.month.supplier_summary.by_supplier.map((row) => ({
                 supplier_id: String(row?.supplier_id || ""),
                 supplier_name: row?.supplier_name || "-",
                 is_active: Boolean(row?.is_active),
-                opening_amount: Number(row?.opening_amount || 0),
+                arrears_amount: Number((row?.arrears_amount ?? row?.opening_amount) || 0),
                 expense_amount: Number(row?.expense_amount || 0),
                 paid_amount: Number(row?.paid_amount || 0),
                 balance_amount: Number(row?.balance_amount || 0),
@@ -617,6 +617,60 @@ export default function Dashboard() {
   const filteredCrpSummaryRows = (ops.monthCrpStaffSummary.by_staff || []).filter((row) =>
     String(row?.staff_name || "").toLowerCase().includes(summarySearch)
   );
+  const combinedSummaryRows = useMemo(() => {
+    const rows = [
+      {
+        entity: "Staff",
+        total_count: Number(ops.monthStaffSummary.record_count || 0),
+        work_amount: Number(ops.monthStaffSummary.work_amount || 0),
+        arrears_amount: Number(ops.monthStaffSummary.arrears_amount || 0),
+        inflow_amount: Number(ops.monthStaffSummary.allowance_amount || 0) + Number(ops.monthStaffSummary.bonus_amount || 0),
+        outflow_amount: Number(ops.monthStaffSummary.deduction_amount || 0),
+        balance_amount: Number(ops.monthStaffSummary.balance_amount || 0),
+      },
+      {
+        entity: "Customer",
+        total_count: Number(ops.monthCustomerSummary.customer_with_activity || 0),
+        work_amount: Number(ops.monthCustomerSummary.billed_amount || 0),
+        arrears_amount: Number(ops.monthCustomerSummary.arrears_amount || 0),
+        inflow_amount: Number(ops.monthCustomerSummary.received_amount || 0),
+        outflow_amount: 0,
+        balance_amount: Number(ops.monthCustomerSummary.balance_amount || 0),
+      },
+      {
+        entity: "Supplier",
+        total_count: Number(ops.monthSupplierSummary.supplier_with_activity || 0),
+        work_amount: Number(ops.monthSupplierSummary.expense_amount || 0),
+        arrears_amount: Number(ops.monthSupplierSummary.arrears_amount || 0),
+        inflow_amount: 0,
+        outflow_amount: Number(ops.monthSupplierSummary.paid_amount || 0),
+        balance_amount: Number(ops.monthSupplierSummary.balance_amount || 0),
+      },
+      {
+        entity: "CRP Staff",
+        total_count: Number(ops.monthCrpStaffSummary.record_count || 0),
+        work_amount: Number(ops.monthCrpStaffSummary.work_amount || 0),
+        arrears_amount: Number(ops.monthCrpStaffSummary.arrears_amount || 0),
+        inflow_amount: 0,
+        outflow_amount: Number(ops.monthCrpStaffSummary.deduction_amount || 0),
+        balance_amount: Number(ops.monthCrpStaffSummary.balance_amount || 0),
+      },
+    ];
+
+    const totals = rows.reduce(
+      (acc, row) => ({
+        total_count: acc.total_count + row.total_count,
+        work_amount: acc.work_amount + row.work_amount,
+        arrears_amount: acc.arrears_amount + row.arrears_amount,
+        inflow_amount: acc.inflow_amount + row.inflow_amount,
+        outflow_amount: acc.outflow_amount + row.outflow_amount,
+        balance_amount: acc.balance_amount + row.balance_amount,
+      }),
+      { total_count: 0, work_amount: 0, arrears_amount: 0, inflow_amount: 0, outflow_amount: 0, balance_amount: 0 }
+    );
+
+    return { rows, totals };
+  }, [ops]);
 
   return (
     <>
@@ -871,6 +925,7 @@ export default function Dashboard() {
                   <div>
                     <p className="text-sm font-medium text-gray-800">Month Summary ({selectedMonth})</p>
                     <p className="text-xs text-gray-500">
+                      {monthSummaryType === "summary" && "Combined summary of Staff, Customer, Supplier and CRP"}
                       {monthSummaryType === "staff" && `Employees: ${ops.monthStaffSummary.staff_count} · Active: ${ops.monthStaffSummary.active_staff_count}`}
                       {monthSummaryType === "customer" && `Customers: ${ops.monthCustomerSummary.customer_count} · Active: ${ops.monthCustomerSummary.active_customer_count}`}
                       {monthSummaryType === "supplier" && `Suppliers: ${ops.monthSupplierSummary.supplier_count} · Active: ${ops.monthSupplierSummary.active_supplier_count}`}
@@ -894,6 +949,7 @@ export default function Dashboard() {
                         value={monthSummaryType}
                         onChange={setMonthSummaryType}
                         options={[
+                          { label: "Summary", value: "summary" },
                           { label: "Staff", value: "staff" },
                           { label: "Customer", value: "customer" },
                           { label: "Supplier", value: "supplier" },
@@ -906,6 +962,46 @@ export default function Dashboard() {
                 </div>
 
                 <div className="max-h-[460px] overflow-auto">
+                  {monthSummaryType === "summary" && (
+                    <table className="w-full text-left border-collapse font-medium">
+                      <thead className="sticky top-0 z-10 bg-gray-200/95 boder-t border-b border-gray-300">
+                        <tr className="text-xs uppercase tracking-wide text-gray-500">
+                          <th className="px-4 py-2.5 font-semibold">Entity</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Count</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Work / Amount</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Arrears</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Inflow</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Outflow</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Balance</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-300">
+                        {combinedSummaryRows.rows.map((row) => (
+                          <tr key={row.entity} className="hover:bg-gray-50/70">
+                            <td className="px-4 py-2.5">{row.entity}</td>
+                            <td className="px-4 py-2.5 text-sm text-right tabular-nums text-gray-700">{formatNumbers(row.total_count, 0)}</td>
+                            <td className="px-4 py-2.5 text-sm text-right tabular-nums text-gray-900">{formatNumbers(row.work_amount, 2)}</td>
+                            <td className="px-4 py-2.5 text-sm text-right tabular-nums text-amber-700">{formatNumbers(row.arrears_amount, 2)}</td>
+                            <td className="px-4 py-2.5 text-sm text-right tabular-nums text-emerald-700">{formatNumbers(row.inflow_amount, 2)}</td>
+                            <td className="px-4 py-2.5 text-sm text-right tabular-nums text-rose-600">{formatNumbers(row.outflow_amount, 2)}</td>
+                            <td className={`px-4 py-2.5 text-sm text-right tabular-nums font-semibold ${row.balance_amount < 0 ? "text-rose-600" : "text-teal-700"}`}>{formatNumbers(row.balance_amount, 2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="sticky bottom-0 z-10">
+                        <tr className="bg-gray-200/95 border-t border-gray-300">
+                          <td className="px-4 py-3 text-sm font-semibold text-gray-900">Grand Total</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums">{formatNumbers(combinedSummaryRows.totals.total_count, 0)}</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-gray-900">{formatNumbers(combinedSummaryRows.totals.work_amount, 2)}</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-amber-700">{formatNumbers(combinedSummaryRows.totals.arrears_amount, 2)}</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-emerald-700">{formatNumbers(combinedSummaryRows.totals.inflow_amount, 2)}</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-rose-600">{formatNumbers(combinedSummaryRows.totals.outflow_amount, 2)}</td>
+                          <td className={`px-4 py-3 text-sm text-right font-semibold tabular-nums ${combinedSummaryRows.totals.balance_amount < 0 ? "text-rose-600" : "text-teal-700"}`}>{formatNumbers(combinedSummaryRows.totals.balance_amount, 2)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  )}
+
                   {monthSummaryType === "staff" && (
                     <table className="w-full text-left border-collapse font-medium">
                       <thead className="sticky top-0 z-10 bg-gray-200/95 boder-t border-b border-gray-300">
@@ -964,7 +1060,7 @@ export default function Dashboard() {
                       <thead className="sticky top-0 z-10 bg-gray-200/95 boder-t border-b border-gray-300">
                         <tr className="text-xs uppercase tracking-wide text-gray-500">
                           <th className="px-4 py-2.5 font-semibold">Customer</th>
-                          <th className="px-4 py-2.5 font-semibold text-right">Opening</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Arrears</th>
                           <th className="px-4 py-2.5 font-semibold text-right">Billed</th>
                           <th className="px-4 py-2.5 font-semibold text-right">Received</th>
                           <th className="px-4 py-2.5 font-semibold text-right">Balance</th>
@@ -981,7 +1077,7 @@ export default function Dashboard() {
                           filteredCustomerSummaryRows.map((row) => (
                             <tr key={row.customer_id || row.customer_name} className="hover:bg-gray-50/70">
                               <td className="px-4 py-2.5">{row.customer_name}</td>
-                              <td className="px-4 py-2.5 text-sm text-right tabular-nums">{formatNumbers(row.opening_amount, 2)}</td>
+                              <td className="px-4 py-2.5 text-sm text-right tabular-nums text-amber-700">{formatNumbers(row.arrears_amount, 2)}</td>
                               <td className="px-4 py-2.5 text-sm text-right tabular-nums text-indigo-700">{formatNumbers(row.billed_amount, 2)}</td>
                               <td className="px-4 py-2.5 text-sm text-right tabular-nums text-emerald-700">{formatNumbers(row.received_amount, 2)}</td>
                               <td className={`px-4 py-2.5 text-sm text-right tabular-nums font-semibold ${row.balance_amount < 0 ? "text-rose-600" : "text-teal-700"}`}>{formatNumbers(row.balance_amount, 2)}</td>
@@ -992,7 +1088,7 @@ export default function Dashboard() {
                       <tfoot className="sticky bottom-0 z-10">
                         <tr className="bg-gray-200/95 border-t border-gray-300">
                           <td className="px-4 py-3 text-sm font-semibold text-gray-900">Total</td>
-                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums">{formatNumbers(ops.monthCustomerSummary.opening_amount, 2)}</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-amber-700">{formatNumbers(ops.monthCustomerSummary.arrears_amount, 2)}</td>
                           <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-indigo-700">{formatNumbers(ops.monthCustomerSummary.billed_amount, 2)}</td>
                           <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-emerald-700">{formatNumbers(ops.monthCustomerSummary.received_amount, 2)}</td>
                           <td className={`px-4 py-3 text-sm text-right font-semibold tabular-nums ${ops.monthCustomerSummary.balance_amount < 0 ? "text-rose-600" : "text-teal-700"}`}>{formatNumbers(ops.monthCustomerSummary.balance_amount, 2)}</td>
@@ -1006,7 +1102,7 @@ export default function Dashboard() {
                       <thead className="sticky top-0 z-10 bg-gray-200/95 boder-t border-b border-gray-300">
                         <tr className="text-xs uppercase tracking-wide text-gray-500">
                           <th className="px-4 py-2.5 font-semibold">Supplier</th>
-                          <th className="px-4 py-2.5 font-semibold text-right">Opening</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Arrears</th>
                           <th className="px-4 py-2.5 font-semibold text-right">Expense</th>
                           <th className="px-4 py-2.5 font-semibold text-right">Paid</th>
                           <th className="px-4 py-2.5 font-semibold text-right">Balance</th>
@@ -1023,7 +1119,7 @@ export default function Dashboard() {
                           filteredSupplierSummaryRows.map((row) => (
                             <tr key={row.supplier_id || row.supplier_name} className="hover:bg-gray-50/70">
                               <td className="px-4 py-2.5">{row.supplier_name}</td>
-                              <td className="px-4 py-2.5 text-sm text-right tabular-nums">{formatNumbers(row.opening_amount, 2)}</td>
+                              <td className="px-4 py-2.5 text-sm text-right tabular-nums text-amber-700">{formatNumbers(row.arrears_amount, 2)}</td>
                               <td className="px-4 py-2.5 text-sm text-right tabular-nums text-rose-600">{formatNumbers(row.expense_amount, 2)}</td>
                               <td className="px-4 py-2.5 text-sm text-right tabular-nums text-emerald-700">{formatNumbers(row.paid_amount, 2)}</td>
                               <td className={`px-4 py-2.5 text-sm text-right tabular-nums font-semibold ${row.balance_amount < 0 ? "text-rose-600" : "text-teal-700"}`}>{formatNumbers(row.balance_amount, 2)}</td>
@@ -1034,7 +1130,7 @@ export default function Dashboard() {
                       <tfoot className="sticky bottom-0 z-10">
                         <tr className="bg-gray-200/95 border-t border-gray-300">
                           <td className="px-4 py-3 text-sm font-semibold text-gray-900">Total</td>
-                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums">{formatNumbers(ops.monthSupplierSummary.opening_amount, 2)}</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-amber-700">{formatNumbers(ops.monthSupplierSummary.arrears_amount, 2)}</td>
                           <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-rose-600">{formatNumbers(ops.monthSupplierSummary.expense_amount, 2)}</td>
                           <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-emerald-700">{formatNumbers(ops.monthSupplierSummary.paid_amount, 2)}</td>
                           <td className={`px-4 py-3 text-sm text-right font-semibold tabular-nums ${ops.monthSupplierSummary.balance_amount < 0 ? "text-rose-600" : "text-teal-700"}`}>{formatNumbers(ops.monthSupplierSummary.balance_amount, 2)}</td>
@@ -1164,4 +1260,3 @@ export default function Dashboard() {
     </>
   );
 }
-
