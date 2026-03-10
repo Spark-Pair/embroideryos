@@ -83,6 +83,25 @@ const getInvoicesSnapshot = async () => {
   return Array.from(map.values());
 };
 
+const getOrdersSnapshot = async () => {
+  const base = await getEntitySnapshot("orders:all");
+  const overlay = (await getEntitySnapshot("orders:overlay")) || {};
+  const rows = Array.isArray(base) ? base : [];
+  const map = new Map(rows.map((row) => [normalizeId(row), row]));
+  Object.values(overlay || {}).forEach((item) => {
+    if (!item) return;
+    const id = normalizeId(item);
+    if (!id) return;
+    if (item._deleted) {
+      map.delete(id);
+      return;
+    }
+    const prev = map.get(id) || {};
+    map.set(id, { ...prev, ...item, _id: id });
+  });
+  return Array.from(map.values());
+};
+
 const withOverlayList = (rows = [], overlay = {}) => {
   const base = uniqueById(rows);
   const map = new Map(base.map((row) => [normalizeId(row), row]));
@@ -466,30 +485,73 @@ export const fetchCustomerStatementLocalFirst = async (params = {}) => {
   const invoices = (await getInvoicesSnapshot()).filter(
     (row) => String(row?.customer_id?._id || row?.customer_id || "") === customerId
   );
+  const invoiceMap = new Map(
+    invoices.map((inv) => [
+      String(inv?._id || ""),
+      { invoice_date: inv?.invoice_date, invoice_number: inv?.invoice_number || "" },
+    ])
+  );
 
-  const priorInvoicesTotal = invoices
-    .filter((row) => toMillis(row?.invoice_date) < startDate.getTime())
+  const orders = (await getOrdersSnapshot()).filter(
+    (row) => String(row?.customer_id?._id || row?.customer_id || "") === customerId
+  );
+
+  const ordersWithInvoices = orders.filter((row) => {
+    const invoiceId = String(row?.invoice_id?._id || row?.invoice_id || "");
+    return Boolean(invoiceId && invoiceMap.has(invoiceId));
+  });
+
+  const priorOrdersTotal = ordersWithInvoices
+    .filter((row) => {
+      const invoiceId = String(row?.invoice_id?._id || row?.invoice_id || "");
+      const invoiceMeta = invoiceMap.get(invoiceId);
+      return invoiceMeta && toMillis(invoiceMeta.invoice_date) < startDate.getTime();
+    })
     .reduce((sum, row) => sum + Number(row?.total_amount || 0), 0);
 
   const priorPaymentsTotal = payments
     .filter((row) => toMillis(row?.date) < startDate.getTime())
     .reduce((sum, row) => sum + Number(row?.amount || 0), 0);
 
-  const openingBalance = Number(customer?.opening_balance || 0) + priorInvoicesTotal - priorPaymentsTotal;
+  const openingBalance = Number(customer?.opening_balance || 0) + priorOrdersTotal - priorPaymentsTotal;
 
   const rows = [
-    ...invoices
-      .filter((row) => inDateRange(row?.invoice_date, startDate, endDate))
-      .map((row) => ({
-        kind: "invoice",
-        _id: row?._id,
-        date: row?.invoice_date,
-        invoice_number: row?.invoice_number || "",
-        details: row?.note || "",
-        debit: Number(row?.total_amount || 0),
-        credit: 0,
-        createdAt: row?.createdAt,
-      })),
+    ...ordersWithInvoices
+      .filter((row) => {
+        const invoiceId = String(row?.invoice_id?._id || row?.invoice_id || "");
+        const invoiceMeta = invoiceMap.get(invoiceId);
+        return invoiceMeta && inDateRange(invoiceMeta.invoice_date, startDate, endDate);
+      })
+      .map((row) => {
+        const invoiceId = String(row?.invoice_id?._id || row?.invoice_id || "");
+        const invoiceMeta = invoiceMap.get(invoiceId) || {};
+        return {
+          kind: "order",
+          _id: row?._id,
+          date: invoiceMeta.invoice_date || row?.date,
+          invoice_date: invoiceMeta.invoice_date || null,
+          order_date: row?.date || null,
+          invoice_number: invoiceMeta.invoice_number || "",
+          description: row?.description || "",
+          machine_no: row?.machine_no || "",
+          lot_no: row?.lot_no || "",
+          client_ref: row?.client_ref || "",
+          unit: row?.unit || "",
+          quantity: Number(row?.quantity || 0),
+          qt_pcs: Number(row?.qt_pcs || 0),
+          actual_stitches: Number(row?.actual_stitches || 0),
+          design_stitches: Number(row?.design_stitches || 0),
+          apq: Number(row?.apq || 0),
+          apq_chr: Number(row?.apq_chr || 0),
+          reverse_mode: Boolean(row?.reverse_mode),
+          two_side: Boolean(row?.two_side),
+          rate: Number(row?.rate || 0),
+          stitch_rate: Number(row?.stitch_rate || 0),
+          debit: Number(row?.total_amount || 0),
+          credit: 0,
+          createdAt: row?.createdAt,
+        };
+      }),
     ...payments
       .filter((row) => inDateRange(row?.date, startDate, endDate))
       .map((row) => ({

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { FileText, Loader2, Printer } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import Select from "../components/Select";
@@ -34,7 +34,7 @@ const PRINT_STYLE = `
     position: fixed !important;
     left: 50% !important;
     top: 0 !important;
-    width: 794px !important;
+    width: 1123px !important;
     min-height: auto !important;
     transform: translateX(-50%) !important;
     margin: 0 !important;
@@ -43,9 +43,11 @@ const PRINT_STYLE = `
     box-shadow: none !important;
     padding: 20px !important;
     box-sizing: border-box !important;
+    font-size: 10px !important;
+    line-height: 1.25 !important;
   }
 
-  @page { size: A4 portrait; margin: 0; }
+  @page { size: A4 landscape; margin: 0; }
 }
 `;
 
@@ -161,6 +163,7 @@ export default function Statements() {
       : statement?.total_expenses || 0
   );
   const totalCredit = Number(statement?.total_payments || 0);
+  const isCustomer = statement?.type === "customer";
 
   return (
     <div className="relative z-10 max-w-7xl mx-auto h-full flex flex-col">
@@ -233,71 +236,141 @@ export default function Statements() {
             Generate a statement to view report.
           </div>
         ) : (
-          <div id="statement-print-root" className="mx-auto rounded-2xl border border-gray-300 bg-white p-5 space-y-4 text-gray-900" style={{ width: "794px", minHeight: "1123px", fontFamily: "'Segoe UI', sans-serif" }}>
+          <div id="statement-print-root" className="mx-auto rounded-2xl border border-gray-300 bg-white p-4 space-y-3 text-gray-900 text-[10px]" style={{ width: "1123px", minHeight: "794px", fontFamily: "'Segoe UI', sans-serif" }}>
             <div className="flex items-start justify-between gap-4 border-b border-gray-300 pb-3">
               <div>
-                <p className="text-2xl font-bold">{title}</p>
-                <p className="text-sm text-gray-500 mt-0.5">
+                <p className="text-lg font-bold">{title}</p>
+                <p className="text-[10px] text-gray-500 mt-0.5">
                   {statement.type === "customer" ? statement?.customer?.name : statement?.supplier?.name}
                 </p>
               </div>
-              <div className="text-right text-sm text-gray-600">
+              <div className="text-right text-[10px] text-gray-600">
                 <p>From: <span className="font-semibold">{formatDate(statement.date_from, "DD MMM yyyy")}</span></p>
                 <p>To: <span className="font-semibold">{formatDate(statement.date_to, "DD MMM yyyy")}</span></p>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-              <div className="rounded-xl border border-gray-300 p-3">
-                <p className="text-xs text-gray-500 uppercase">Opening Balance</p>
-                <p className="text-lg font-semibold tabular-nums">{formatNumbers(opening, 2)}</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px]">
+              <div className="rounded-xl border border-gray-300 p-2">
+                <p className="text-[9px] text-gray-500 uppercase">Opening Balance</p>
+                <p className="text-sm font-semibold tabular-nums">{formatNumbers(opening, 2)}</p>
               </div>
-              <div className="rounded-xl border border-gray-300 p-3">
-                <p className="text-xs text-gray-500 uppercase">{statement.type === "customer" ? "Total Invoices" : "Total Expenses"}</p>
-                <p className="text-lg font-semibold tabular-nums">{formatNumbers(totalDebit, 2)}</p>
+              <div className="rounded-xl border border-gray-300 p-2">
+                <p className="text-[9px] text-gray-500 uppercase">{statement.type === "customer" ? "Total Billing Amount" : "Total Expenses"}</p>
+                <p className="text-sm font-semibold tabular-nums">{formatNumbers(totalDebit, 2)}</p>
               </div>
-              <div className="rounded-xl border border-gray-300 p-3">
-                <p className="text-xs text-gray-500 uppercase">Total Payments</p>
-                <p className="text-lg font-semibold tabular-nums">{formatNumbers(totalCredit, 2)}</p>
+              <div className="rounded-xl border border-gray-300 p-2">
+                <p className="text-[9px] text-gray-500 uppercase">Total Payments</p>
+                <p className="text-sm font-semibold tabular-nums">{formatNumbers(totalCredit, 2)}</p>
               </div>
-              <div className="rounded-xl border border-gray-300 p-3">
-                <p className="text-xs text-gray-500 uppercase">Closing Balance</p>
-                <p className="text-xl font-bold tabular-nums">{formatNumbers(closing, 2)}</p>
+              <div className="rounded-xl border border-gray-300 p-2">
+                <p className="text-[9px] text-gray-500 uppercase">Closing Balance</p>
+                <p className="text-base font-bold tabular-nums">{formatNumbers(closing, 2)}</p>
               </div>
             </div>
 
-            <div className="overflow-auto rounded-xl border border-gray-300">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="bg-slate-800 text-slate-200 uppercase tracking-wide">
-                    {["#", "Date", "Type", "Ref / Method", "Details", "Debit", "Credit", "Balance"].map((h) => (
-                      <th key={h} className={`px-3 py-2.5 font-medium ${["Debit", "Credit", "Balance"].includes(h) ? "text-right" : ""}`}>
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {(statement.rows || []).map((row, idx) => (
-                    <tr key={row._id || idx} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                      <td className="px-3 py-2.5">{idx + 1}</td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">{formatDate(row.date, "DD MMM yyyy")}</td>
-                      <td className="px-3 py-2.5 capitalize font-medium">{row.kind}</td>
-                      <td className="px-3 py-2.5">
-                        {statement.type === "customer"
-                          ? row.kind === "invoice"
-                            ? row.invoice_number || "—"
-                            : row.method || "—"
-                          : row.reference_no || row.method || "—"}
-                      </td>
-                      <td className="px-3 py-2.5">{row.details || "—"}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">{row.debit ? formatNumbers(row.debit, 2) : "—"}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">{row.credit ? formatNumbers(row.credit, 2) : "—"}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{formatNumbers(row.balance, 2)}</td>
+            <div className="overflow-auto rounded-xl border border-gray-300 max-h-[520px]">
+              {isCustomer ? (
+                <table className="w-full text-left border-collapse text-[10.5px]" style={{ fontWeight: 500 }}>
+                  <thead>
+                    <tr className="bg-slate-800 text-slate-200 tracking-wide">
+                      {[
+                        "#",
+                        "Date",
+                        "Bill No",
+                        "Lot No / Type",
+                        "Descriptions",
+                        "Qty pcs",
+                        "Design Stitches",
+                        "Applique",
+                        "Apq Charges",
+                        "Rate",
+                        "Stitch Rate",
+                        "Pcs",
+                        "Bill Amount",
+                        "Payment Amount",
+                        "Balance",
+                      ].map((h) => (
+                        <th
+                          key={h}
+                          className={`px-1.5 py-1.5 font-medium first:px-2.5 last:px-2.5 ${[
+                            "Qty pcs",
+                            "Design Stitches",
+                            "Applique",
+                            "Apq Charges",
+                            "Rate",
+                            "Stitch Rate",
+                            "Pcs",
+                            "Bill Amount",
+                            "Payment Amount",
+                            "Balance",
+                          ].includes(h) ? "text-right" : ""}`}
+                        >
+                          {h}
+                        </th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-300">
+                    {(statement.rows || []).map((row, idx) => {
+                      const isPayment = row.kind === "payment";
+                      const lotOrType = isPayment
+                        ? (row.method || "").toString().toUpperCase() || "—"
+                        : row.lot_no || "—";
+                      const itemDesc = isPayment
+                        ? [row.method ? `Payment: ${row.method}` : "", row.details || ""].filter(Boolean).join(" | ")
+                        : row.description || "—";
+                      return (
+                        <tr key={row._id || idx} className={idx % 2 === 0 ? "bg-white" : "bg-gray-100"}>
+                          <td className="px-2.5 py-1.5">{idx + 1}</td>
+                          <td className="px-1.5 py-1.5 whitespace-nowrap">{formatDate(row.date, "DD MMM yyyy")}</td>
+                          <td className="px-1.5 py-1.5">{isPayment ? "—" : row.invoice_number || "—"}</td>
+                          <td className="px-1.5 py-1.5">{lotOrType}</td>
+                          <td className="px-1.5 py-1.5">{itemDesc}</td>
+                          <td className="px-1.5 py-1.5 text-right tabular-nums">{isPayment ? "—" : formatNumbers(row.quantity || 0, 0)}</td>
+                          <td className="px-1.5 py-1.5 text-right tabular-nums">{isPayment ? "—" : formatNumbers(row.design_stitches || 0, 0)}</td>
+                          <td className="px-1.5 py-1.5 text-right tabular-nums">{isPayment ? "—" : formatNumbers(row.apq || 0, 2)}</td>
+                          <td className="px-1.5 py-1.5 text-right tabular-nums">{isPayment ? "—" : formatNumbers(row.apq_chr || 0, 2)}</td>
+                          <td className="px-1.5 py-1.5 text-right tabular-nums">{isPayment ? "—" : formatNumbers(row.rate || 0, 2)}</td>
+                          <td className="px-1.5 py-1.5 text-right tabular-nums">{isPayment ? "—" : formatNumbers(row.stitch_rate || 0, 2)}</td>
+                          <td className="px-1.5 py-1.5 text-right tabular-nums">{isPayment ? "—" : formatNumbers(row.qt_pcs || 0, 0)}</td>
+                          <td className="px-1.5 py-1.5 text-right tabular-nums">{row.debit ? formatNumbers(row.debit, 2) : "—"}</td>
+                          <td className="px-1.5 py-1.5 text-right tabular-nums">{row.credit ? formatNumbers(row.credit, 2) : "—"}</td>
+                          <td className="px-2.5 py-1.5 text-right tabular-nums font-semibold">{formatNumbers(row.balance, 2)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-800 text-slate-200 uppercase tracking-wide">
+                      {["#", "Date", "Type", "Ref / Method", "Details", "Debit", "Credit", "Balance"].map((h) => (
+                        <th key={h} className={`px-3 py-2.5 font-medium ${["Debit", "Credit", "Balance"].includes(h) ? "text-right" : ""}`}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {(statement.rows || []).map((row, idx) => (
+                      <tr key={row._id || idx} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                        <td className="px-3 py-2.5">{idx + 1}</td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">{formatDate(row.date, "DD MMM yyyy")}</td>
+                        <td className="px-3 py-2.5 capitalize font-medium">{row.kind}</td>
+                        <td className="px-3 py-2.5">
+                          {row.reference_no || row.method || "—"}
+                        </td>
+                        <td className="px-3 py-2.5">{row.details || "—"}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">{row.debit ? formatNumbers(row.debit, 2) : "—"}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">{row.credit ? formatNumbers(row.credit, 2) : "—"}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{formatNumbers(row.balance, 2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         )}
@@ -305,3 +378,6 @@ export default function Statements() {
     </div>
   );
 }
+
+
+
