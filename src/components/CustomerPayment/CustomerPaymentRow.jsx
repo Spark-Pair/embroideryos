@@ -11,6 +11,8 @@ const METHOD_LABEL = {
   adjustment: "Adjustment",
 };
 
+const needsClearDate = (method) => method === "cheque" || method === "slip";
+
 export default function CustomerPaymentRow({ item, index, startIndex, onView, onEdit }) {
   const [activeMenu, setActiveMenu] = useState(null);
 
@@ -31,6 +33,11 @@ export default function CustomerPaymentRow({ item, index, startIndex, onView, on
       </td>
       <td className="px-7 py-4 text-sm font-medium tracking-wider text-gray-800">
         {formatNumbers(item.amount, 2)}
+      </td>
+      <td className="px-7 py-4 text-sm text-gray-500 font-light">
+        {needsClearDate(item.method)
+          ? (item.clear_date ? formatDate(item.clear_date, "dd-MMM-YYYY") : "Pending")
+          : "-"}
       </td>
       <td className="max-w-[220px] truncate px-7 py-4 text-sm font-light text-gray-500" title={item.remarks || ""}>
         {item.remarks || "-"}

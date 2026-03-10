@@ -137,7 +137,7 @@ const ensureRange = (range, date_from, date_to) => {
 
 const sumBy = (rows, key) => rows.reduce((sum, row) => sum + Number(row?.[key] || 0), 0);
 
-const buildCustomerMonthlySummaryLocal = ({ customers, invoices, customerPayments, monthFrom, monthTo }) => {
+const buildCustomerMonthlySummaryLocal = ({ customers, invoices, customerPayments, selectedMonth, monthFrom, monthTo }) => {
   const rows = Array.isArray(customers) ? customers : [];
   if (!rows.length) {
     return {
@@ -146,7 +146,7 @@ const buildCustomerMonthlySummaryLocal = ({ customers, invoices, customerPayment
       customer_with_activity: 0,
       billed_amount: 0,
       received_amount: 0,
-      opening_amount: 0,
+      arrears_amount: 0,
       balance_amount: 0,
       by_customer: [],
     };
@@ -160,6 +160,7 @@ const buildCustomerMonthlySummaryLocal = ({ customers, invoices, customerPayment
         customer_name: row?.name || "",
         is_active: Boolean(row?.isActive),
         opening_amount: Number(row?.opening_balance || 0),
+        arrears_amount: Number(row?.opening_balance || 0),
         billed_amount: 0,
         received_amount: 0,
       },
@@ -167,18 +168,32 @@ const buildCustomerMonthlySummaryLocal = ({ customers, invoices, customerPayment
   );
 
   (invoices || []).forEach((row) => {
-    if (!inDateRange(row?.invoice_date, monthFrom, monthTo)) return;
+    const monthKey = monthKeyFromDate(row?.invoice_date);
+    if (!monthKey) return;
     const id = String(row?.customer_id?._id || row?.customer_id || "");
     const current = byCustomer.get(id);
     if (!current) return;
+    if (monthKey < selectedMonth) {
+      current.arrears_amount += Number(row?.total_amount || 0);
+      return;
+    }
+    if (monthKey !== selectedMonth) return;
+    if (!inDateRange(row?.invoice_date, monthFrom, monthTo)) return;
     current.billed_amount += Number(row?.total_amount || 0);
   });
 
   (customerPayments || []).forEach((row) => {
-    if (!inDateRange(row?.date, monthFrom, monthTo)) return;
+    const monthKey = monthKeyFromDate(row?.date);
+    if (!monthKey) return;
     const id = String(row?.customer_id?._id || row?.customer_id || "");
     const current = byCustomer.get(id);
     if (!current) return;
+    if (monthKey < selectedMonth) {
+      current.arrears_amount -= Number(row?.amount || 0);
+      return;
+    }
+    if (monthKey !== selectedMonth) return;
+    if (!inDateRange(row?.date, monthFrom, monthTo)) return;
     current.received_amount += Number(row?.amount || 0);
   });
 
@@ -188,23 +203,25 @@ const buildCustomerMonthlySummaryLocal = ({ customers, invoices, customerPayment
     customer_with_activity: 0,
     billed_amount: 0,
     received_amount: 0,
-    opening_amount: 0,
+    arrears_amount: 0,
     balance_amount: 0,
     by_customer: [],
   };
 
   byCustomer.forEach((row) => {
-    const balanceAmount = row.opening_amount + row.billed_amount - row.received_amount;
+    const historyBalance = row.arrears_amount;
+    const effectiveArrears = historyBalance === 0 ? row.opening_amount : historyBalance;
+    const balanceAmount = effectiveArrears + row.billed_amount - row.received_amount;
     if (row.billed_amount > 0 || row.received_amount > 0) total.customer_with_activity += 1;
     total.billed_amount += row.billed_amount;
     total.received_amount += row.received_amount;
-    total.opening_amount += row.opening_amount;
+    total.arrears_amount += effectiveArrears;
     total.balance_amount += balanceAmount;
     total.by_customer.push({
       customer_id: row.customer_id,
       customer_name: row.customer_name,
       is_active: row.is_active,
-      opening_amount: row.opening_amount,
+      arrears_amount: effectiveArrears,
       billed_amount: row.billed_amount,
       received_amount: row.received_amount,
       balance_amount: balanceAmount,
@@ -215,7 +232,7 @@ const buildCustomerMonthlySummaryLocal = ({ customers, invoices, customerPayment
   return total;
 };
 
-const buildSupplierMonthlySummaryLocal = ({ suppliers, expenses, supplierPayments, monthFrom, monthTo }) => {
+const buildSupplierMonthlySummaryLocal = ({ suppliers, expenses, supplierPayments, selectedMonth, monthFrom, monthTo }) => {
   const rows = Array.isArray(suppliers) ? suppliers : [];
   if (!rows.length) {
     return {
@@ -224,7 +241,7 @@ const buildSupplierMonthlySummaryLocal = ({ suppliers, expenses, supplierPayment
       supplier_with_activity: 0,
       expense_amount: 0,
       paid_amount: 0,
-      opening_amount: 0,
+      arrears_amount: 0,
       balance_amount: 0,
       by_supplier: [],
     };
@@ -238,6 +255,7 @@ const buildSupplierMonthlySummaryLocal = ({ suppliers, expenses, supplierPayment
         supplier_name: row?.name || "",
         is_active: Boolean(row?.isActive),
         opening_amount: Number(row?.opening_balance || 0),
+        arrears_amount: Number(row?.opening_balance || 0),
         expense_amount: 0,
         paid_amount: 0,
       },
@@ -245,18 +263,32 @@ const buildSupplierMonthlySummaryLocal = ({ suppliers, expenses, supplierPayment
   );
 
   (expenses || []).forEach((row) => {
-    if (!inDateRange(row?.date, monthFrom, monthTo)) return;
+    const monthKey = monthKeyFromDate(row?.date);
+    if (!monthKey) return;
     const id = String(row?.supplier_id?._id || row?.supplier_id || "");
     const current = bySupplier.get(id);
     if (!current) return;
+    if (monthKey < selectedMonth) {
+      current.arrears_amount += Number(row?.amount || 0);
+      return;
+    }
+    if (monthKey !== selectedMonth) return;
+    if (!inDateRange(row?.date, monthFrom, monthTo)) return;
     current.expense_amount += Number(row?.amount || 0);
   });
 
   (supplierPayments || []).forEach((row) => {
-    if (!inDateRange(row?.date, monthFrom, monthTo)) return;
+    const monthKey = monthKeyFromDate(row?.date);
+    if (!monthKey) return;
     const id = String(row?.supplier_id?._id || row?.supplier_id || "");
     const current = bySupplier.get(id);
     if (!current) return;
+    if (monthKey < selectedMonth) {
+      current.arrears_amount -= Number(row?.amount || 0);
+      return;
+    }
+    if (monthKey !== selectedMonth) return;
+    if (!inDateRange(row?.date, monthFrom, monthTo)) return;
     current.paid_amount += Number(row?.amount || 0);
   });
 
@@ -266,23 +298,25 @@ const buildSupplierMonthlySummaryLocal = ({ suppliers, expenses, supplierPayment
     supplier_with_activity: 0,
     expense_amount: 0,
     paid_amount: 0,
-    opening_amount: 0,
+    arrears_amount: 0,
     balance_amount: 0,
     by_supplier: [],
   };
 
   bySupplier.forEach((row) => {
-    const balanceAmount = row.opening_amount + row.expense_amount - row.paid_amount;
+    const historyBalance = row.arrears_amount;
+    const effectiveArrears = historyBalance === 0 ? row.opening_amount : historyBalance;
+    const balanceAmount = effectiveArrears + row.expense_amount - row.paid_amount;
     if (row.expense_amount > 0 || row.paid_amount > 0) total.supplier_with_activity += 1;
     total.expense_amount += row.expense_amount;
     total.paid_amount += row.paid_amount;
-    total.opening_amount += row.opening_amount;
+    total.arrears_amount += effectiveArrears;
     total.balance_amount += balanceAmount;
     total.by_supplier.push({
       supplier_id: row.supplier_id,
       supplier_name: row.supplier_name,
       is_active: row.is_active,
-      opening_amount: row.opening_amount,
+      arrears_amount: effectiveArrears,
       expense_amount: row.expense_amount,
       paid_amount: row.paid_amount,
       balance_amount: balanceAmount,
@@ -635,6 +669,7 @@ export const fetchDashboardSummaryLocalFirst = async (params = {}) => {
         customers,
         invoices,
         customerPayments,
+        selectedMonth,
         monthFrom: monthRange.from,
         monthTo: monthRange.to,
       }),
@@ -642,6 +677,7 @@ export const fetchDashboardSummaryLocalFirst = async (params = {}) => {
         suppliers,
         expenses,
         supplierPayments,
+        selectedMonth,
         monthFrom: monthRange.from,
         monthTo: monthRange.to,
       }),

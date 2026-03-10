@@ -927,8 +927,8 @@ export default function Dashboard() {
                     <p className="text-xs text-gray-500">
                       {monthSummaryType === "summary" && "Combined summary of Staff, Customer, Supplier and CRP"}
                       {monthSummaryType === "staff" && `Employees: ${ops.monthStaffSummary.staff_count} · Active: ${ops.monthStaffSummary.active_staff_count}`}
-                      {monthSummaryType === "customer" && `Customers: ${ops.monthCustomerSummary.customer_count} · Active: ${ops.monthCustomerSummary.active_customer_count}`}
-                      {monthSummaryType === "supplier" && `Suppliers: ${ops.monthSupplierSummary.supplier_count} · Active: ${ops.monthSupplierSummary.active_supplier_count}`}
+                      {monthSummaryType === "customer" && `Customers: ${ops.monthCustomerSummary.customer_count} · Active: ${ops.monthCustomerSummary.active_customer_count} · Arrears = last month balance (0 => opening)`}
+                      {monthSummaryType === "supplier" && `Suppliers: ${ops.monthSupplierSummary.supplier_count} · Active: ${ops.monthSupplierSummary.active_supplier_count} · Arrears = last month balance (0 => opening)`}
                       {monthSummaryType === "crp" && `CRP Staff: ${ops.monthCrpStaffSummary.staff_count} · Active: ${ops.monthCrpStaffSummary.active_staff_count}`}
                     </p>
                   </div>

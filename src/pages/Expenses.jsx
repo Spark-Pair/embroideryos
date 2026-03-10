@@ -656,7 +656,7 @@ export default function Expenses() {
   const [detailsModal, setDetailsModal] = useState({ isOpen: false, expense: null });
   const [activeMenu, setActiveMenu] = useState(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [filters, setFilters] = useState({ item_name: "", expense_type: "", month: "", date_from: "", date_to: "" });
+  const [filters, setFilters] = useState({ item_name: "", supplier_name: "", expense_type: "", month: "", date_from: "", date_to: "" });
 
   const tableScrollRef = useRef(null);
 
@@ -714,9 +714,9 @@ export default function Expenses() {
                 <tr className="text-sm tracking-wider text-gray-500">
                   <th className="px-5 py-3.5 font-medium">#</th>
                   <th className="px-5 py-3.5 font-medium">Date</th>
-                  <th className="px-5 py-3.5 font-medium">Type</th>
-                  <th className="px-5 py-3.5 font-medium">Expense / Item</th>
                   <th className="px-5 py-3.5 font-medium">Supplier</th>
+                  <th className="px-5 py-3.5 font-medium">Expense / Item</th>
+                  <th className="px-5 py-3.5 font-medium">Type</th>
                   <th className="px-5 py-3.5 font-medium">Rows</th>
                   <th className="px-5 py-3.5 font-medium">Total Qty</th>
                   <th className="px-5 py-3.5 font-medium">Ref No</th>
@@ -740,13 +740,15 @@ export default function Expenses() {
                     >
                       <td className="px-5 py-4 text-sm text-gray-500">{(pagination.currentPage - 1) * pagination.itemsPerPage + index + 1}</td>
                       <td className="px-5 py-4 text-sm text-gray-600">{formatDate(item.date, "DD MMM yyyy")}</td>
+                      <td className="px-5 py-4 text-sm font-semibold text-gray-800" title={item.supplier_name || ""}>
+                        {item.supplier_name || "-"}
+                      </td>
+                      <td className="px-5 py-4 text-sm font-semibold text-gray-800">{item.item_name || "-"}</td>
                       <td className="px-5 py-4 text-sm">
                         <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${TYPE_BADGE_CLASS[item.expense_type] || "bg-gray-100 text-gray-700"}`}>
                           {EXPENSE_TYPE_LABEL[item.expense_type] || item.expense_type}
                         </span>
                       </td>
-                      <td className="px-5 py-4 text-sm font-semibold text-gray-800">{item.item_name || "-"}</td>
-                      <td className="px-5 py-4 text-sm text-gray-600">{item.supplier_name || "-"}</td>
                       <td className="px-5 py-4 text-sm text-gray-600">
                         <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
                           <ListTree size={12} /> {formatNumbers(item.items_count || (Array.isArray(item.items) ? item.items.length : 1), 0)}
@@ -843,6 +845,7 @@ export default function Expenses() {
         isOpen={isFilterOpen}
         onClose={() => setIsFilterOpen(false)}
         filters={[
+          { label: "Supplier", type: "text", value: filters.supplier_name, onChange: (e) => setFilters((prev) => ({ ...prev, supplier_name: e.target.value })) },
           { label: "Expense / Item", type: "text", value: filters.item_name, onChange: (e) => setFilters((prev) => ({ ...prev, item_name: e.target.value })) },
           {
             label: "Expense Type",
@@ -865,7 +868,7 @@ export default function Expenses() {
           setIsFilterOpen(false);
         }}
         onReset={() => {
-          const reset = { item_name: "", expense_type: "", month: "", date_from: "", date_to: "" };
+          const reset = { item_name: "", supplier_name: "", expense_type: "", month: "", date_from: "", date_to: "" };
           setFilters(reset);
           loadExpenses(1, reset);
           setIsFilterOpen(false);

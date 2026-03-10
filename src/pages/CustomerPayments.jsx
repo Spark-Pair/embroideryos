@@ -198,18 +198,19 @@ export default function CustomerPayments() {
                   <th className="px-7 py-3.5 font-medium">Date</th>
                   <th className="px-7 py-3.5 font-medium">Method</th>
                   <th className="px-7 py-3.5 font-medium">Amount</th>
+                  <th className="px-7 py-3.5 font-medium">Clear Date</th>
                   <th className="px-7 py-3.5 font-medium">Remarks</th>
                   <th className="px-7 py-3.5 font-medium text-right">Actions</th>
                 </tr>
               </thead>
 
               {loading ? (
-                <TableSkeleton rows={8} columns={7} />
+                <TableSkeleton rows={8} columns={8} />
               ) : (
                 <tbody className="divide-y divide-gray-200">
                   {payments.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-7 py-12 text-center text-gray-500">
+                      <td colSpan={8} className="px-7 py-12 text-center text-gray-500">
                         No customer payments found.
                       </td>
                     </tr>
