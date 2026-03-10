@@ -3,8 +3,9 @@ import ContextMenu from "../ContextMenu";
 import StatusBadge from "../StatusBadge";
 import { useState } from "react";
 
-export default function UserRow({ item, index, startIndex, onResetPassword, onView, onToggleStatus }) {
+export default function UserRow({ item, index, startIndex, onResetPassword, onView, onToggleStatus, showBusiness = true }) {
   const [activeMenu, setActiveMenu] = useState(null);
+  const businessName = item?.business_name || item?.businessId?.name || "-";
 
   return (
     <tr
@@ -14,7 +15,9 @@ export default function UserRow({ item, index, startIndex, onResetPassword, onVi
       <td className="px-7 py-4 font-medium text-gray-500">{startIndex + index + 1}</td>
       <td className="px-7 py-4 font-semibold text-gray-800">{item.name}</td>
       <td className="px-7 py-4 font-semibold text-gray-800">{item.username}</td>
-      <td className="px-7 py-4 font-semibold text-gray-800">{item.businessId.name}</td>
+      {showBusiness && (
+        <td className="px-7 py-4 font-semibold text-gray-800">{businessName}</td>
+      )}
       <td className="px-7 py-3.5">
         <StatusBadge active={item.isActive} />
       </td>

@@ -11,6 +11,7 @@ export default function UserDetailsModal({
   onAction,
 }) {
   const isActive = initialData?.isActive;
+  const businessName = initialData?.business_name || initialData?.businessId?.name || "-";
 
   return (
     <Modal
@@ -46,7 +47,7 @@ export default function UserDetailsModal({
           data={[
             { label: "Name", value: initialData?.name },
             { label: "Username", value: initialData?.username },
-            { label: "Business Name", value: initialData?.businessId.name },
+            { label: "Business Name", value: businessName },
             { label: "Role", value: initialData?.role, className: 'capitalize' },
           ]}
         />

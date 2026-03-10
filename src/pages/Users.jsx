@@ -1,11 +1,16 @@
 // pages/Users.jsx
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { Plus, CircleCheck, XCircle, Users2 } from "lucide-react";
 import {
   fetchUsers,
   fetchUserStats,
   toggleUserStatus,
   resetUserPassword,
+  fetchBusinessUsers,
+  fetchBusinessUserStats,
+  toggleBusinessUserStatus,
+  resetBusinessUserPassword,
+  createBusinessUser,
 } from "../api/user";
 
 import StatCard from "../components/StatCard";
@@ -17,15 +22,23 @@ import TableSkeleton from "../components/table/TableLoader";
 import PageHeader from "../components/PageHeader";
 import ConfirmModal from "../components/ConfirmModal";
 import UserPasswordResetModal from "../components/User/UserPasswordResetModal";
+import UserFormModal from "../components/User/UserFormModal";
 import { useToast } from '../context/ToastContext';
+import useAuth from "../hooks/useAuth";
+import { fetchMySubscription } from "../api/subscription";
 
 export default function Users() {
+  const { user } = useAuth();
   const { showToast } = useToast();
+  const isDeveloper = user?.role === "developer";
+  const isAdmin = user?.role === "admin";
+  const isReadOnly = Boolean(user?.subscription?.readOnly);
   const [stats, setStats] = useState({
     total: 0,
     active: 0,
     inactive: 0,
   });
+  const [subscription, setSubscription] = useState(null);
   const [users, setUsers] = useState([]);
   const [pagination, setPagination] = useState({
     currentPage: 1,
@@ -50,6 +63,10 @@ export default function Users() {
     isOpen: false,
     userData: null,
   });
+  const [formModal, setFormModal] = useState({
+    isOpen: false,
+  });
+  const [creating, setCreating] = useState(false);
   const [filters, setFilters] = useState({
     name: "",
     status: "",
@@ -57,8 +74,7 @@ export default function Users() {
 
   const loadUsersStats = async () => {
     try {
-      const res = await fetchUserStats();
-
+      const res = isDeveloper ? await fetchUserStats() : await fetchBusinessUserStats();
       setStats(res.data);
     } catch (err) {
       console.error(err);
@@ -75,7 +91,13 @@ export default function Users() {
   const loadUsers = async (page = 1, filterParams = filters) => {
     try {
       setLoading(true);
-      const res = await fetchUsers({
+      const res = isDeveloper
+        ? await fetchUsers({
+          page,
+          limit: 30,
+          ...filterParams,
+        })
+        : await fetchBusinessUsers({
         page,
         limit: 30,
         ...filterParams,
@@ -97,8 +119,22 @@ export default function Users() {
 
   // Initial load
   useEffect(() => {
+    if (!user) return;
     loadUsers();
-  }, []);
+  }, [user]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const loadSubscription = async () => {
+      try {
+        const res = await fetchMySubscription();
+        setSubscription(res?.data || null);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    loadSubscription();
+  }, [isAdmin]);
 
   // Scroll to top on page change
   useEffect(() => {
@@ -134,7 +170,11 @@ export default function Users() {
       confirmText: "Reset Password",
       onConfirm: async () => {
         try {
-          await resetUserPassword(data.userId, { newPassword: data.newPassword });
+          if (isDeveloper) {
+            await resetUserPassword(data.userId, { newPassword: data.newPassword });
+          } else {
+            await resetBusinessUserPassword(data.userId, { newPassword: data.newPassword });
+          }
           showToast({
             type: 'success',
             message: 'Password reset successfully'
@@ -155,7 +195,7 @@ export default function Users() {
     try {
       if (action === "openEdit") {
         setDetailsModal({ isOpen: false });
-        setFormModal({ isOpen: true, data });
+        setFormModal({ isOpen: true });
         return;
       } else if (action === "toggleStatus") {
         const isActive = data.isActive;
@@ -169,7 +209,11 @@ export default function Users() {
           variant: isActive ? "danger" : "success",
           confirmText: isActive ? "Deactivate" : "Activate",
           onConfirm: async () => {
-            await toggleUserStatus(data._id);
+            if (isDeveloper) {
+              await toggleUserStatus(data._id);
+            } else {
+              await toggleBusinessUserStatus(data._id);
+            }
             loadUsers(pagination.currentPage);
             showToast({
               type: 'success',
@@ -193,6 +237,39 @@ export default function Users() {
     }
   };
 
+  const handleCreateUser = async (payload) => {
+    if (!isAdmin) return;
+    setCreating(true);
+    try {
+      await createBusinessUser(payload);
+      setFormModal({ isOpen: false });
+      showToast({
+        type: "success",
+        message: "User created successfully",
+      });
+      loadUsers(1);
+    } catch (err) {
+      console.error(err);
+      showToast({
+        type: "error",
+        message: err.response?.data?.message || "Failed to create user",
+      });
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const userLimit = useMemo(() => {
+    const limit = Number(subscription?.plan_details?.limits?.users);
+    return Number.isFinite(limit) ? limit : null;
+  }, [subscription]);
+
+  const isLimitReached = useMemo(() => {
+    if (!isAdmin || !Number.isFinite(userLimit)) return false;
+    if (userLimit <= 0) return true;
+    return stats.total >= userLimit;
+  }, [isAdmin, userLimit, stats.total]);
+
   const filterConfig = [
     {
       label: "User Name",
@@ -214,13 +291,39 @@ export default function Users() {
     },
   ];
 
+  const showBusinessColumn = isDeveloper;
+  const canCreateUser = isAdmin && !isReadOnly && !isLimitReached;
+
   return (
     <>
       <div className="relative z-10 max-w-7xl mx-auto h-full flex flex-col">
         <PageHeader
           title="User"
           subtitle="Manage all your users effortlessly."
+          actionLabel={isAdmin ? "Add User" : undefined}
+          onAction={canCreateUser ? () => setFormModal({ isOpen: true }) : undefined}
+          actionIcon={Plus}
         />
+
+        {isAdmin && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 mb-5 text-xs text-amber-900">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                Plan user limit: <span className="font-semibold">{Number.isFinite(userLimit) ? userLimit : "-"}</span>
+                {" "}·{" "}
+                Current users: <span className="font-semibold">{stats.total}</span>
+              </div>
+              {isReadOnly && (
+                <span className="font-semibold text-amber-800">Read-only mode</span>
+              )}
+            </div>
+            {isLimitReached && !isReadOnly && (
+              <div className="mt-1 text-[11px] text-amber-800">
+                User limit reached. Upgrade your plan to add more users.
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Stats Row */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
@@ -263,7 +366,9 @@ export default function Users() {
                   <th className="px-7 py-3.5 font-medium">Id</th>
                   <th className="px-7 py-3.5 font-medium">Name</th>
                   <th className="px-7 py-3.5 font-medium">Username</th>
-                  <th className="px-7 py-3.5 font-medium">Business Name</th>
+                  {showBusinessColumn && (
+                    <th className="px-7 py-3.5 font-medium">Business Name</th>
+                  )}
                   <th className="px-7 py-3.5 font-medium">Status</th>
                   <th className="px-7 py-3.5 font-medium text-right">
                     Actions
@@ -277,7 +382,7 @@ export default function Users() {
                 <tbody className="divide-y divide-gray-200">
                   {users.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-7 py-16 text-center text-sm text-gray-400">
+                      <td colSpan={showBusinessColumn ? 6 : 5} className="px-7 py-16 text-center text-sm text-gray-400">
                         No users found.
                       </td>
                     </tr>
@@ -290,6 +395,7 @@ export default function Users() {
                         startIndex={
                           (pagination.currentPage - 1) * pagination.itemsPerPage
                         }
+                        showBusiness={showBusinessColumn}
                         onResetPassword={(data) => setPasswordResetModal({ isOpen: true, userData: data })}
                         onView={(data) => setDetailsModal({ isOpen: true, data })}
                         onToggleStatus={(data) =>
@@ -317,6 +423,13 @@ export default function Users() {
         userData={passwordResetModal.userData}
         onClose={() => setPasswordResetModal({ isOpen: false, userData: null })}
         onSubmit={(data) => handlePasswordResetSubmit({ ...data, userData: passwordResetModal.userData })}
+      />
+
+      <UserFormModal
+        isOpen={formModal.isOpen}
+        onClose={() => setFormModal({ isOpen: false })}
+        onSubmit={handleCreateUser}
+        loading={creating}
       />
 
       <ConfirmModal

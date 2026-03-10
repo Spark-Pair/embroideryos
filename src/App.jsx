@@ -163,7 +163,14 @@ export default function App() {
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/businesses" element={<Businesses />} />
-                <Route path="/users" element={<Users />} />
+                <Route
+                  path="/users"
+                  element={
+                    <RoleRoute allow={["developer", "admin"]}>
+                      <Users />
+                    </RoleRoute>
+                  }
+                />
                 <Route path="/subscriptions" element={<Subscriptions />} />
                 <Route path="/plans" element={<Plans />} />
                 <Route path="/payments" element={<Payments />} />

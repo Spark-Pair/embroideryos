@@ -769,6 +769,11 @@ export default function Dashboard() {
                 </Button>
               </>
             )}
+            {user?.role === "admin" && (
+              <Button size="md" className="" variant="secondary" outline icon={Users2} onClick={() => navigate("/users")}>
+                Users
+              </Button>
+            )}
             <Button size="md" className="" icon={RefreshCcw} onClick={loadDashboard}>Refresh</Button>
           </div>
         </div>
