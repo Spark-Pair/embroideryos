@@ -253,7 +253,7 @@ export default function Dashboard() {
     return formatYmdLocal(d);
   });
   const [customDateTo, setCustomDateTo] = useState(() => formatYmdLocal(new Date()));
-  const [monthSummaryType, setMonthSummaryType] = useState("staff");
+  const [monthSummaryType, setMonthSummaryType] = useState("summary");
   const [monthSummarySearch, setMonthSummarySearch] = useState("");
   const lastLoadRef = useRef({ month: "", at: 0 });
 
@@ -773,10 +773,11 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {loading ? (
-          <DashboardLoadingSkeleton isDeveloper={isDeveloper} />
-        ) : isDeveloper ? (
-          <div className="space-y-6 pb-6">
+        <div className="flex-1 overflow-auto">
+          {loading ? (
+            <DashboardLoadingSkeleton isDeveloper={isDeveloper} />
+          ) : isDeveloper ? (
+            <div className="space-y-6 pb-6">
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
               <StatCard label="Total Businesses" value={dev.businessesTotal} icon={Building2} />
               <StatCard label="Active Businesses" value={dev.businessesActive} icon={Activity} variant="success" />
@@ -855,9 +856,9 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
-          </div>
-        ) : (
-          <div className="space-y-6 pb-6">
+            </div>
+          ) : (
+            <div className="space-y-6 pb-6">
             <div>
               <p className="text-xs font-medium uppercase tracking-wider text-gray-400 mb-3">Month Overview · {selectedMonth}</p>
               <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4">
@@ -1254,8 +1255,9 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </div>
     </>
   );
