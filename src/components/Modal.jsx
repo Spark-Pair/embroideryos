@@ -73,14 +73,14 @@ export default function Modal({
             // ✅ prevent close when clicking inside modal
             onMouseDown={onClose}
           >
-            <div className={`p-7 max-h-full flex flex-col overflow-hidden bg-white w-full ${maxWidth} rounded-4xl shadow-md`} onMouseDown={(e) => e.stopPropagation()}>
+            <div className={`modal-panel p-4 sm:p-7 max-h-full flex flex-col overflow-hidden bg-white w-full ${maxWidth} rounded-3xl sm:rounded-4xl shadow-md`} onMouseDown={(e) => e.stopPropagation()}>
               
               {/* Header */}
               {(title || badge) && (
-                <div className="flex justify-between items-start mb-6">
+                <div className="flex justify-between items-start mb-4 sm:mb-6">
                   <div>
                     <div className="flex items-center gap-3">
-                      <h2 className="text-2xl font-semibold text-gray-900">
+                      <h2 className="text-xl sm:text-2xl font-semibold text-gray-900">
                         {title}
                       </h2>
                       {badge}

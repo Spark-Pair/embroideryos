@@ -37,21 +37,23 @@ export default function PageHeader({
   }, [actionLabel, onAction, primaryActionShortcut, isReadOnly]);
 
   return (
-    <div className="flex justify-between items-start mb-5">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-5">
       <div>
-        <h1 className="text-3xl font-medium tracking-tight">{title}</h1>
+        <h1 className="text-2xl sm:text-3xl font-medium tracking-tight">{title}</h1>
         {subtitle && <p className="text-gray-400 text-sm">{subtitle}</p>}
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         {actionLabel && onAction && (
           <Button
             icon={actionIcon}
+            iconPosition="right"
             onClick={onAction}
             disabled={isReadOnly}
             title={isReadOnly ? "Read-only mode: renew subscription to enable actions" : `Shortcut: ${formatComboDisplay(primaryActionShortcut)}`}
+            aria-label={actionLabel}
           >
-            {actionLabel}
+            <span className="hidden sm:inline">{actionLabel}</span>
           </Button>
         )}
       </div>

@@ -146,10 +146,10 @@ function DashboardLoadingSkeleton({ isDeveloper }) {
     <div className="space-y-6 pb-6">
       <div>
         <SkeletonBox className="mb-3 h-3 w-44" />
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-5">
-          {Array.from({ length: 5 }).map((_, idx) => (
-            <div key={idx} className="rounded-3xl border border-gray-300 bg-white p-4">
-              <div className="flex items-center gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+            {Array.from({ length: 5 }).map((_, idx) => (
+              <div key={idx} className="rounded-3xl border border-gray-300 bg-white p-4">
+                <div className="flex items-center gap-4">
                 <SkeletonBox className="h-12 w-12 rounded-xl" />
                 <div className="flex-1 space-y-2">
                   <SkeletonBox className="h-3 w-20" />
@@ -783,7 +783,7 @@ export default function Dashboard() {
             <DashboardLoadingSkeleton isDeveloper={isDeveloper} />
           ) : isDeveloper ? (
             <div className="space-y-6 pb-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-2 xl:grid-cols-4 gap-4">
               <StatCard label="Total Businesses" value={dev.businessesTotal} icon={Building2} />
               <StatCard label="Active Businesses" value={dev.businessesActive} icon={Activity} variant="success" />
               <StatCard label="Total Users" value={dev.usersTotal} icon={Users2} />
@@ -866,7 +866,7 @@ export default function Dashboard() {
             <div className="space-y-6 pb-6">
             <div>
               <p className="text-xs font-medium uppercase tracking-wider text-gray-400 mb-3">Month Overview · {selectedMonth}</p>
-              <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
                 <StatCard label="Orders" value={ops.monthOrdersCount} icon={FileText} />
                 <StatCard label="Invoices" value={ops.monthInvoicesCount} icon={Receipt} variant="success" />
                 <StatCard label="Expenses" value={ops.monthExpenseCount} icon={CreditCard} variant="danger" />

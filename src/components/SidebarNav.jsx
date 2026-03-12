@@ -48,7 +48,7 @@ const staffNav = [
   { id: 'staff-payments', icon: <Banknote className="w-4.5 h-4.5" />, label: 'Staff Payments', path: '/staff-payments' },
 ];
 
-const SidebarNav = ({ currentPath, handleLogout }) => {
+const SidebarNav = ({ currentPath, handleLogout, isMobileOpen = false, onCloseMobile }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -93,8 +93,20 @@ const SidebarNav = ({ currentPath, handleLogout }) => {
     action();
   };
 
+  const handleNav = (path) => {
+    navigate(path);
+    if (onCloseMobile) onCloseMobile();
+  };
+
+  const mobileClasses = `
+    fixed inset-y-0 left-0 z-40 w-[280px] p-4
+    transition-transform duration-200 ease-out
+    ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}
+    lg:static lg:translate-x-0 lg:w-78 lg:p-6
+  `;
+
   return (
-    <aside className="w-78 p-6 no-default-transition">
+    <aside className={`${mobileClasses} h-full lg:h-screen no-default-transition`}>
       <div className="bg-white p-4 flex flex-col gap-4 h-full border border-gray-300 rounded-3xl">
         {/* Top */}
         <div className="flex items-center gap-1.5 ps-3 pt-2.5 pb-5 border-b border-gray-300">
@@ -113,15 +125,15 @@ const SidebarNav = ({ currentPath, handleLogout }) => {
         </div>
 
         {/* Menu */}
-        <div className="flex flex-col justify-between h-full">
-          <nav className="space-y-1">
+        <div className="flex flex-col justify-between h-full min-h-0">
+          <nav className="space-y-1 overflow-y-auto pr-1">
             {navItems.map(item => (
               <SidebarNavItem
                 key={item.id}
                 icon={item.icon}
                 label={item.label}
                 isActive={isActive(item.path)}
-                onClick={() => navigate(item.path)}
+                onClick={() => handleNav(item.path)}
               />
             ))}
           </nav>
@@ -162,7 +174,7 @@ const SidebarNav = ({ currentPath, handleLogout }) => {
                       {canManagePersonalSettings && (
                         <>
                           <button
-                            onClick={() => handleDropdownAction(() => navigate('/settings'))}
+                        onClick={() => handleDropdownAction(() => handleNav('/settings'))}
                             className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-200/60 text-left rounded-xl cursor-pointer"
                           >
                             <Settings className="w-4 h-4 text-gray-600" />
@@ -170,7 +182,7 @@ const SidebarNav = ({ currentPath, handleLogout }) => {
                           </button>
 
                           <button
-                            onClick={() => handleDropdownAction(() => navigate('/keyboard-shortcuts'))}
+                            onClick={() => handleDropdownAction(() => handleNav('/keyboard-shortcuts'))}
                             className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-200/60 text-left rounded-xl cursor-pointer"
                           >
                             <Keyboard className="w-4 h-4 text-gray-600" />
@@ -180,7 +192,7 @@ const SidebarNav = ({ currentPath, handleLogout }) => {
                       )}
 
                       <button
-                        onClick={() => handleDropdownAction(() => navigate('/sessions'))}
+                        onClick={() => handleDropdownAction(() => handleNav('/sessions'))}
                         className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-200/60 text-left rounded-xl cursor-pointer"
                       >
                         <History className="w-4 h-4 text-gray-600" />

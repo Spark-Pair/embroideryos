@@ -3,7 +3,7 @@ import SidebarNav from '../components/SidebarNav';
 import useAuth from '../hooks/useAuth';
 import { Outlet, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Menu } from "lucide-react";
 import { formatDate } from "../utils";
 import { useToast } from "../context/ToastContext";
 import SyncStatusPortal from "../components/SyncStatusPortal";
@@ -16,6 +16,7 @@ export default function Layout({ children }) {
   const lastReadOnlyBlockToastAtRef = useRef(0);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const isReadOnly = Boolean(user?.subscription?.readOnly);
   const expiryText = user?.subscription?.expiresAt
     ? formatDate(user.subscription.expiresAt, "DD MMM yyyy")
@@ -116,6 +117,10 @@ export default function Layout({ children }) {
     };
   }, [isReadOnly, showToast]);
 
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
+
   const handleLogout = () => {
     setLogoutConfirmOpen(true);
   };
@@ -132,14 +137,39 @@ export default function Layout({ children }) {
 
   return (
     <div className="h-screen flex bg-gray-50 overflow-hidden">
-      {/* Sidebar */}
-      <SidebarNav
-        currentPath={location.pathname}
-        handleLogout={handleLogout} // bottom logout button
-      />
+      {/* Sidebar (Desktop) */}
+      <div className="hidden lg:block">
+        <SidebarNav
+          currentPath={location.pathname}
+          handleLogout={handleLogout}
+        />
+      </div>
+
+      {/* Sidebar (Mobile Drawer) */}
+      <div className="lg:hidden">
+        <SidebarNav
+          currentPath={location.pathname}
+          handleLogout={handleLogout}
+          isMobileOpen={sidebarOpen}
+          onCloseMobile={() => setSidebarOpen(false)}
+        />
+      </div>
 
       {/* Main content */}
-      <main className="flex-1 p-6 overflow-auto">
+      <main className="flex-1 p-3 sm:p-6 overflow-auto min-w-0">
+        {/* Mobile header */}
+        <div className="lg:hidden flex items-center justify-between mb-3">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="inline-flex items-center justify-center w-10 h-10 rounded-xl border border-gray-300 bg-white text-gray-700"
+            aria-label="Open menu"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+          <div className="text-sm font-semibold text-gray-600">EmbroideryOS</div>
+          <div className="w-10 h-10" />
+        </div>
+
         {isReadOnly && (
           <div className="mb-4 flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-800">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -162,6 +192,13 @@ export default function Layout({ children }) {
         </AnimatePresence>
       </main>
       <SyncStatusPortal />
+      {sidebarOpen && (
+        <button
+          className="fixed inset-0 bg-black/40 z-30 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+          aria-label="Close menu"
+        />
+      )}
       <ConfirmModal
         isOpen={logoutConfirmOpen}
         onClose={() => {

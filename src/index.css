@@ -48,3 +48,44 @@ input[type=number] {
 .is-negative-number {
   color: rgb(225 29 72) !important;
 }
+
+@media (max-width: 768px) {
+  table {
+    min-width: 640px;
+  }
+}
+
+@media (max-width: 768px) {
+  html {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 768px) {
+  table th,
+  table td {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+    font-size: 0.75rem !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .modal-panel {
+    max-width: 100% !important;
+    width: 100% !important;
+    border-radius: 18px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .grid:has(.stat-card) {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .stat-card {
+    display: none !important;
+  }
+}
