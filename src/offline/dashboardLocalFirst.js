@@ -327,7 +327,8 @@ const buildSupplierMonthlySummaryLocal = ({ suppliers, expenses, supplierPayment
   return total;
 };
 
-const buildCrpStaffMonthlySummaryLocal = ({ staff, crpRecords, staffPayments, monthFrom, monthTo }) => {
+const buildCrpStaffMonthlySummaryLocal = ({ staff, crpRecords, staffPayments, selectedMonth }) => {
+  const prevMonthKey = previousMonth(selectedMonth);
   const crpStaff = (staff || []).filter((row) => String(row?.category || "").toLowerCase() === "cropping");
   if (!crpStaff.length) {
     return {
@@ -358,20 +359,53 @@ const buildCrpStaffMonthlySummaryLocal = ({ staff, crpRecords, staffPayments, mo
     ])
   );
 
+  const historyTotals = new Map();
+
   (crpRecords || []).forEach((row) => {
-    if (!inDateRange(row?.order_date, monthFrom, monthTo)) return;
     const id = String(row?.staff_id?._id || row?.staff_id || "");
     const current = byStaff.get(id);
     if (!current) return;
+    const recordMonth = typeof row?.month === "string" && row.month ? row.month : "";
+    if (!recordMonth) return;
+
+    if (recordMonth < selectedMonth) {
+      const historyKey = `${id}::${recordMonth}`;
+      const prev = historyTotals.get(historyKey) || {
+        staffId: id,
+        monthKey: recordMonth,
+        totalAmount: 0,
+      };
+      prev.totalAmount += Number(row?.total_amount || 0);
+      historyTotals.set(historyKey, prev);
+      return;
+    }
+
+    if (recordMonth !== selectedMonth) return;
     current.records += 1;
     current.work_amount += Number(row?.total_amount || 0);
   });
 
+  [...historyTotals.values()]
+    .sort((a, b) => (a.monthKey === b.monthKey ? a.staffId.localeCompare(b.staffId) : a.monthKey.localeCompare(b.monthKey)))
+    .forEach((row) => {
+      const current = byStaff.get(row.staffId);
+      if (!current) return;
+      current.arrears_amount += Number(row.totalAmount || 0);
+    });
+
   (staffPayments || []).forEach((row) => {
-    if (!inDateRange(row?.date, monthFrom, monthTo)) return;
     const id = String(row?.staff_id?._id || row?.staff_id || "");
     const current = byStaff.get(id);
     if (!current) return;
+    const paymentMonth = typeof row?.month === "string" && row.month ? row.month : "";
+    if (!paymentMonth) return;
+
+    if (paymentMonth <= prevMonthKey) {
+      current.arrears_amount -= Number(row?.amount || 0);
+      return;
+    }
+
+    if (paymentMonth !== selectedMonth) return;
     current.deduction_amount += Number(row?.amount || 0);
   });
 
@@ -413,8 +447,6 @@ const buildCrpStaffMonthlySummaryLocal = ({ staff, crpRecords, staffPayments, mo
 
 const buildStaffMonthlySummaryLocal = ({ staff, staffRecords, staffPayments, selectedMonth }) => {
   const prevMonthKey = previousMonth(selectedMonth);
-  const prevMonthRange = toMonthRange(prevMonthKey);
-  const prevMonthEndMillis = toMillis(prevMonthRange?.to);
 
   const embroideryStaff = (staff || []).filter((row) => String(row?.category || "Embroidery") === "Embroidery");
   if (!embroideryStaff.length) {
@@ -519,14 +551,9 @@ const buildStaffMonthlySummaryLocal = ({ staff, staffRecords, staffPayments, sel
     if (!current) return;
 
     const amount = Number(payment?.amount || 0);
-    const paymentMonth = typeof payment?.month === "string" && payment.month
-      ? payment.month
-      : monthKeyFromDate(payment?.date);
-    const paymentDateMillis = toMillis(payment?.date);
-
-    const isHistoryPayment = paymentMonth
-      ? paymentMonth <= prevMonthKey
-      : Boolean(paymentDateMillis && paymentDateMillis <= prevMonthEndMillis);
+    const paymentMonth = typeof payment?.month === "string" && payment.month ? payment.month : "";
+    if (!paymentMonth) return;
+    const isHistoryPayment = paymentMonth <= prevMonthKey;
 
     if (isHistoryPayment) {
       current.arrears -= amount;
@@ -644,9 +671,9 @@ export const fetchDashboardSummaryLocalFirst = async (params = {}) => {
   const monthExpenses = expenses.filter((row) => inDateRange(row?.date, monthRange.from, monthRange.to));
   const monthCustomerPayments = customerPayments.filter((row) => inDateRange(row?.date, monthRange.from, monthRange.to));
   const monthSupplierPayments = supplierPayments.filter((row) => inDateRange(row?.date, monthRange.from, monthRange.to));
-  const monthStaffPayments = staffPayments.filter((row) => inDateRange(row?.date, monthRange.from, monthRange.to));
+  const monthStaffPayments = staffPayments.filter((row) => row?.month === selectedMonth);
   const monthStaffRecords = staffRecords.filter((row) => inDateRange(row?.date, monthRange.from, monthRange.to));
-  const monthCrpRecords = crpRecords.filter((row) => inDateRange(row?.order_date, monthRange.from, monthRange.to));
+  const monthCrpRecords = crpRecords.filter((row) => row?.month === selectedMonth);
 
   const summary = {
     today: {
@@ -685,8 +712,7 @@ export const fetchDashboardSummaryLocalFirst = async (params = {}) => {
         staff,
         crpRecords,
         staffPayments,
-        monthFrom: monthRange.from,
-        monthTo: monthRange.to,
+        selectedMonth,
       }),
       staff_summary: buildStaffMonthlySummaryLocal({
         staff,

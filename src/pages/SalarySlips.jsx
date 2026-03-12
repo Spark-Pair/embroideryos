@@ -8,6 +8,7 @@ import {
   fetchStaffPaymentMonths,
   fetchStaffPayments,
 } from "../api/staffPayment";
+import { fetchStaffs } from "../api/staff";
 import { fetchProductionConfig } from "../api/productionConfig";
 import PageHeader from "../components/PageHeader";
 import Select from "../components/Select";
@@ -172,8 +173,9 @@ function normalizePrintStyles() {
   style.id = styleId;
   style.innerHTML = `
     @media print {
-      html { zoom: 85%; }
+      html { zoom: 89%; }
       @page { size: A4 portrait; margin: 0mm; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
       body * { visibility: hidden !important; }
       #salary-slips-print-root,
       #salary-slips-print-root * { visibility: visible !important; }
@@ -181,17 +183,26 @@ function normalizePrintStyles() {
         position: fixed !important;
         top: 0 !important;
         left: 0 !important;
-        width: 100vw !important;
+        width: 100% !important;
+        min-height: 100vh !important;
         height: auto !important;
-        padding: 8mm !important;
+        padding: 20px !important;
         box-sizing: border-box !important;
         background: white !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: flex-start !important;
       }
       #salary-slips-print-root > div {
         display: grid !important;
-        grid-template-columns: repeat(2, 1fr) !important;
-        gap: 50px !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        grid-template-rows: repeat(3, auto) !important;
+        gap: 45px !important;
         width: 100% !important;
+        max-width: 100% !important;
+        height: auto !important;
+        margin: 0 auto !important;
+        align-content: start !important;
       }
       #salary-slips-print-root > div > div {
         display: block !important;
@@ -199,9 +210,42 @@ function normalizePrintStyles() {
         page-break-inside: avoid !important;
         box-sizing: border-box !important;
         width: 100% !important;
+        height: auto !important;
       }
       #salary-slips-print-root .flex {
         display: flex !important;
+      }
+      #salary-slips-print-root .print-slip {
+        border-color: #0f172a !important;
+        color: #0f172a !important;
+      }
+      #salary-slips-print-root .print-slip * {
+        color: #0f172a !important;
+      }
+      #salary-slips-print-root .print-slip hr {
+        border-color: #0f172a !important;
+      }
+      #salary-slips-print-root .print-slip .border-gray-300,
+      #salary-slips-print-root .print-slip .border-gray-200,
+      #salary-slips-print-root .print-slip .border-gray-400 {
+        border-color: #0f172a !important;
+      }
+      #salary-slips-print-root .print-slip .bg-gray-100,
+      #salary-slips-print-root .print-slip .bg-gray-50 {
+        background: #e5e7eb !important;
+      }
+      #salary-slips-print-root .print-slip .bg-[#127475] {
+        background: #0b3b3a !important;
+      }
+      #salary-slips-print-root .print-slip .text-[#127475] {
+        color: #0b3b3a !important;
+      }
+      #salary-slips-print-root .print-slip .text-red-600 {
+        color: #7f1d1d !important;
+      }
+      #salary-slips-print-root .print-slip:nth-child(6n) {
+        break-after: page !important;
+        page-break-after: always !important;
       }
     }
   `;
@@ -271,6 +315,7 @@ export default function SalarySlipsPage() {
         historyPaymentsRes,
         prevMonthRecordsRes,
         prevMonthPaymentsRes,
+        staffRes,
       ] = await Promise.all([
         fetchStaffRecords({ date_from: from, date_to: to, limit: 1000 }),
         fetchStaffPayments({ month: selectedMonth, limit: 5000 }),
@@ -278,14 +323,29 @@ export default function SalarySlipsPage() {
         fetchStaffPayments({ limit: 20000 }),
         fetchStaffRecords({ date_from: prevMonthMeta.from, date_to: prevMonthMeta.to, limit: 5000 }),
         fetchStaffPayments({ month: prevMonthKey, limit: 5000 }),
+        fetchStaffs({ limit: 5000 }),
       ]);
 
-      const records = currentRecordsRes.data || [];
-      const payments = currentPaymentsRes.data || [];
-      const historyRecords = historyRecordsRes.data || [];
-      const historyPayments = historyPaymentsRes.data || [];
-      const prevMonthRecords = prevMonthRecordsRes.data || [];
-      const prevMonthPayments = prevMonthPaymentsRes.data || [];
+      const staffList = staffRes?.data || [];
+      const embroideryStaffIds = new Set(
+        staffList
+          .filter((row) => String(row?.category || "Embroidery").toLowerCase() === "embroidery")
+          .map((row) => String(row?._id || ""))
+          .filter(Boolean)
+      );
+
+      const filterEmbroideryStaff = (rows) =>
+        (rows || []).filter((row) => {
+          const staffId = row?.staff_id?._id ?? row?.staff_id;
+          return embroideryStaffIds.has(String(staffId || ""));
+        });
+
+      const records = filterEmbroideryStaff(currentRecordsRes.data || []);
+      const payments = filterEmbroideryStaff(currentPaymentsRes.data || []);
+      const historyRecords = filterEmbroideryStaff(historyRecordsRes.data || []);
+      const historyPayments = filterEmbroideryStaff(historyPaymentsRes.data || []);
+      const prevMonthRecords = filterEmbroideryStaff(prevMonthRecordsRes.data || []);
+      const prevMonthPayments = filterEmbroideryStaff(prevMonthPaymentsRes.data || []);
       const monthLabel = getMonthLabel(selectedMonth);
 
       const historyMonths = historyRecords
