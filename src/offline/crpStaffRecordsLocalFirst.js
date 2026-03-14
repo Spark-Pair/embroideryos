@@ -183,12 +183,14 @@ ensureSyncLoop();
 const applyFilters = (rows = [], params = {}) => {
   let data = [...rows];
   const month = String(params?.month || "").trim();
+  const staffId = String(params?.staff_id || "").trim();
   const category = String(normalizeCategory(params?.category) || "").trim();
   const typeName = String(params?.type_name || "").trim().toLowerCase();
   const dateFrom = params?.date_from;
   const dateTo = params?.date_to;
 
   if (month) data = data.filter((row) => String(row?.month || "") === month);
+  if (staffId) data = data.filter((row) => String(row?.staff_id?._id || row?.staff_id || "") === staffId);
   if (category) {
     data = data.filter((row) => String(normalizeCategory(row?.category) || "") === category);
   }

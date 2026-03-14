@@ -583,7 +583,8 @@ export default function CrpStaffRecords() {
   const [activeMenu, setActiveMenu] = useState(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [reportModal, setReportModal] = useState(false);
-  const [filters, setFilters] = useState({ month: "", category: "", type_name: "", date_from: "", date_to: "" });
+  const [filters, setFilters] = useState({ month: "", staff_id: "", category: "", type_name: "", date_from: "", date_to: "" });
+  const [staffFilterOptions, setStaffFilterOptions] = useState([]);
 
   const tableScrollRef = useRef(null);
 
@@ -613,6 +614,23 @@ export default function CrpStaffRecords() {
   useEffect(() => {
     loadRecords();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const loadStaffFilterOptions = async () => {
+      try {
+        const res = await fetchStaffNames();
+        const rows = Array.isArray(res?.data) ? res.data : [];
+        const options = rows
+          .filter((row) => String(row?.category || "").toLowerCase() === "cropping")
+          .map((row) => ({ label: row.name, value: row._id }))
+          .sort((a, b) => a.label.localeCompare(b.label));
+        setStaffFilterOptions([{ label: "All", value: "" }, ...options]);
+      } catch {
+        setStaffFilterOptions([{ label: "All", value: "" }]);
+      }
+    };
+    loadStaffFilterOptions();
   }, []);
 
   useEffect(() => {
@@ -763,6 +781,13 @@ export default function CrpStaffRecords() {
         filters={[
           { label: "Month", type: "month", value: filters.month, onChange: (e) => setFilters((prev) => ({ ...prev, month: e.target.value })) },
           {
+            label: "Staff",
+            type: "select",
+            value: filters.staff_id,
+            options: staffFilterOptions.length ? staffFilterOptions : [{ label: "All", value: "" }],
+            onChange: (v) => setFilters((prev) => ({ ...prev, staff_id: v })),
+          },
+          {
             label: "Category",
             type: "select",
             value: filters.category,
@@ -778,7 +803,7 @@ export default function CrpStaffRecords() {
           setIsFilterOpen(false);
         }}
         onReset={() => {
-          const reset = { month: "", category: "", type_name: "", date_from: "", date_to: "" };
+          const reset = { month: "", staff_id: "", category: "", type_name: "", date_from: "", date_to: "" };
           setFilters(reset);
           loadRecords(1, reset);
           setIsFilterOpen(false);
