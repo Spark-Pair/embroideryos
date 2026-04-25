@@ -291,9 +291,17 @@ export const fetchInvoicesLocalFirst = async (params = {}) => {
     return res.data;
   }
 
-  const overlay = await getOverlay();
-  const base = await getAllBaseInvoices();
-  const merged = withOverlayList(base, overlay);
+  let overlay = await getOverlay();
+  let base = await getAllBaseInvoices();
+  let merged = withOverlayList(base, overlay);
+  if (!merged.length && typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      await refreshAllSnapshotFromCloud();
+      overlay = await getOverlay();
+      base = await getAllBaseInvoices();
+      merged = withOverlayList(base, overlay);
+    } catch {}
+  }
   const filtered = applyFilters(merged, params);
 
   logDataSource("IDB", "invoices.fetch.local", {
@@ -355,6 +363,14 @@ export const fetchInvoiceOrderGroupsLocalFirst = async (params = {}) => {
     if (!ts) return latest;
     return ts > latest ? ts : latest;
   }, 0);
+  if (!data.length && typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      await refreshAllSnapshotFromCloud();
+      return fetchInvoiceOrderGroupsLocalFirst(params);
+    } catch {
+      // fall back to empty local result
+    }
+  }
   logDataSource("IDB", "invoices.order_groups.local", { count: data.length });
   return {
     success: true,
@@ -375,6 +391,14 @@ export const fetchInvoiceLocalFirst = async (id) => {
   const base = await getAllBaseInvoices();
   const merged = withOverlayList(base, overlay);
   const invoice = merged.find((row) => normalizeId(row) === String(id));
+  if (!invoice && typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      await refreshAllSnapshotFromCloud();
+      return fetchInvoiceLocalFirst(id);
+    } catch {
+      // fall through
+    }
+  }
   if (!invoice) throw new Error("Invoice not available locally");
 
   const orders = await getOrdersSnapshot();

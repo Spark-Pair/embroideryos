@@ -1,145 +1,175 @@
-import { useState } from "react";
-import { Check, Plus, Save, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Save, X } from "lucide-react";
 import Modal from "../Modal";
 import Button from "../Button";
 import Input from "../Input";
 import Select from "../Select";
+import {
+  EMPTY_PRODUCTION_CONFIG,
+  PAYOUT_MODES,
+  getPayoutModeOptions,
+  normalizeProductionConfig,
+} from "../../utils/productionPayout";
 
-const FIELDS = [
+const COMMON_FIELDS = [
   { key: "stitch_rate", label: "Stitch Rate", hint: "Per stitch multiplier", step: "0.0001", type: "number" },
   { key: "applique_rate", label: "Applique Rate", hint: "Per applique unit rate", step: "0.001", type: "number" },
-  { key: "on_target_pct", label: "On Target %", hint: "Multiplier when staff meets daily target", step: "1", type: "number" },
-  { key: "after_target_pct", label: "After Target %", hint: "Multiplier for production above target", step: "1", type: "number" },
   { key: "pcs_per_round", label: "PCs Per Round", hint: "How many pieces make one round", step: "1", type: "number" },
-  { key: "target_amount", label: "Daily Target Amount", hint: "Target earnings per day", step: "1", type: "number" },
   { key: "off_amount", label: "Off Day Amount", hint: "Amount for non-salary staff on Off days", step: "1", type: "number" },
-  { key: "bonus_rate", label: "Bonus Rate", hint: "Default amount per bonus unit (e.g. 200)", step: "1", type: "number" },
+  { key: "bonus_rate", label: "Bonus Rate", hint: "Default amount per bonus unit", step: "1", type: "number" },
   { key: "allowance", label: "Monthly Allowance", hint: "Allowance when monthly attendance criteria pass", step: "1", type: "number" },
+  { key: "stitch_cap", label: "Minimum Stitch Cap", hint: "If design stitch is below this, use this value", step: "1", type: "number" },
   { key: "effective_date", label: "Effective Date", hint: "Config applies from this date onwards", type: "date" },
 ];
 
-const DEFAULT_STITCH_FORMULA_RULES = [
-  { up_to: "4237", mode: "fixed", value: "5000" },
-  { up_to: "10000", mode: "percent", value: "18" },
-  { up_to: "50000", mode: "percent", value: "10" },
-  { up_to: "", mode: "percent", value: "5" },
-];
-
-const FORMULA_MODE_OPTIONS = [
-  { label: "Fixed", value: "fixed" },
-  { label: "Percent", value: "percent" },
-  { label: "Identity", value: "identity" },
-];
+const MODE_FIELDS = {
+  [PAYOUT_MODES.TARGET_DUAL_PCT]: [
+    { key: "on_target_pct", label: "On Target %", hint: "Multiplier when target is not crossed", step: "1", type: "number" },
+    { key: "after_target_pct", label: "After Target %", hint: "Multiplier after crossing target", step: "1", type: "number" },
+    { key: "target_amount", label: "Daily Target Amount", hint: "Target earnings per day", step: "1", type: "number" },
+  ],
+  [PAYOUT_MODES.SINGLE_PCT]: [
+    { key: "production_pct", label: "Production %", hint: "Single multiplier for all production", step: "1", type: "number" },
+  ],
+  [PAYOUT_MODES.SALARY_BONUS_ONLY]: [],
+  [PAYOUT_MODES.STITCH_BLOCK_RATE]: [
+    { key: "stitch_block_size", label: "Stitch Block Size", hint: "Example: 50000 stitches", step: "1", type: "number" },
+    { key: "amount_per_block", label: "Amount Per Block", hint: "Example: 100 rupees per block", step: "1", type: "number" },
+  ],
+};
 
 const EMPTY_FORM = {
+  payout_mode: EMPTY_PRODUCTION_CONFIG.payout_mode,
   stitch_rate: "",
   applique_rate: "",
   on_target_pct: "",
   after_target_pct: "",
+  production_pct: "",
+  stitch_block_size: "",
+  amount_per_block: "",
   pcs_per_round: "",
   target_amount: "",
   off_amount: "",
   bonus_rate: "",
-  allowance: "1500",
+  allowance: "",
+  stitch_cap: "",
   effective_date: "",
-  stitch_formula_enabled: true,
-  stitch_formula_rules: DEFAULT_STITCH_FORMULA_RULES,
 };
 
-export default function ProductionConfigFormModal({ isOpen, onClose, onSave }) {
+const evaluateMathExpression = (value) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  if (!/^[\d+\-*/().\s]+$/.test(raw)) return null;
+  try {
+    // eslint-disable-next-line no-new-func
+    const result = Function(`"use strict"; return (${raw})`)();
+    if (!Number.isFinite(result)) return null;
+    return Number(result);
+  } catch {
+    return null;
+  }
+};
+
+const normalizeNumberString = (value) => {
+  if (!Number.isFinite(value)) return "";
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(6)));
+};
+
+const buildFormFromRecord = (record) => {
+  if (!record) return { ...EMPTY_FORM };
+  const normalized = normalizeProductionConfig(record);
+  return {
+    payout_mode: normalized.payout_mode,
+    stitch_rate: record?.stitch_rate ?? "",
+    applique_rate: record?.applique_rate ?? "",
+    on_target_pct: record?.on_target_pct ?? "",
+    after_target_pct: record?.after_target_pct ?? "",
+    production_pct: record?.production_pct ?? "",
+    stitch_block_size: record?.stitch_block_size ?? "",
+    amount_per_block: record?.amount_per_block ?? "",
+    pcs_per_round: record?.pcs_per_round ?? "",
+    target_amount: record?.target_amount ?? "",
+    off_amount: record?.off_amount ?? "",
+    bonus_rate: record?.bonus_rate ?? "",
+    allowance: record?.allowance ?? "",
+    stitch_cap: record?.stitch_cap ?? "",
+    effective_date: record?.effective_date
+      ? new Date(record.effective_date).toISOString().slice(0, 10)
+      : "",
+  };
+};
+
+export default function ProductionConfigFormModal({
+  isOpen,
+  onClose,
+  onSave,
+  initialData = null,
+  clearEffectiveDateOnOpen = false,
+  existingConfigs = [],
+}) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
 
-  const handleOpen = () => {
-    setForm(EMPTY_FORM);
+  useEffect(() => {
+    if (!isOpen) return;
+    const nextForm = buildFormFromRecord(initialData);
+    if (clearEffectiveDateOnOpen) {
+      nextForm.effective_date = "";
+    }
+    setForm(nextForm);
     setErrors({});
-  };
+  }, [isOpen, initialData, clearEffectiveDateOnOpen]);
+
+  const visibleFields = useMemo(() => {
+    const modeSpecific = MODE_FIELDS[form.payout_mode] || [];
+    return [...modeSpecific, ...COMMON_FIELDS];
+  }, [form.payout_mode]);
 
   const handleChange = (key) => (e) => {
-    setForm((prev) => ({ ...prev, [key]: e.target.value }));
+    const value = e?.target ? e.target.value : e;
+    setForm((prev) => ({ ...prev, [key]: value }));
     if (errors[key]) setErrors((prev) => ({ ...prev, [key]: null }));
   };
 
-  const handleRuleChange = (index, key, value) => {
-    setForm((prev) => {
-      const nextRules = [...prev.stitch_formula_rules];
-      nextRules[index] = { ...nextRules[index], [key]: value };
-      return { ...prev, stitch_formula_rules: nextRules };
-    });
-    if (errors.stitch_formula_rules) {
-      setErrors((prev) => ({ ...prev, stitch_formula_rules: null }));
-    }
+  const handleNumericBlur = (key) => () => {
+    const resolved = evaluateMathExpression(form[key]);
+    if (resolved === null) return;
+    setForm((prev) => ({ ...prev, [key]: normalizeNumberString(resolved) }));
   };
 
-  const addRule = () => {
-    setForm((prev) => ({
-      ...prev,
-      stitch_formula_enabled: true,
-      stitch_formula_rules: [...prev.stitch_formula_rules, { up_to: "", mode: "percent", value: "" }],
-    }));
-  };
-
-  const removeRule = (index) => {
-    setForm((prev) => ({
-      ...prev,
-      stitch_formula_rules: prev.stitch_formula_rules.filter((_, i) => i !== index),
-    }));
-  };
-
-  const setDefaultFormula = () => {
-    setForm((prev) => ({
-      ...prev,
-      stitch_formula_enabled: true,
-      stitch_formula_rules: DEFAULT_STITCH_FORMULA_RULES,
-    }));
-  };
-
-  const removeFormula = () => {
-    setForm((prev) => ({
-      ...prev,
-      stitch_formula_enabled: false,
-      stitch_formula_rules: [],
-    }));
-  };
-
-  const toggleFormula = () => {
-    setForm((prev) => {
-      const enabled = !prev.stitch_formula_enabled;
-      return {
-        ...prev,
-        stitch_formula_enabled: enabled,
-        stitch_formula_rules:
-          enabled && prev.stitch_formula_rules.length === 0
-            ? DEFAULT_STITCH_FORMULA_RULES
-            : prev.stitch_formula_rules,
-      };
-    });
+  const handleNumericKeyDown = (key) => (e) => {
+    if (e.key !== "Enter") return;
+    const resolved = evaluateMathExpression(form[key]);
+    if (resolved === null) return;
+    e.preventDefault();
+    setForm((prev) => ({ ...prev, [key]: normalizeNumberString(resolved) }));
+    if (errors[key]) setErrors((prev) => ({ ...prev, [key]: null }));
   };
 
   const validate = () => {
     const errs = {};
-    FIELDS.forEach(({ key, label }) => {
+    visibleFields.forEach(({ key, label, type }) => {
       const val = form[key];
       if (val === "" || val === null || val === undefined) {
         errs[key] = `${label} is required`;
+        return;
+      }
+      if (type === "number" && evaluateMathExpression(val) === null) {
+        errs[key] = `${label} must be a valid number or math expression`;
       }
     });
 
-    if (form.stitch_formula_enabled) {
-      if (!form.stitch_formula_rules.length) {
-        errs.stitch_formula_rules = "At least one formula rule is required when formula is enabled";
-      } else {
-        const hasInvalid = form.stitch_formula_rules.some((rule) => {
-          if (!rule.mode) return true;
-          if ((rule.mode === "fixed" || rule.mode === "percent") && (rule.value === "" || rule.value == null)) {
-            return true;
-          }
-          return false;
-        });
-        if (hasInvalid) {
-          errs.stitch_formula_rules = "Complete all formula rule values";
-        }
+    const effectiveDate = String(form.effective_date || "").trim();
+    if (effectiveDate) {
+      const duplicateConfig = (Array.isArray(existingConfigs) ? existingConfigs : []).find((config) => {
+        const configDate = config?.effective_date
+          ? new Date(config.effective_date).toISOString().slice(0, 10)
+          : "";
+        return configDate === effectiveDate;
+      });
+      if (duplicateConfig) {
+        errs.effective_date = "A config already exists for this effective date";
       }
     }
 
@@ -155,46 +185,33 @@ export default function ProductionConfigFormModal({ isOpen, onClose, onSave }) {
 
     setSubmitting(true);
     try {
-      const payload = Object.fromEntries(
-        Object.entries(form)
-          .filter(([k]) => k !== "stitch_formula_enabled" && k !== "stitch_formula_rules")
-          .map(([k, v]) => {
-            const field = FIELDS.find((f) => f.key === k);
-            return [k, field?.type === "date" ? v : parseFloat(v)];
-          })
-      );
+      const payload = {
+        payout_mode: form.payout_mode,
+        effective_date: form.effective_date,
+      };
 
-      payload.stitch_formula_enabled = Boolean(form.stitch_formula_enabled);
-      payload.stitch_formula_rules = form.stitch_formula_rules.map((rule) => ({
-        up_to: rule.up_to === "" || rule.up_to == null ? null : parseFloat(rule.up_to),
-        mode: ["fixed", "percent", "identity"].includes(rule.mode) ? rule.mode : "identity",
-        value: rule.mode === "identity" ? 0 : parseFloat(rule.value || 0),
-      }));
+      visibleFields.forEach((field) => {
+        if (field.key === "effective_date") return;
+        payload[field.key] = evaluateMathExpression(form[field.key]);
+      });
 
       await onSave(payload);
       onClose();
-      setForm(EMPTY_FORM);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleClose = () => {
-    if (submitting) return;
-    onClose();
-  };
-
   return (
     <Modal
       isOpen={isOpen}
-      onClose={handleClose}
-      onOpen={handleOpen}
+      onClose={submitting ? undefined : onClose}
       maxWidth="max-w-4xl"
-      title="Add Config"
-      subtitle="Create a new production configuration record"
+      title="Production Config"
+      subtitle={initialData ? "Prefilled from your active staff-record config. Set a new effective date to create the next config." : "Create a new production configuration record"}
       footer={
         <div className="flex justify-end gap-3">
-          <Button outline variant="secondary" icon={X} onClick={handleClose} disabled={submitting}>
+          <Button outline variant="secondary" icon={X} onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
           <Button variant="primary" icon={Save} onClick={handleSave} disabled={submitting} loading={submitting}>
@@ -204,121 +221,42 @@ export default function ProductionConfigFormModal({ isOpen, onClose, onSave }) {
       }
     >
       <div className="grid grid-cols-2 gap-x-5 gap-y-4 p-0.5">
-        {FIELDS.map((field) => (
-          <div key={field.key}>
+        <div className="col-span-2">
+          <Select
+            label="Payout Mode"
+            value={form.payout_mode}
+            onChange={(value) => {
+              setForm((prev) => ({ ...prev, payout_mode: value }));
+              if (errors.payout_mode) setErrors((prev) => ({ ...prev, payout_mode: null }));
+            }}
+            options={getPayoutModeOptions()}
+            placeholder="Select payout mode..."
+          />
+        </div>
+
+        {visibleFields.map((field) => (
+          <div key={field.key} className={field.key === "effective_date" ? "col-span-2" : ""}>
             <Input
               id={field.key}
               name={field.key}
               label={field.label}
-              type={field.type}
+              type={field.type === "number" ? "text" : field.type}
+              inputMode={field.type === "number" ? "decimal" : undefined}
               step={field.step ?? undefined}
               min={0}
-              placeholder={field.hint}
+              placeholder={field.type === "number" ? `${field.hint} e.g. 200*12` : field.hint}
               value={form[field.key]}
               onChange={handleChange(field.key)}
+              onBlur={field.type === "number" ? handleNumericBlur(field.key) : undefined}
+              onKeyDown={field.type === "number" ? handleNumericKeyDown(field.key) : undefined}
               disabled={submitting}
               autocomplete="off"
               required
               className={errors[field.key] ? "border-red-400 focus:ring-red-200" : ""}
             />
-            {errors[field.key] && <p className="text-xs text-red-500 mt-1">{errors[field.key]}</p>}
+            {errors[field.key] && <p className="mt-1 text-xs text-red-500">{errors[field.key]}</p>}
           </div>
         ))}
-      </div>
-
-      <div className="mt-5 rounded-2xl border border-gray-300 bg-gray-50 p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold text-gray-800">Order Stitch Formula</p>
-            <p className="text-xs text-gray-500">Enable to apply design-stitch conversion rules on orders.</p>
-          </div>
-          <Button
-            size="sm"
-            variant={form.stitch_formula_enabled ? "success" : "secondary"}
-            outline={!form.stitch_formula_enabled}
-            icon={Check}
-            onClick={toggleFormula}
-            disabled={submitting}
-          >
-            {form.stitch_formula_enabled ? "Enabled" : "Disabled"}
-          </Button>
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="info" outline icon={Plus} onClick={addRule} disabled={!form.stitch_formula_enabled || submitting}>
-            Add Rule
-          </Button>
-          <Button size="sm" variant="secondary" outline onClick={setDefaultFormula} disabled={submitting}>
-            Reset Default Formula
-          </Button>
-          <Button size="sm" variant="danger" outline onClick={removeFormula} disabled={submitting}>
-            Remove Formula
-          </Button>
-        </div>
-
-        {errors.stitch_formula_rules && (
-          <p className="text-xs text-red-500 mt-2">{errors.stitch_formula_rules}</p>
-        )}
-
-        <div className="mt-3 space-y-2">
-          {form.stitch_formula_rules.map((rule, idx) => (
-            <div key={`rule-${idx}`} className="grid grid-cols-12 gap-2 items-end">
-              <div className="col-span-3">
-                <Input
-                  label={idx === 0 ? "Up To" : ""}
-                  type="number"
-                  min={0}
-                  step="1"
-                  placeholder="blank = no limit"
-                  value={rule.up_to}
-                  onChange={(e) => handleRuleChange(idx, "up_to", e.target.value)}
-                  disabled={!form.stitch_formula_enabled || submitting}
-                  required={false}
-                />
-              </div>
-              <div className="col-span-4">
-                <Select
-                  label={idx === 0 ? "Mode" : ""}
-                  value={rule.mode}
-                  onChange={(val) => handleRuleChange(idx, "mode", val)}
-                  options={FORMULA_MODE_OPTIONS}
-                  placeholder="Select mode"
-                  disabled={!form.stitch_formula_enabled || submitting}
-                />
-              </div>
-              <div className="col-span-4">
-                <Input
-                  label={idx === 0 ? "Value" : ""}
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  placeholder={rule.mode === "percent" ? "%" : rule.mode === "fixed" ? "Fixed value" : "0"}
-                  value={rule.value}
-                  onChange={(e) => handleRuleChange(idx, "value", e.target.value)}
-                  disabled={!form.stitch_formula_enabled || submitting || rule.mode === "identity"}
-                  required={false}
-                />
-              </div>
-              <div className="col-span-1 pb-1">
-                <button
-                  type="button"
-                  onClick={() => removeRule(idx)}
-                  disabled={!form.stitch_formula_enabled || submitting}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-gray-300 text-gray-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-                  title="Remove rule"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          ))}
-
-          {!form.stitch_formula_rules.length && (
-            <p className="text-xs text-gray-500 py-2">
-              Formula removed. Orders will keep design stitches equal to actual stitches.
-            </p>
-          )}
-        </div>
       </div>
     </Modal>
   );

@@ -19,6 +19,7 @@ import TableSkeleton from "../components/table/TableLoader";
 import PageHeader from "../components/PageHeader";
 import ConfirmModal from "../components/ConfirmModal";
 import { useToast } from '../context/ToastContext';
+import { fetchMyReferenceData } from "../api/business";
 
 export default function Staffs() {
   const { showToast } = useToast();
@@ -53,6 +54,7 @@ export default function Staffs() {
     status: "",
     category: "",
   });
+  const [referenceData, setReferenceData] = useState({ staff_categories: [] });
 
   const loadStaffsStats = async () => {
     try {
@@ -97,6 +99,18 @@ export default function Staffs() {
   // Initial load
   useEffect(() => {
     loadStaffs();
+  }, []);
+
+  useEffect(() => {
+    const loadReferenceData = async () => {
+      try {
+        const res = await fetchMyReferenceData();
+        setReferenceData(res?.reference_data || { staff_categories: [] });
+      } catch {
+        setReferenceData({ staff_categories: [] });
+      }
+    };
+    loadReferenceData();
   }, []);
 
   // Scroll to top on page change
@@ -223,11 +237,9 @@ export default function Staffs() {
       label: "Category",
       type: "select",
       value: filters.category,
-      options: [
-        { label: "All", value: "" },
-        { label: "Embroidery", value: "Embroidery" },
-        { label: "Cropping", value: "Cropping" },
-      ],
+      options: [{ label: "All", value: "" }].concat(
+        (referenceData.staff_categories || []).map((item) => ({ label: item, value: item }))
+      ),
       onChange: (val) => setFilters((prev) => ({ ...prev, category: val })),
     },
   ];

@@ -3,6 +3,7 @@ import { RefreshCcw, WifiOff, X, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   discardSyncAction,
+  getOfflineMetaValue,
   getPendingSyncActions,
   getSyncQueueSnapshot,
   offlineAccess,
@@ -14,6 +15,8 @@ import { runFullBootstrapSeed } from "../offline/bootstrapSeed";
 import { logDataSource } from "../offline/logger";
 import useAuth from "../hooks/useAuth";
 import { useToast } from "../context/ToastContext";
+
+void motion;
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
 const formatCount = (n) => (n > 99 ? "99+" : String(n));
@@ -34,11 +37,62 @@ const warmSyncWorkers = async () => {
     import("../offline/invoicesLocalFirst"),
     import("../offline/expenseItemsLocalFirst"),
     import("../offline/productionConfigLocalFirst"),
+    import("../offline/orderConfigLocalFirst"),
     import("../offline/crpRateConfigsLocalFirst"),
     import("../offline/crpStaffRecordsLocalFirst"),
+    import("../offline/adminEntitiesLocalFirst"),
+    import("../offline/billingLocalFirst"),
+    import("../offline/subscriptionLocalFirst"),
     import("../offline/businessLocalFirst"),
     import("../offline/shortcutsLocalFirst"),
   ]);
+};
+
+const ENTITY_LABELS = {
+  customers: "Customers",
+  suppliers: "Suppliers",
+  staffs: "Staff",
+  staffRecords: "Staff Records",
+  staffPayments: "Staff Payments",
+  customerPayments: "Customer Payments",
+  supplierPayments: "Supplier Payments",
+  expenses: "Expenses",
+  orders: "Orders",
+  invoices: "Invoices",
+  expenseItems: "Expense Items",
+  productionConfigs: "Production Configs",
+  orderConfigs: "Order Configs",
+  crpRateConfigs: "CRP Rate Configs",
+  crpStaffRecords: "CRP Records",
+  businesses: "Businesses",
+  users: "Users",
+  businessUsers: "Business Users",
+  plans: "Plans",
+  subscriptions: "Subscriptions",
+  subscriptionPayments: "Subscription Payments",
+  "auth.shortcuts": "Keyboard Shortcuts",
+  "business.invoiceBanner": "Invoice Banner",
+  "business.invoiceCounter": "Invoice Counter",
+  "business.machineOptions": "Machine Options",
+  "business.referenceData": "Reference Data",
+  "business.ruleData": "Rule Data",
+};
+
+const getEntityLabel = (entity) => {
+  const key = String(entity || "").trim();
+  if (!key) return "Unknown";
+  return ENTITY_LABELS[key] || key.replace(/([A-Z])/g, " $1").replace(/\./g, " ").trim();
+};
+
+const getQueueHint = (err) => {
+  const code = String(err?.statusCode || "");
+  if (code.startsWith("4") && code !== "408" && code !== "409" && code !== "429") {
+    return "Server rejected this change. Review data, then retry or discard.";
+  }
+  if (code === "409") return "Conflict detected. Refresh latest data, then retry.";
+  if (code === "429") return "Server rate limit hit. Retry after a short wait.";
+  if (!navigator.onLine) return "Offline mode active. This will retry when connection returns.";
+  return "Likely temporary network/server issue. Retry is usually safe.";
 };
 
 const relativeTime = (ts) => {
@@ -47,6 +101,15 @@ const relativeTime = (ts) => {
   if (d < 60000)   return "Just now";
   if (d < 3600000) return `${Math.floor(d / 60000)}m ago`;
   return `${Math.floor(d / 3600000)}h ago`;
+};
+
+const relativeFutureTime = (ts) => {
+  if (!ts) return "";
+  const d = Number(ts) - Date.now();
+  if (d <= 0) return "Retrying now";
+  if (d < 60000) return `Retry in ${Math.ceil(d / 1000)}s`;
+  if (d < 3600000) return `Retry in ${Math.ceil(d / 60000)}m`;
+  return `Retry in ${Math.ceil(d / 3600000)}h`;
 };
 
 const STATUS = {
@@ -96,8 +159,13 @@ export default function SyncStatusPortal() {
     pendingCount: 0,
     delayedCount: 0,
     failedCount: 0,
+    errorBreakdown: { conflict: 0, validation: 0, network: 0, other: 0 },
     nextAction: null,
     latestErrors: [],
+  });
+  const [metaSnapshot, setMetaSnapshot] = useState({
+    lastSnapshotUpdateAt: 0,
+    lastQueueSuccessAt: 0,
   });
 
   const bootstrapInProgress = bootstrap.phase === "syncing";
@@ -106,15 +174,26 @@ export default function SyncStatusPortal() {
     return Math.max(0, Math.min(100, Math.round((bootstrap.completedSteps / bootstrap.totalSteps) * 100)));
   }, [bootstrap.completedSteps, bootstrap.totalSteps, bootstrapInProgress]);
 
-  const hasPendingQueue = pendingCount > 0;
+  const hasRetryingQueue = Number(queueSnapshot?.delayedCount || 0) > 0;
+  const hasPendingQueue = pendingCount > 0 || hasRetryingQueue;
   const isBusy          = bootstrapInProgress || hasPendingQueue || manualSyncing;
   const hasBootstrapError = bootstrap.phase === "done" && bootstrap.failedSteps > 0;
   const hasQueueError = Number(queueSnapshot?.failedCount || 0) > 0;
-  const hasError = hasBootstrapError || hasQueueError;
+  const hasRetriableQueueIssue = Array.isArray(queueSnapshot?.latestErrors)
+    && queueSnapshot.latestErrors.some((err) => err?.status === "pending" && Number(err?.nextRetryAt || 0) > Date.now());
+  const hasError = hasBootstrapError || hasQueueError || hasRetriableQueueIssue;
   const latestQueueError = queueSnapshot?.latestErrors?.[0] || null;
+  const queueErrorSummary = [
+    Number(queueSnapshot?.errorBreakdown?.conflict || 0) > 0 ? `${queueSnapshot.errorBreakdown.conflict} conflict` : "",
+    Number(queueSnapshot?.errorBreakdown?.validation || 0) > 0 ? `${queueSnapshot.errorBreakdown.validation} validation` : "",
+    Number(queueSnapshot?.errorBreakdown?.network || 0) > 0 ? `${queueSnapshot.errorBreakdown.network} network` : "",
+    Number(queueSnapshot?.errorBreakdown?.other || 0) > 0 ? `${queueSnapshot.errorBreakdown.other} other` : "",
+    hasRetryingQueue ? `${queueSnapshot.delayedCount} retrying` : "",
+  ].filter(Boolean).join(" • ");
 
   const statusKey = !isOnline        ? "offline"
     : (bootstrapInProgress || manualSyncing) ? "syncing"
+    : hasRetriableQueueIssue          ? "error"
     : hasPendingQueue                ? "pending"
     : hasError                       ? "error"
     : "synced";
@@ -134,24 +213,31 @@ export default function SyncStatusPortal() {
     let active = true, tid = null;
     const poll = async () => {
       try {
-        const [p, details] = await Promise.all([
+        const [p, details, lastSnapshotMeta, lastQueueMeta] = await Promise.all([
           getPendingSyncActions(),
           getSyncQueueSnapshot().catch(() => null),
+          getOfflineMetaValue("last_snapshot_update_at").catch(() => null),
+          getOfflineMetaValue("last_queue_success_at").catch(() => null),
         ]);
         if (!active) return;
         setPendingCount(p.length); setPollError(false); setLastCheckedAt(Date.now());
         if (details) setQueueSnapshot(details);
+        setMetaSnapshot({
+          lastSnapshotUpdateAt: Number(lastSnapshotMeta?.value || 0) || 0,
+          lastQueueSuccessAt: Number(lastQueueMeta?.value || 0) || 0,
+        });
       } catch {
         if (!active) return;
         setPollError(true); setLastCheckedAt(Date.now());
       } finally {
-        if (!active) return;
-        tid = setTimeout(poll, isOnline ? (isBusy ? 1800 : 5000) : 7000);
+        if (active) {
+          tid = setTimeout(poll, isOnline ? (isBusy ? 1800 : 5000) : 7000);
+        }
       }
     };
     poll();
     return () => { active = false; if (tid) clearTimeout(tid); };
-  }, [bootstrapInProgress, hasPendingQueue, isOnline, user]);
+  }, [bootstrapInProgress, hasPendingQueue, isBusy, isOnline, user]);
 
   useEffect(() => {
     if (!user || !offlineAccess.isUnlocked()) {
@@ -225,12 +311,18 @@ export default function SyncStatusPortal() {
   };
 
   const refreshQueueState = async () => {
-    const [actions, details] = await Promise.all([
+    const [actions, details, lastSnapshotMeta, lastQueueMeta] = await Promise.all([
       getPendingSyncActions().catch(() => []),
       getSyncQueueSnapshot().catch(() => null),
+      getOfflineMetaValue("last_snapshot_update_at").catch(() => null),
+      getOfflineMetaValue("last_queue_success_at").catch(() => null),
     ]);
     setPendingCount(Array.isArray(actions) ? actions.length : 0);
     if (details) setQueueSnapshot(details);
+    setMetaSnapshot({
+      lastSnapshotUpdateAt: Number(lastSnapshotMeta?.value || 0) || 0,
+      lastQueueSuccessAt: Number(lastQueueMeta?.value || 0) || 0,
+    });
     setLastCheckedAt(Date.now());
   };
 
@@ -299,7 +391,7 @@ export default function SyncStatusPortal() {
           /* ── Expanded: full card ── */
           <motion.div
             key="card"
-            className="w-72 rounded-2xl border border-gray-300 bg-white overflow-hidden"
+            className="w-90 rounded-2xl border border-gray-300 bg-white overflow-hidden"
             initial={{ scale: 0.85, opacity: 0, y: 12 }}
             animate={{ scale: 1,    opacity: 1, y: 0  }}
             exit={{    scale: 0.85, opacity: 0, y: 12 }}
@@ -383,10 +475,17 @@ export default function SyncStatusPortal() {
                         {bootstrap.failedSteps} step{bootstrap.failedSteps > 1 ? "s" : ""} failed during cloud refresh.
                       </p>
                     )}
-                    {hasQueueError && (
+                    {(hasQueueError || hasRetriableQueueIssue) && (
                       <p className="mt-1 text-xs font-medium text-rose-700">
-                        {queueSnapshot.failedCount} pending change{queueSnapshot.failedCount > 1 ? "s" : ""} stopped.
+                        {hasQueueError
+                          ? `${queueSnapshot.failedCount} pending change${queueSnapshot.failedCount > 1 ? "s" : ""} stopped.`
+                          : `${queueSnapshot.delayedCount} change${queueSnapshot.delayedCount > 1 ? "s are" : " is"} retrying automatically.`}
                         {latestQueueError?.message ? ` Latest: ${latestQueueError.message}` : ""}
+                      </p>
+                    )}
+                    {(hasQueueError || hasRetriableQueueIssue) && queueErrorSummary && (
+                      <p className="mt-1 text-[10px] text-rose-700/80">
+                        {queueErrorSummary}
                       </p>
                     )}
                   </motion.div>
@@ -397,7 +496,7 @@ export default function SyncStatusPortal() {
             </AnimatePresence>
 
             <AnimatePresence>
-              {hasQueueError && Array.isArray(queueSnapshot?.latestErrors) && queueSnapshot.latestErrors.length > 0 && (
+              {(hasQueueError || hasRetriableQueueIssue) && Array.isArray(queueSnapshot?.latestErrors) && queueSnapshot.latestErrors.length > 0 && (
                 <>
                   <motion.div
                     className="max-h-40 overflow-auto px-3 py-2"
@@ -412,11 +511,19 @@ export default function SyncStatusPortal() {
                       return (
                         <div key={rowId || `${err?.entity}-${err?.method}-${err?.url}`} className="mb-2 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1.5 last:mb-0">
                           <p className="truncate text-[10px] font-semibold text-rose-700">
-                            {err?.entity || "Unknown"} {err?.method || ""}
+                            {getEntityLabel(err?.entity)} {err?.method || ""}
                           </p>
                           <p className="truncate text-[10px] text-rose-700/90">
                             {err?.message || "Sync failed"}
                           </p>
+                          <p className="mt-1 text-[10px] text-rose-700/80">
+                            {getQueueHint(err)}
+                          </p>
+                          {Number(err?.nextRetryAt || 0) > 0 && (
+                            <p className="mt-1 text-[10px] font-medium text-amber-700">
+                              {relativeFutureTime(err.nextRetryAt)}
+                            </p>
+                          )}
                           <div className="mt-1 flex items-center gap-1">
                             <button
                               type="button"
@@ -456,6 +563,22 @@ export default function SyncStatusPortal() {
                   <p className="text-[10px] text-amber-600">
                     Retry queued: {queueSnapshot.delayedCount}
                   </p>
+                )}
+                {metaSnapshot.lastSnapshotUpdateAt > 0 && (
+                  <p className="text-[10px] text-gray-500">
+                    Cache updated {relativeTime(metaSnapshot.lastSnapshotUpdateAt)}
+                  </p>
+                )}
+                {metaSnapshot.lastQueueSuccessAt > 0 && (
+                  <p className="text-[10px] text-emerald-600">
+                    Last sync success {relativeTime(metaSnapshot.lastQueueSuccessAt)}
+                  </p>
+                )}
+                {isOnline && !hasPendingQueue && !hasError && (
+                  <p className="text-[10px] text-gray-500">Running from local cache with cloud sync ready.</p>
+                )}
+                {!isOnline && (
+                  <p className="text-[10px] text-rose-500">Working from local cache until connection returns.</p>
                 )}
                 <div className="flex items-center gap-1.5">
                 {!isOnline && <WifiOff size={12} className="text-rose-400" />}

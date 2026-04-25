@@ -1,15 +1,14 @@
-import { apiClient } from "./apiClient";
+import {
+  createSubscriptionLocalFirst,
+  fetchSubscriptionsLocalFirst,
+  renewSubscriptionLocalFirst,
+  updateSubscriptionLocalFirst,
+} from "../offline/billingLocalFirst";
 
-const SUBSCRIPTION_URL = "/subscriptions";
+export const fetchSubscriptions = (params) => fetchSubscriptionsLocalFirst(params);
 
-export const fetchSubscriptions = (params) =>
-  apiClient.get(SUBSCRIPTION_URL, { params }).then((r) => r.data);
+export const updateSubscription = (id, payload) => updateSubscriptionLocalFirst(id, payload);
 
-export const updateSubscription = (id, payload) =>
-  apiClient.patch(`${SUBSCRIPTION_URL}/${id}`, payload).then((r) => r.data);
+export const createSubscription = (payload) => createSubscriptionLocalFirst(payload);
 
-export const createSubscription = (payload) =>
-  apiClient.post(SUBSCRIPTION_URL, payload).then((r) => r.data);
-
-export const renewSubscription = (id, payload = {}) =>
-  apiClient.post(`${SUBSCRIPTION_URL}/${id}/renew`, payload).then((r) => r.data);
+export const renewSubscription = (id, payload = {}) => renewSubscriptionLocalFirst(id, payload);

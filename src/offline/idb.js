@@ -98,6 +98,25 @@ export const getOfflineSessionMeta = async () => {
   });
 };
 
+export const setOfflineMetaValue = async (key, value) => {
+  if (!key) return;
+  await runTx("meta", "readwrite", (store) => {
+    store.put({ key, value, updatedAt: Date.now() });
+  });
+};
+
+export const getOfflineMetaValue = async (key) => {
+  if (!key) return null;
+  const db = await getDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("meta", "readonly");
+    const store = tx.objectStore("meta");
+    const req = store.get(key);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error || new Error("Failed to read offline meta value"));
+  });
+};
+
 export const clearOfflineData = async () => {
   sessionMetaCache = null;
   const db = await getDb();
@@ -226,6 +245,7 @@ export const completeSyncAction = async (id) => {
     tx.onerror = () => reject(tx.error || new Error("Failed to complete sync action"));
     tx.onabort = () => reject(tx.error || new Error("Sync action completion aborted"));
   });
+  await setOfflineMetaValue("last_queue_success_at", Date.now());
   logDataSource("IDB", "sync_queue.complete", { id });
 };
 
@@ -408,11 +428,35 @@ export const getSyncQueueSnapshot = async () => {
           nextRetryAt: Number(row?.nextRetryAt || 0) || 0,
         }));
 
+      const errorBreakdown = rows.reduce(
+        (acc, row) => {
+          const statusCode = Number(row?.lastErrorStatusCode || 0) || 0;
+          const message = String(row?.lastError || "").toLowerCase();
+          if (!statusCode && !message) return acc;
+          if (statusCode === 409 || message.includes("conflict")) {
+            acc.conflict += 1;
+            return acc;
+          }
+          if ((statusCode >= 400 && statusCode < 500 && ![408, 409, 429].includes(statusCode)) || message.includes("validation")) {
+            acc.validation += 1;
+            return acc;
+          }
+          if (message.includes("offline") || message.includes("network")) {
+            acc.network += 1;
+            return acc;
+          }
+          acc.other += 1;
+          return acc;
+        },
+        { conflict: 0, validation: 0, network: 0, other: 0 }
+      );
+
       resolve({
         total: rows.length,
         pendingCount: duePending.length,
         delayedCount: delayed.length,
         failedCount: failed.length,
+        errorBreakdown,
         nextAction:
           duePending.length > 0
             ? {
@@ -516,6 +560,7 @@ export const upsertEntitySnapshot = async (key, data) => {
       updatedAt: Date.now(),
     })
   );
+  await setOfflineMetaValue("last_snapshot_update_at", Date.now());
   logDataSource("IDB", "entity.upsert", { key: scopedKey });
 };
 

@@ -12,7 +12,7 @@ const INITIAL_STATE = {
   role: "staff",
 };
 
-export default function UserFormModal({ isOpen, onClose, onSubmit, loading = false }) {
+export default function UserFormModal({ isOpen, onClose, onSubmit, loading = false, roleOptions = [] }) {
   const [formData, setFormData] = useState(INITIAL_STATE);
 
   useEffect(() => {
@@ -20,6 +20,12 @@ export default function UserFormModal({ isOpen, onClose, onSubmit, loading = fal
       setFormData(INITIAL_STATE);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const firstRole = roleOptions[0]?.value || "staff";
+    setFormData((prev) => ({ ...prev, role: firstRole }));
+  }, [isOpen, roleOptions]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -71,10 +77,7 @@ export default function UserFormModal({ isOpen, onClose, onSubmit, loading = fal
           label="Role"
           value={formData.role}
           onChange={(value) => setFormData((prev) => ({ ...prev, role: value }))}
-          options={[
-            { label: "Staff", value: "staff" },
-            { label: "Admin", value: "admin" },
-          ]}
+          options={roleOptions}
         />
       </form>
     </Modal>

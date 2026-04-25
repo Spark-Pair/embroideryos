@@ -2,6 +2,7 @@ import { Edit3, Eye, Power, MoreVertical, Gift, Lock } from "lucide-react";
 import ContextMenu from "../ContextMenu";
 import { useState } from "react";
 import { formatDate } from "../../utils";
+import { PAYOUT_MODES } from "../../utils/productionPayout";
 
 const ATTENDANCE_META = {
   Day:    "bg-emerald-100 text-emerald-700",
@@ -26,6 +27,7 @@ export default function StaffRecordRow({ item, index, startIndex, onView, onEdit
   const hasBonus        = item.bonus_amount > 0;
   const productionCount = item.production?.length ?? 0;
   const configSnapshot  = item.config_snapshot;
+  const payoutMode = configSnapshot?.payout_mode || PAYOUT_MODES.TARGET_DUAL_PCT;
 
   // We show the effective percentage that was actually applied.
   const targetMet = totals
@@ -40,6 +42,15 @@ export default function StaffRecordRow({ item, index, startIndex, onView, onEdit
   if (isFixed) {
     pctLabel = "FIX";
     pctStyle = "bg-amber-100 text-amber-700";
+  } else if (payoutMode === PAYOUT_MODES.SINGLE_PCT) {
+    pctLabel = configSnapshot?.production_pct != null ? `${configSnapshot.production_pct}%` : "Rate";
+    pctStyle = "bg-sky-100 text-sky-700";
+  } else if (payoutMode === PAYOUT_MODES.STITCH_BLOCK_RATE) {
+    pctLabel = "Block";
+    pctStyle = "bg-indigo-100 text-indigo-700";
+  } else if (payoutMode === PAYOUT_MODES.SALARY_BONUS_ONLY) {
+    pctLabel = "Salary";
+    pctStyle = "bg-gray-100 text-gray-700";
   } else if (totals && totals.on_target_amt > 0) {
     if (targetMet || forceAfter) {
       pctLabel = configSnapshot?.after_target_pct != null

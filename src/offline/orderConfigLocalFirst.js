@@ -9,18 +9,26 @@ import {
   upsertEntitySnapshot,
 } from "./idb";
 import { logDataSource } from "./logger";
-import { normalizeProductionConfig } from "../utils/productionPayout";
 
-const CONFIG_URL = "/production-configs";
-const ALL_KEY = "productionConfigs:all";
-const OVERLAY_KEY = "productionConfigs:overlay";
+const CONFIG_URL = "/order-configs";
+const ALL_KEY = "orderConfigs:all";
+const OVERLAY_KEY = "orderConfigs:overlay";
 
 let syncInFlight = false;
 let onlineHandlerAttached = false;
 let syncLoopAttached = false;
 
 const normalizeConfig = (value = {}) => ({
-  ...normalizeProductionConfig(value),
+  ...value,
+  stitch_formula_enabled:
+    value?.stitch_formula_enabled === undefined ? false : Boolean(value?.stitch_formula_enabled),
+  stitch_formula_rules: Array.isArray(value?.stitch_formula_rules)
+    ? value.stitch_formula_rules.map((rule = {}) => ({
+        up_to: rule?.up_to === "" || rule?.up_to == null ? null : Number(rule.up_to),
+        mode: ["fixed", "percent", "identity"].includes(rule?.mode) ? rule.mode : "identity",
+        value: Number(rule?.value || 0),
+      }))
+    : [],
   effective_date: value?.effective_date ?? null,
 });
 
@@ -47,11 +55,9 @@ const uniqueById = (rows = []) => {
 };
 
 const getOverlay = async () => (await getEntitySnapshot(OVERLAY_KEY)) || {};
-
 const setOverlay = async (overlay) => {
   await upsertEntitySnapshot(OVERLAY_KEY, overlay || {});
 };
-
 const getAllBaseConfigs = async () => {
   const all = await getEntitySnapshot(ALL_KEY);
   return uniqueById(Array.isArray(all) ? all : []);
@@ -83,31 +89,17 @@ const sortByEffectiveDateDesc = (rows = []) =>
     return bTime - aTime;
   });
 
-const toEffectiveDateKey = (value) => {
-  if (!value) return "";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "";
-  return parsed.toISOString().slice(0, 10);
-};
-
 const getEffectiveConfigForDate = (rows = [], date) => {
-  if (!date) {
-    return sortByEffectiveDateDesc(rows)[0] || null;
-  }
+  if (!date) return sortByEffectiveDateDesc(rows)[0] || null;
   const target = toMillis(date);
   if (!target) return sortByEffectiveDateDesc(rows)[0] || null;
 
   const eligible = rows.filter((row) => {
     const eff = toMillis(row?.effective_date);
-    if (!eff) return false;
-    return eff <= target;
+    return eff && eff <= target;
   });
 
-  if (eligible.length > 0) {
-    return sortByEffectiveDateDesc(eligible)[0];
-  }
-
-  return sortByEffectiveDateDesc(rows)[0] || null;
+  return eligible.length > 0 ? sortByEffectiveDateDesc(eligible)[0] : sortByEffectiveDateDesc(rows)[0] || null;
 };
 
 const patchOverlay = async (patchFn) => {
@@ -122,17 +114,15 @@ const refreshLatestSnapshotFromCloud = async (date = null) => {
   const res = await apiClient.get(CONFIG_URL, { params });
   const config = res?.data?.data || res?.data || null;
   if (!config) return;
-
   const existing = await getAllBaseConfigs();
   const list = uniqueById([...existing.filter((row) => normalizeId(row) !== normalizeId(config)), config]);
   await upsertEntitySnapshot(ALL_KEY, list);
-  logDataSource("IDB", "productionConfigs.snapshot.refreshed", { count: list.length });
+  logDataSource("IDB", "orderConfigs.snapshot.refreshed", { count: list.length });
 };
 
 const syncCreateSuccess = async (action, serverConfig) => {
   const localId = String(action?.meta?.localId || "");
   const realId = normalizeId(serverConfig);
-
   await patchOverlay((overlay) => {
     if (localId) delete overlay[localId];
     if (realId) overlay[realId] = { ...serverConfig, _id: realId };
@@ -150,46 +140,24 @@ const syncUpdateSuccess = async (action, serverConfig) => {
 };
 
 const processConfigQueue = async () => {
-  if (syncInFlight) return;
-  if (!offlineAccess.isUnlocked()) return;
-  if (!navigator.onLine) return;
-
+  if (syncInFlight || !offlineAccess.isUnlocked() || !navigator.onLine) return;
   syncInFlight = true;
   try {
-    const actions = await getPendingSyncActions("productionConfigs");
+    const actions = await getPendingSyncActions("orderConfigs");
     for (const action of actions) {
       try {
-        logDataSource("IDB", "sync.productionConfigs.start", {
-          id: action.id,
-          method: action.method,
-          url: action.url,
-        });
         if (action.method === "POST") {
           const res = await apiClient.post(action.url, action.payload);
-          const serverConfig = res?.data?.data || res?.data;
-          await syncCreateSuccess(action, serverConfig);
+          await syncCreateSuccess(action, res?.data?.data || res?.data);
         } else if (action.method === "PUT") {
           const res = await apiClient.put(action.url, action.payload);
-          const serverConfig = res?.data?.data || res?.data;
-          await syncUpdateSuccess(action, serverConfig);
+          await syncUpdateSuccess(action, res?.data?.data || res?.data);
         }
-
         await completeSyncAction(action.id);
-        logDataSource("IDB", "sync.productionConfigs.success", {
-          id: action.id,
-          method: action.method,
-          url: action.url,
-        });
       } catch (error) {
         await failSyncAction(action.id, error?.response?.data?.message || error?.message || "sync failed", { statusCode: error?.response?.status });
-        logDataSource("IDB", "sync.productionConfigs.failed", {
-          id: action.id,
-          method: action.method,
-          url: action.url,
-        });
       }
     }
-
     await refreshLatestSnapshotFromCloud();
   } finally {
     syncInFlight = false;
@@ -203,7 +171,6 @@ const ensureOnlineSyncHook = () => {
     processConfigQueue().catch(() => null);
   });
 };
-
 ensureOnlineSyncHook();
 
 const ensureSyncLoop = () => {
@@ -216,28 +183,21 @@ const ensureSyncLoop = () => {
     if (!document.hidden) processConfigQueue().catch(() => null);
   });
 };
-
 ensureSyncLoop();
 
-export const fetchProductionConfigLocalFirst = async (date) => {
+export const fetchOrderConfigLocalFirst = async (date) => {
   if (!offlineAccess.isUnlocked()) {
     const res = await apiClient.get(CONFIG_URL, { params: date ? { date } : {} });
     return res.data;
   }
-
   const overlay = await getOverlay();
   const base = await getAllBaseConfigs();
   const merged = withOverlayList(base, overlay);
   const selected = getEffectiveConfigForDate(merged, date);
-
   if (selected) {
     if (typeof navigator !== "undefined" && navigator.onLine) {
       refreshLatestSnapshotFromCloud(date).catch(() => null);
     }
-    logDataSource("IDB", "productionConfigs.fetch.local", {
-      date: date || null,
-      found: true,
-    });
     return { success: true, data: selected };
   }
 
@@ -252,75 +212,47 @@ export const fetchProductionConfigLocalFirst = async (date) => {
     }
   }
 
-  logDataSource("IDB", "productionConfigs.fetch.local", {
-    date: date || null,
-    found: Boolean(selected),
-  });
-
-  return { success: true, data: selected || {} };
+  return { success: true, data: {} };
 };
 
-export const createProductionConfigLocalFirst = async (payload) => {
+export const createOrderConfigLocalFirst = async (payload) => {
   if (!offlineAccess.isUnlocked()) {
     const res = await apiClient.post(CONFIG_URL, payload);
     return res.data;
   }
-
-  const normalizedPayload = normalizeConfig(payload);
-  const effectiveDateKey = toEffectiveDateKey(normalizedPayload?.effective_date);
-  const overlay = await getOverlay();
-  const base = await getAllBaseConfigs();
-  const merged = withOverlayList(base, overlay);
-  const duplicate = merged.find((row) => toEffectiveDateKey(row?.effective_date) === effectiveDateKey);
-  if (effectiveDateKey && duplicate) {
-    const error = new Error("A production config already exists for this effective date");
-    error.statusCode = 409;
-    throw error;
-  }
-
-  const localId = `local-production-config-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const localId = `local-order-config-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const localConfig = {
     _id: localId,
-    ...normalizedPayload,
+    ...normalizeConfig(payload),
     __syncStatus: "pending",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-
   await patchOverlay((overlay) => {
     overlay[localId] = localConfig;
     return overlay;
   });
-
   await queueSyncAction({
-    entity: "productionConfigs",
+    entity: "orderConfigs",
     method: "POST",
     url: CONFIG_URL,
-    payload: normalizedPayload,
+    payload: normalizeConfig(payload),
     meta: { localId },
-    dedupeKey: `productionConfigs:POST:${effectiveDateKey || localId}`,
   });
-
-  if (typeof navigator !== "undefined" && navigator.onLine) {
-    await processConfigQueue();
-  } else {
-    processConfigQueue().catch(() => null);
-  }
+  processConfigQueue().catch(() => null);
   return { success: true, data: localConfig };
 };
 
-export const updateProductionConfigLocalFirst = async (payload) => {
+export const updateOrderConfigLocalFirst = async (payload) => {
   if (!offlineAccess.isUnlocked()) {
     const res = await apiClient.put(CONFIG_URL, payload);
     return res.data;
   }
-
   const overlay = await getOverlay();
   const base = await getAllBaseConfigs();
   const merged = withOverlayList(base, overlay);
   const latest = sortByEffectiveDateDesc(merged)[0];
-
-  const localId = latest?._id || `local-production-config-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const localId = latest?._id || `local-order-config-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const localConfig = {
     ...(latest || {}),
     ...normalizeConfig(payload),
@@ -328,30 +260,17 @@ export const updateProductionConfigLocalFirst = async (payload) => {
     __syncStatus: "pending",
     updatedAt: new Date().toISOString(),
   };
-
   await patchOverlay((nextOverlay) => {
     nextOverlay[localId] = localConfig;
     return nextOverlay;
   });
-
   await queueSyncAction({
-    entity: "productionConfigs",
+    entity: "orderConfigs",
     method: "PUT",
     url: CONFIG_URL,
     payload: normalizeConfig(payload),
     meta: { id: String(localId) },
   });
-
-  if (typeof navigator !== "undefined" && navigator.onLine) {
-    await processConfigQueue();
-  } else {
-    processConfigQueue().catch(() => null);
-  }
+  processConfigQueue().catch(() => null);
   return { success: true, data: localConfig };
-};
-
-export const refreshProductionConfigFromCloud = async (date) => {
-  if (!offlineAccess.isUnlocked()) return;
-  if (!navigator.onLine) return;
-  await refreshLatestSnapshotFromCloud(date);
 };

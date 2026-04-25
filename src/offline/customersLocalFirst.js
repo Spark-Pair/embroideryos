@@ -354,9 +354,17 @@ export const fetchCustomersLocalFirst = async (params = {}) => {
     return res.data;
   }
 
-  const overlay = await getOverlay();
-  const base = await getAllBaseCustomers();
-  const merged = withOverlayList(base, overlay);
+  let overlay = await getOverlay();
+  let base = await getAllBaseCustomers();
+  let merged = withOverlayList(base, overlay);
+  if (!merged.length && typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      await refreshAllSnapshotFromCloud();
+      overlay = await getOverlay();
+      base = await getAllBaseCustomers();
+      merged = withOverlayList(base, overlay);
+    } catch {}
+  }
   const filtered = applyFilters(merged, params);
   const withBalances = await attachCustomerBalances(filtered);
 

@@ -5,14 +5,9 @@ import Button from "../Button";
 import Input from "../Input";
 import Select from "../Select";
 import { fetchStaffNames } from "../../api/staff";
+import { fetchMyReferenceData } from "../../api/business";
 import { useFormKeyboard } from "../../hooks/useFormKeyboard";
 import { useToast } from "../../context/ToastContext";
-
-const TYPE_OPTIONS = [
-  { label: "Advance", value: "advance" },
-  { label: "Payment", value: "payment" },
-  { label: "Adjustment", value: "adjustment" },
-];
 
 const todayInput = () => new Date().toISOString().slice(0, 10);
 const monthInput = () => new Date().toISOString().slice(0, 7);
@@ -28,6 +23,7 @@ export default function StaffPaymentFormModal({ isOpen, onClose, onAction, initi
   const remarksRef = useRef(null);
 
   const [staffList, setStaffList] = useState([]);
+  const [referenceData, setReferenceData] = useState({ staff_payment_types: [] });
   const [staffLoading, setStaffLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
@@ -44,6 +40,10 @@ export default function StaffPaymentFormModal({ isOpen, onClose, onAction, initi
   const staffOptions = useMemo(
     () => staffList.map((s) => ({ label: s.name, value: s._id })),
     [staffList]
+  );
+  const typeOptions = useMemo(
+    () => (referenceData.staff_payment_types || []).map((item) => ({ label: item, value: item })),
+    [referenceData.staff_payment_types]
   );
 
   const handleSubmit = async () => {
@@ -100,10 +100,15 @@ export default function StaffPaymentFormModal({ isOpen, onClose, onAction, initi
     const loadStaffs = async () => {
       setStaffLoading(true);
       try {
-        const res = await fetchStaffNames({ params: { status: "active" } });
+        const [res, referenceRes] = await Promise.all([
+          fetchStaffNames({ params: { status: "active" } }),
+          fetchMyReferenceData().catch(() => ({ reference_data: {} })),
+        ]);
         setStaffList(res.data || []);
+        setReferenceData(referenceRes?.reference_data || { staff_payment_types: [] });
       } catch {
         setStaffList([]);
+        setReferenceData({ staff_payment_types: [] });
         showToast({ type: "error", message: "Failed to load staff list" });
       } finally {
         setStaffLoading(false);
@@ -186,8 +191,8 @@ export default function StaffPaymentFormModal({ isOpen, onClose, onAction, initi
             setFormData((prev) => ({ ...prev, type: value }));
             setTimeout(() => amountRef.current?.focus(), 50);
           }}
-          options={TYPE_OPTIONS}
-          placeholder="Select type..."
+          options={typeOptions}
+          placeholder={typeOptions.length ? "Select type..." : "No types in settings"}
         />
 
         <Input

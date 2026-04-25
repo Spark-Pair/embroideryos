@@ -220,7 +220,31 @@ export const fetchExpenseItemsLocalFirst = async (params = {}) => {
       : status === "inactive"
         ? merged.filter((row) => !Boolean(row?.isActive))
         : merged;
-  const sorted = sortLatestFirst(filtered);
+  let sorted = sortLatestFirst(filtered);
+  if (sorted.length > 0) {
+    if (typeof navigator !== "undefined" && navigator.onLine) {
+      refreshAllSnapshotFromCloud().catch(() => null);
+    }
+    logDataSource("IDB", "expenseItems.fetch.local", { count: sorted.length });
+    return { data: sorted };
+  }
+
+  if (typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      await refreshAllSnapshotFromCloud();
+      const nextMerged = withOverlayList(await getAllBaseItems(), await getOverlay());
+      const nextFiltered =
+        status === "active"
+          ? nextMerged.filter((row) => Boolean(row?.isActive))
+          : status === "inactive"
+            ? nextMerged.filter((row) => !Boolean(row?.isActive))
+            : nextMerged;
+      sorted = sortLatestFirst(nextFiltered);
+    } catch {
+      // fall back to local empty state
+    }
+  }
+
   logDataSource("IDB", "expenseItems.fetch.local", { count: sorted.length });
   return { data: sorted };
 };

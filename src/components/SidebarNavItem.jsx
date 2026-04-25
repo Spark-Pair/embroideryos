@@ -1,6 +1,15 @@
 import React from 'react';
 
-const SidebarNavItem = ({ icon, label, isActive, onClick, isSubItem = false, className }) => {
+const SidebarNavItem = ({
+  icon,
+  label,
+  isActive,
+  onClick,
+  onMouseEnter,
+  onFocus,
+  isSubItem = false,
+  className,
+}) => {
   const baseClasses = `
     w-full text-left py-2.5 px-4 flex items-center gap-3 cursor-pointer
     ${isSubItem ? 'pl-8 text-sm text-gray-600' : ''}
@@ -13,6 +22,8 @@ const SidebarNavItem = ({ icon, label, isActive, onClick, isSubItem = false, cla
   return (
     <button
       onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onFocus={onFocus}
       className={`${className} ${baseClasses} ${activeClasses}`}
     >
       {!isSubItem && <span>{icon}</span>}

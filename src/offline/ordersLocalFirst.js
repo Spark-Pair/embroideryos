@@ -9,7 +9,7 @@ import {
   upsertEntitySnapshot,
 } from "./idb";
 import { logDataSource } from "./logger";
-import { fetchProductionConfigLocalFirst } from "./productionConfigLocalFirst";
+import { fetchOrderConfigLocalFirst } from "./orderConfigLocalFirst";
 
 const ORDERS_URL = "/orders";
 const ALL_KEY = "orders:all";
@@ -160,15 +160,8 @@ const toBool = (value, fallback = false) => {
   return fallback;
 };
 
-const DEFAULT_STITCH_FORMULA_RULES = [
-  { up_to: 4237, mode: "fixed", value: 5000 },
-  { up_to: 10000, mode: "percent", value: 18 },
-  { up_to: 50000, mode: "percent", value: 10 },
-  { up_to: null, mode: "percent", value: 5 },
-];
-
 const normalizeFormulaRules = (rawRules) => {
-  if (!Array.isArray(rawRules) || rawRules.length === 0) return DEFAULT_STITCH_FORMULA_RULES;
+  if (!Array.isArray(rawRules) || rawRules.length === 0) return [];
   const clean = rawRules
     .map((rule = {}) => {
       const upToRaw = rule?.up_to;
@@ -182,7 +175,7 @@ const normalizeFormulaRules = (rawRules) => {
       const bv = b.up_to == null ? Number.POSITIVE_INFINITY : b.up_to;
       return av - bv;
     });
-  return clean.length ? clean : DEFAULT_STITCH_FORMULA_RULES;
+  return clean;
 };
 
 const computeDesignStitchesByConfig = (actualStitches, config) => {
@@ -223,7 +216,11 @@ const computeDesignStitchFromRate = (rate, stitchRate, apqChr) => {
   return roundDown(((r - ac) / sr) * 1000, 2);
 };
 
-const computeQtPcs = (qty, unit) => (unit === "Dzn" ? toNum(qty) * 12 : toNum(qty));
+const computeQtPcs = (qty, unit) => {
+  const normalizedUnit = String(unit || "").trim().toLowerCase();
+  const multiplier = normalizedUnit.includes("dzn") || normalizedUnit.includes("dozen") ? 12 : 1;
+  return toNum(qty) * multiplier;
+};
 const computeTotalAmount = (rate, qtPcs) => roundDown(toNum(rate) * toNum(qtPcs), 2);
 const buildClientRef = () => `order-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
@@ -257,18 +254,24 @@ const buildOrderPayload = async (body) => {
     resolvedCustomerBaseRate = toNum(customerRow.rate);
   }
 
-  const resolvedUnit = unit === "Pcs" ? "Pcs" : "Dzn";
+  const resolvedUnit = typeof unit === "string" ? unit.trim() : "";
   const resolvedQty = toNum(quantity);
   const resolvedActualStitches = toNum(actual_stitches);
   const resolvedApq = apq === "" || apq == null ? null : Math.max(0, Math.min(30, Math.floor(toNum(apq))));
   const resolvedApqChr = apq_chr === "" || apq_chr == null ? null : Math.max(0, toNum(apq_chr));
-  const resolvedReverseMode = toBool(reverse_mode, false);
-  const resolvedTwoSide = toBool(two_side, false);
   const resolvedRateInput = Math.max(0, toNum(rate_input ?? rate));
+  const configRes = await fetchOrderConfigLocalFirst(date);
+  const stitchFormulaConfig = configRes?.data || null;
+  const resolvedReverseMode =
+    reverse_mode === undefined || reverse_mode === null || reverse_mode === ""
+      ? false
+      : toBool(reverse_mode, false);
+  const resolvedTwoSide =
+    two_side === undefined || two_side === null || two_side === ""
+      ? false
+      : toBool(two_side, false);
   const resolvedRate = !resolvedReverseMode && resolvedTwoSide ? roundDown(resolvedRateInput * 2, 2) : resolvedRateInput;
   const rateForDesignStitch = resolvedTwoSide ? resolvedRateInput / 2 : resolvedRateInput;
-  const configRes = await fetchProductionConfigLocalFirst(date);
-  const stitchFormulaConfig = configRes?.data || null;
   const design_stitches = resolvedReverseMode
     ? computeDesignStitchFromRate(rateForDesignStitch, resolvedCustomerBaseRate, resolvedApqChr)
     : computeDesignStitchesByConfig(resolvedActualStitches, stitchFormulaConfig);
@@ -410,9 +413,17 @@ export const fetchOrdersLocalFirst = async (params = {}) => {
     return res.data;
   }
 
-  const overlay = await getOverlay();
-  const base = await getAllBaseOrders();
-  const merged = withOverlayList(base, overlay);
+  let overlay = await getOverlay();
+  let base = await getAllBaseOrders();
+  let merged = withOverlayList(base, overlay);
+  if (!merged.length && typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      await refreshAllSnapshotFromCloud();
+      overlay = await getOverlay();
+      base = await getAllBaseOrders();
+      merged = withOverlayList(base, overlay);
+    } catch {}
+  }
   const filtered = applyFilters(merged, params);
 
   logDataSource("IDB", "orders.fetch.local", {

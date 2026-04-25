@@ -11,23 +11,10 @@ import { useShortcut } from "../../hooks/useShortcuts";
 import { formatComboDisplay, isEventMatchingShortcut } from "../../utils/shortcuts";
 import { fetchCustomers } from "../../api/customer";
 import { useToast } from "../../context/ToastContext";
-import { fetchProductionConfig } from "../../api/productionConfig";
+import { fetchOrderConfig } from "../../api/orderConfig";
+import { fetchMyMachineOptions, fetchMyReferenceData } from "../../api/business";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const MACHINE_OPTIONS = [
-  { label: "R1", value: "R1" },
-  { label: "R2", value: "R2" },
-  { label: "R3", value: "R3" },
-  { label: "R4", value: "R4" },
-  { label: "R5", value: "R5" },
-  { label: "OS", value: "OS" },
-];
-
-const UNIT_OPTIONS = [
-  { label: "Dozen (×12)", value: "Dzn" },
-  { label: "Pieces (×1)", value: "Pcs" },
-];
 
 const STEPS = [
   { id: 1, label: "Order Info"      },
@@ -47,15 +34,8 @@ function roundDown(value, digits = 2) {
   return Math.floor(value * factor) / factor;
 }
 
-const DEFAULT_STITCH_FORMULA_RULES = [
-  { up_to: 4237, mode: "fixed", value: 5000 },
-  { up_to: 10000, mode: "percent", value: 18 },
-  { up_to: 50000, mode: "percent", value: 10 },
-  { up_to: null, mode: "percent", value: 5 },
-];
-
 function normalizeFormulaRules(rawRules) {
-  if (!Array.isArray(rawRules) || rawRules.length === 0) return DEFAULT_STITCH_FORMULA_RULES;
+  if (!Array.isArray(rawRules) || rawRules.length === 0) return [];
   const clean = rawRules
     .map((rule = {}) => {
       const upToRaw = rule?.up_to;
@@ -69,7 +49,7 @@ function normalizeFormulaRules(rawRules) {
       const bv = b.up_to == null ? Number.POSITIVE_INFINITY : b.up_to;
       return av - bv;
     });
-  return clean.length ? clean : DEFAULT_STITCH_FORMULA_RULES;
+  return clean;
 }
 
 function computeDesignStitchesByConfig(actualStitches, config) {
@@ -112,7 +92,24 @@ function computeDesignStitchFromRate(rate, stitchRate, apqChr) {
 }
 
 function computeQtPcs(qty, unit) {
-  return unit === "Dzn" ? toNum(qty) * 12 : toNum(qty);
+  const normalizedUnit = String(unit || "").trim().toLowerCase();
+  const multiplier = normalizedUnit.includes("dzn") || normalizedUnit.includes("dozen") ? 12 : 1;
+  return toNum(qty) * multiplier;
+}
+
+function parseUnitOption(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const parts = raw.split("|");
+  const label = String(parts[0] || "").trim();
+  if (!label) return null;
+  const multiplier = Math.max(1, Number(parts[1] || 1) || 1);
+  return {
+    label: `${label} (×${multiplier})`,
+    value: raw,
+    unitLabel: label,
+    multiplier,
+  };
 }
 
 function computeTotalAmount(rate, qtPcs) {
@@ -179,7 +176,7 @@ const EMPTY_FORM = {
   date:               "",
   machine_no:         "",
   lot_no:             "",
-  unit:               "Dzn",
+  unit:               "",
   quantity:           "",
   actual_stitches:    "",
   apq:                "",
@@ -219,9 +216,11 @@ export default function OrderFormModal({
   const [apqError,         setApqError]         = useState("");
   const [customers,        setCustomers]        = useState([]);
   const [customersLoading, setCustomersLoading] = useState(false);
+  const [machineOptions,   setMachineOptions]   = useState([]);
+  const [unitOptions,      setUnitOptions]      = useState([]);
   const [formulaConfig,    setFormulaConfig]    = useState(null);
   const [submitting,       setSubmitting]       = useState(false);
-  const [reverseMode,      setReverseMode]      = useState(true);   // rate → stitch calc
+  const [reverseMode,      setReverseMode]      = useState(false);  // rate → stitch calc
   const [twoSide,          setTwoSide]          = useState(false);  // rate×2 only
 
   const reverseModeShortcut = useShortcut("order_toggle_rate_to_stitch");
@@ -238,10 +237,22 @@ export default function OrderFormModal({
     const load = async () => {
       setCustomersLoading(true);
       try {
-        const res = await fetchCustomers({ status: "active" });
-        setCustomers(res.data || []);
+        const [customersRes, machinesRes, referenceRes] = await Promise.all([
+          fetchCustomers({ status: "active" }),
+          fetchMyMachineOptions().catch(() => ({ machine_options: [] })),
+          fetchMyReferenceData().catch(() => ({ reference_data: {} })),
+        ]);
+        setCustomers(customersRes.data || []);
+        const machines = Array.isArray(machinesRes?.machine_options) ? machinesRes.machine_options : [];
+        setMachineOptions(machines.map((item) => ({ label: item, value: item })));
+        const nextUnitOptions = Array.isArray(referenceRes?.reference_data?.order_units)
+          ? referenceRes.reference_data.order_units.map(parseUnitOption).filter(Boolean)
+          : [];
+        setUnitOptions(nextUnitOptions);
       } catch {
         setCustomers([]);
+        setMachineOptions([]);
+        setUnitOptions([]);
         showToast({ type: "error", message: "Failed to load customers" });
       }
       finally {
@@ -260,7 +271,7 @@ export default function OrderFormModal({
       setForm(EMPTY_FORM);
       setStep(1);
       setCompletedSteps(new Set());
-      setReverseMode(true);
+      setReverseMode(false);
       setTwoSide(false);
     } else {
       setForm({
@@ -272,7 +283,7 @@ export default function OrderFormModal({
         date:               initialData.date                || "",
         machine_no:         initialData.machine_no          || "",
         lot_no:             initialData.lot_no              || "",
-        unit:               initialData.unit                || "Dzn",
+        unit:               initialData.unit                || "",
         quantity:           initialData.quantity            ?? "",
         actual_stitches:    initialData.actual_stitches     ?? "",
         apq:                initialData.apq                 ?? "",
@@ -281,10 +292,16 @@ export default function OrderFormModal({
       });
       setStep(1);
       setCompletedSteps(new Set([1])); // step 1 already done in edit mode
-      setReverseMode(typeof initialData.reverse_mode === "boolean" ? initialData.reverse_mode : true);
+      setReverseMode(typeof initialData.reverse_mode === "boolean" ? initialData.reverse_mode : false);
       setTwoSide(!!initialData.two_side);
     }
   }, [isOpen, isEdit, initialData]);
+
+  useEffect(() => {
+    if (!isOpen || initialData) return;
+    if (form.unit || !unitOptions.length) return;
+    setForm((prev) => ({ ...prev, unit: unitOptions[0].value }));
+  }, [isOpen, initialData, form.unit, unitOptions]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -292,7 +309,7 @@ export default function OrderFormModal({
 
     const loadFormulaConfig = async () => {
       try {
-        const res = await fetchProductionConfig(form.date || undefined);
+        const res = await fetchOrderConfig(form.date || undefined);
         if (!active) return;
         setFormulaConfig(res?.data || null);
       } catch {
@@ -347,7 +364,7 @@ export default function OrderFormModal({
   const set = (field) => (e) => setForm((p) => ({ ...p, [field]: e.target.value }));
 
   // ── Step 1 valid ──
-  const step1Valid = !!form.customer_id && !!form.date && !!form.machine_no && toNum(form.quantity) > 0;
+  const step1Valid = !!form.customer_id && !!form.date && !!form.machine_no && !!form.unit && toNum(form.quantity) > 0;
 
   function goToStep2() {
     if (!step1Valid) return;
@@ -465,6 +482,12 @@ export default function OrderFormModal({
   const effectiveRate = useMemo(() => toNum(form.rate) * rateMultiplier, [form.rate, rateMultiplier]);
 
   const qtPcs          = useMemo(() => computeQtPcs(form.quantity, form.unit), [form.quantity, form.unit]);
+  const selectedUnit = useMemo(
+    () => unitOptions.find((item) => item.value === form.unit) || parseUnitOption(form.unit),
+    [unitOptions, form.unit]
+  );
+  const unitLabel = selectedUnit?.unitLabel || form.unit || "Unit";
+  const unitMultiplier = selectedUnit?.multiplier || 1;
   const calculatedRate = useMemo(() => computeCalculatedRate(form.customer_base_rate, designStitches, form.apq_chr), [form.customer_base_rate, designStitches, form.apq_chr]);
   const stitchRate     = useMemo(() => computeStitchRate(effectiveRate, designStitches, form.apq, form.apq_chr), [effectiveRate, designStitches, form.apq, form.apq_chr]);
   const totalAmount    = useMemo(() => computeTotalAmount(effectiveRate, qtPcs), [effectiveRate, qtPcs]);
@@ -621,8 +644,8 @@ export default function OrderFormModal({
                 label="Machine"
                 value={form.machine_no}
                 onChange={handleMachineSelect}
-                options={MACHINE_OPTIONS}
-                placeholder="Select..."
+                options={machineOptions}
+                placeholder={machineOptions.length ? "Select..." : "No machine options in settings"}
                 disabled={!form.customer_id}
               />
             </div>
@@ -664,7 +687,8 @@ export default function OrderFormModal({
                 label="Unit"
                 value={form.unit}
                 onChange={handleUnitSelect}
-                options={UNIT_OPTIONS}
+                options={unitOptions}
+                placeholder={unitOptions.length ? "Select unit..." : "No units in settings"}
                 disabled={!form.machine_no}
               />
             </div>
@@ -672,7 +696,7 @@ export default function OrderFormModal({
             <div className="grid grid-cols-2 gap-3.5">
               <Input
                 ref={quantityRef}
-                label={`Quantity (${form.unit})`}
+                label={`Quantity (${unitLabel})`}
                 type="number"
                 value={form.quantity}
                 onChange={(e) => setForm((p) => ({ ...p, quantity: e.target.value }))}
@@ -682,7 +706,7 @@ export default function OrderFormModal({
                 disabled={!form.machine_no}
               />
               <Input
-                label={`Pieces (×${form.unit === "Dzn" ? "12" : "1"})`}
+                label={`Pieces (×${unitMultiplier})`}
                 value={qtPcs > 0 ? formatNumbers(qtPcs) : ""}
                 readOnly
                 required={false}

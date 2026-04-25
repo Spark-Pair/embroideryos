@@ -1,5 +1,5 @@
 import { apiClient } from "../api/apiClient";
-import { getEntitySnapshot, upsertEntitySnapshot } from "./idb";
+import { getEntitySnapshot, getOfflineMetaValue, setOfflineMetaValue, upsertEntitySnapshot } from "./idb";
 import { logDataSource } from "./logger";
 import {
   completeBootstrapSync,
@@ -23,6 +23,7 @@ const STAFF_PAYMENTS_ALL_KEY = "staffPayments:all";
 const STAFF_PAYMENTS_STATS_KEY = "staffPayments:stats";
 const STAFF_PAYMENTS_MONTHS_KEY = "staffPayments:months";
 const PRODUCTION_CONFIGS_ALL_KEY = "productionConfigs:all";
+const ORDER_CONFIGS_ALL_KEY = "orderConfigs:all";
 const CUSTOMER_PAYMENTS_ALL_KEY = "customerPayments:all";
 const CUSTOMER_PAYMENTS_STATS_KEY = "customerPayments:stats";
 const CUSTOMER_PAYMENTS_MONTHS_KEY = "customerPayments:months";
@@ -40,6 +41,28 @@ const CRP_STAFF_RECORDS_ALL_KEY = "crpStaffRecords:all";
 const CRP_STAFF_RECORDS_STATS_KEY = "crpStaffRecords:stats";
 const BUSINESS_INVOICE_BANNER_KEY = "business:invoice_banner";
 const SUBSCRIPTION_ME_KEY = "subscription:me";
+const BUSINESSES_ALL_KEY = "businesses:all";
+const BUSINESSES_STATS_KEY = "businesses:stats";
+const USERS_ALL_KEY = "users:all";
+const USERS_STATS_KEY = "users:stats";
+const BUSINESS_USERS_ALL_KEY = "users:business:all";
+const BUSINESS_USERS_STATS_KEY = "users:business:stats";
+const PLANS_ALL_KEY = "plans:all";
+const SUBSCRIPTIONS_ALL_KEY = "subscriptions:all";
+const SUBSCRIPTION_PAYMENTS_ALL_KEY = "subscriptionPayments:all";
+const SUBSCRIPTION_PAYMENTS_STATS_ALL_KEY = "subscriptionPayments:stats:all";
+const BOOTSTRAP_MIN_INTERVAL_MS = 2 * 60 * 1000;
+const BOOTSTRAP_PARALLELISM = 4;
+
+const getCachedUserRole = () => {
+  try {
+    const raw = localStorage.getItem("cachedUser");
+    const parsed = raw ? JSON.parse(raw) : null;
+    return String(parsed?.role || "").trim().toLowerCase();
+  } catch {
+    return "";
+  }
+};
 
 const hasExistingData = (existing) =>
   (Array.isArray(existing) && existing.length > 0) ||
@@ -318,6 +341,37 @@ export const seedProductionConfigsCache = async ({ forceRefresh = false } = {}) 
     });
   } finally {
     productionConfigsSeedInFlight = false;
+  }
+};
+
+let orderConfigsSeedInFlight = false;
+
+export const seedOrderConfigsCache = async ({ forceRefresh = false } = {}) => {
+  if (orderConfigsSeedInFlight) return;
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+
+  const existingAll = await getEntitySnapshot(ORDER_CONFIGS_ALL_KEY);
+  if (!forceRefresh && Array.isArray(existingAll) && existingAll.length > 0) {
+    logDataSource("IDB", "seed.orderConfigs.skip_existing", { count: existingAll.length });
+    return;
+  }
+
+  orderConfigsSeedInFlight = true;
+  try {
+    const res = await apiClient.get("/order-configs");
+    const config = res?.data?.data || res?.data || null;
+    const rows = config ? [config] : [];
+    await upsertEntitySnapshot(ORDER_CONFIGS_ALL_KEY, rows);
+
+    logDataSource("IDB", "seed.orderConfigs.done", {
+      listCount: Number(rows.length || 0),
+    });
+  } catch (error) {
+    logDataSource("IDB", "seed.orderConfigs.failed", {
+      message: error?.response?.data?.message || error?.message || "seed failed",
+    });
+  } finally {
+    orderConfigsSeedInFlight = false;
   }
 };
 
@@ -611,6 +665,125 @@ export const seedSubscriptionCache = async ({ forceRefresh = false } = {}) => {
   }
 };
 
+let businessesSeedInFlight = false;
+export const seedBusinessesCache = async ({ forceRefresh = false } = {}) => {
+  if (businessesSeedInFlight) return;
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+  const existing = await getEntitySnapshot(BUSINESSES_ALL_KEY);
+  if (!forceRefresh && hasExistingData(existing)) return;
+  businessesSeedInFlight = true;
+  try {
+    const [listRes, statsRes] = await Promise.all([
+      apiClient.get("/businesses?page=1&limit=5000"),
+      apiClient.get("/businesses/stats"),
+    ]);
+    await Promise.all([
+      upsertEntitySnapshot(BUSINESSES_ALL_KEY, listRes?.data?.data || []),
+      upsertEntitySnapshot(BUSINESSES_STATS_KEY, statsRes?.data || null),
+    ]);
+  } finally {
+    businessesSeedInFlight = false;
+  }
+};
+
+let usersSeedInFlight = false;
+export const seedUsersCache = async ({ forceRefresh = false } = {}) => {
+  if (usersSeedInFlight) return;
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+  const existing = await getEntitySnapshot(USERS_ALL_KEY);
+  if (!forceRefresh && hasExistingData(existing)) return;
+  usersSeedInFlight = true;
+  try {
+    const [listRes, statsRes] = await Promise.all([
+      apiClient.get("/users?page=1&limit=5000"),
+      apiClient.get("/users/stats"),
+    ]);
+    await Promise.all([
+      upsertEntitySnapshot(USERS_ALL_KEY, listRes?.data?.data || []),
+      upsertEntitySnapshot(USERS_STATS_KEY, statsRes?.data || null),
+    ]);
+  } finally {
+    usersSeedInFlight = false;
+  }
+};
+
+let businessUsersSeedInFlight = false;
+export const seedBusinessUsersCache = async ({ forceRefresh = false } = {}) => {
+  if (businessUsersSeedInFlight) return;
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+  const existing = await getEntitySnapshot(BUSINESS_USERS_ALL_KEY);
+  if (!forceRefresh && hasExistingData(existing)) return;
+  businessUsersSeedInFlight = true;
+  try {
+    const [listRes, statsRes] = await Promise.all([
+      apiClient.get("/users/business?page=1&limit=5000"),
+      apiClient.get("/users/business/stats"),
+    ]);
+    await Promise.all([
+      upsertEntitySnapshot(BUSINESS_USERS_ALL_KEY, listRes?.data?.data || []),
+      upsertEntitySnapshot(BUSINESS_USERS_STATS_KEY, statsRes?.data || null),
+    ]);
+  } catch (error) {
+    logDataSource("IDB", "seed.businessUsers.failed", {
+      message: error?.response?.data?.message || error?.message || "seed failed",
+    });
+  }
+  finally {
+    businessUsersSeedInFlight = false;
+  }
+};
+
+let plansSeedInFlight = false;
+export const seedPlansCache = async ({ forceRefresh = false } = {}) => {
+  if (plansSeedInFlight) return;
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+  const existing = await getEntitySnapshot(PLANS_ALL_KEY);
+  if (!forceRefresh && hasExistingData(existing)) return;
+  plansSeedInFlight = true;
+  try {
+    const res = await apiClient.get("/subscriptions/plans");
+    await upsertEntitySnapshot(PLANS_ALL_KEY, res?.data?.data || []);
+  } finally {
+    plansSeedInFlight = false;
+  }
+};
+
+let subscriptionsSeedInFlight = false;
+export const seedSubscriptionsCache = async ({ forceRefresh = false } = {}) => {
+  if (subscriptionsSeedInFlight) return;
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+  const existing = await getEntitySnapshot(SUBSCRIPTIONS_ALL_KEY);
+  if (!forceRefresh && hasExistingData(existing)) return;
+  subscriptionsSeedInFlight = true;
+  try {
+    const res = await apiClient.get("/subscriptions?page=1&limit=5000");
+    await upsertEntitySnapshot(SUBSCRIPTIONS_ALL_KEY, res?.data?.data || []);
+  } finally {
+    subscriptionsSeedInFlight = false;
+  }
+};
+
+let subscriptionPaymentsSeedInFlight = false;
+export const seedSubscriptionPaymentsCache = async ({ forceRefresh = false } = {}) => {
+  if (subscriptionPaymentsSeedInFlight) return;
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+  const existing = await getEntitySnapshot(SUBSCRIPTION_PAYMENTS_ALL_KEY);
+  if (!forceRefresh && hasExistingData(existing)) return;
+  subscriptionPaymentsSeedInFlight = true;
+  try {
+    const [listRes, statsRes] = await Promise.all([
+      apiClient.get("/subscription-payments?page=1&limit=5000"),
+      apiClient.get("/subscription-payments/stats"),
+    ]);
+    await Promise.all([
+      upsertEntitySnapshot(SUBSCRIPTION_PAYMENTS_ALL_KEY, listRes?.data?.data || []),
+      upsertEntitySnapshot(SUBSCRIPTION_PAYMENTS_STATS_ALL_KEY, statsRes?.data || null),
+    ]);
+  } finally {
+    subscriptionPaymentsSeedInFlight = false;
+  }
+};
+
 let crpRateConfigsSeedInFlight = false;
 
 export const seedCrpRateConfigsCache = async ({ forceRefresh = false } = {}) => {
@@ -687,6 +860,23 @@ export const runFullBootstrapSeed = async ({ forceRefresh = false } = {}) => {
     return;
   }
 
+  if (!forceRefresh) {
+    const lastBootstrapMeta = await getOfflineMetaValue("last_bootstrap_completed_at").catch(() => null);
+    const lastBootstrapAt = Number(lastBootstrapMeta?.value || 0) || 0;
+    if (lastBootstrapAt > 0 && Date.now() - lastBootstrapAt < BOOTSTRAP_MIN_INTERVAL_MS) {
+      logDataSource("IDB", "seed.bootstrap.skip_recent", {
+        lastBootstrapAt,
+        ageMs: Date.now() - lastBootstrapAt,
+      });
+      startBootstrapSync(0);
+      completeBootstrapSync();
+      return;
+    }
+  }
+
+  const cachedUserRole = getCachedUserRole();
+  const isDeveloper = cachedUserRole === "developer";
+
   const steps = [
     { id: "customers", label: "Customers", run: () => seedCustomersCache({ forceRefresh }) },
     { id: "suppliers", label: "Suppliers", run: () => seedSuppliersCache({ forceRefresh }) },
@@ -694,6 +884,7 @@ export const runFullBootstrapSeed = async ({ forceRefresh = false } = {}) => {
     { id: "staffRecords", label: "Staff Records", run: () => seedStaffRecordsCache({ forceRefresh }) },
     { id: "staffPayments", label: "Staff Payments", run: () => seedStaffPaymentsCache({ forceRefresh }) },
     { id: "productionConfigs", label: "Production Configs", run: () => seedProductionConfigsCache({ forceRefresh }) },
+    { id: "orderConfigs", label: "Order Configs", run: () => seedOrderConfigsCache({ forceRefresh }) },
     { id: "customerPayments", label: "Customer Payments", run: () => seedCustomerPaymentsCache({ forceRefresh }) },
     { id: "supplierPayments", label: "Supplier Payments", run: () => seedSupplierPaymentsCache({ forceRefresh }) },
     { id: "expenses", label: "Expenses", run: () => seedExpensesCache({ forceRefresh }) },
@@ -704,21 +895,37 @@ export const runFullBootstrapSeed = async ({ forceRefresh = false } = {}) => {
     { id: "crpStaffRecords", label: "CRP Records", run: () => seedCrpStaffRecordsCache({ forceRefresh }) },
     { id: "invoiceBanner", label: "Invoice Banner", run: () => seedInvoiceBannerCache({ forceRefresh }) },
     { id: "subscription", label: "Subscription", run: () => seedSubscriptionCache({ forceRefresh }) },
+    { id: "businessUsers", label: "Business Users", run: () => seedBusinessUsersCache({ forceRefresh }) },
+    ...(isDeveloper
+      ? [
+          { id: "businesses", label: "Businesses", run: () => seedBusinessesCache({ forceRefresh }) },
+          { id: "users", label: "Users", run: () => seedUsersCache({ forceRefresh }) },
+          { id: "plans", label: "Plans", run: () => seedPlansCache({ forceRefresh }) },
+          { id: "subscriptions", label: "Subscriptions", run: () => seedSubscriptionsCache({ forceRefresh }) },
+          { id: "subscriptionPayments", label: "Subscription Payments", run: () => seedSubscriptionPaymentsCache({ forceRefresh }) },
+        ]
+      : []),
   ];
 
   startBootstrapSync(steps.length);
-  for (const step of steps) {
-    try {
-      await step.run();
-      markBootstrapSyncStepDone(step.id, step.label);
-    } catch (error) {
-      failBootstrapSyncStep(
-        step.id,
-        step.label,
-        error?.response?.data?.message || error?.message || "Sync step failed"
-      );
-      markBootstrapSyncStepDone(step.id, step.label);
-    }
+  for (let i = 0; i < steps.length; i += BOOTSTRAP_PARALLELISM) {
+    const batch = steps.slice(i, i + BOOTSTRAP_PARALLELISM);
+    await Promise.allSettled(
+      batch.map(async (step) => {
+        try {
+          await step.run();
+          markBootstrapSyncStepDone(step.id, step.label);
+        } catch (error) {
+          failBootstrapSyncStep(
+            step.id,
+            step.label,
+            error?.response?.data?.message || error?.message || "Sync step failed"
+          );
+          markBootstrapSyncStepDone(step.id, step.label);
+        }
+      })
+    );
   }
+  await setOfflineMetaValue("last_bootstrap_completed_at", Date.now()).catch(() => null);
   completeBootstrapSync();
 };

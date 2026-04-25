@@ -10,6 +10,7 @@ import {
 } from "../api/staffPayment";
 import { fetchStaffs } from "../api/staff";
 import { fetchProductionConfig } from "../api/productionConfig";
+import { fetchMyRuleData } from "../api/business";
 import PageHeader from "../components/PageHeader";
 import Select from "../components/Select";
 import SlipCard from "../components/SalarySlip/SlipCard";
@@ -23,8 +24,13 @@ import {
   toMonthWindow,
 } from "../utils/salarySlip";
 import { formatNumbers } from "../utils";
-
-const DEFAULT_ALLOWANCE = 1500;
+import {
+  applyPaymentEffect,
+  getDisplayPreferences,
+  getLabelOverride,
+  getStaffPaymentTypeRule,
+  isAllowanceEligibleWithRule,
+} from "../utils/businessRuleData";
 
 function buildEmptySlip(id, name, month, openingBalance = 0) {
   return {
@@ -33,11 +39,11 @@ function buildEmptySlip(id, name, month, openingBalance = 0) {
     month,
     amount: 0,
     arrears: 0,
-    advance: 0,
     bonusQty: 0,
     bonusAmt: 0,
-    adjustment: 0,
-    payment: 0,
+        payment_breakdown: {},
+    payment_addition: 0,
+    payment_deduction: 0,
     allowance: 0,
     recordCount: 0,
     absentCount: 0,
@@ -59,11 +65,14 @@ function applyRecordMetrics(target, rec) {
   target.amount += Math.max(0, finalAmt - bonusAmt);
 }
 
-function applyPaymentMetrics(target, payment) {
+function applyPaymentMetrics(target, payment, ruleData) {
   const amt = Number(payment.amount) || 0;
-  if (payment.type === "advance") target.advance += amt;
-  if (payment.type === "adjustment") target.adjustment += amt;
-  if (payment.type === "payment") target.payment += amt;
+  const type = String(payment.type || "");
+  const rule = getStaffPaymentTypeRule(ruleData, type);
+  const signedAmount = rule?.current_effect === "add" ? amt : rule?.current_effect === "subtract" ? -amt : 0;
+  target.payment_breakdown[type] = Number(target.payment_breakdown[type] || 0) + signedAmount;
+  if (rule?.current_effect === "add") target.payment_addition += amt;
+  if (rule?.current_effect === "subtract") target.payment_deduction += amt;
 }
 
 function getPaymentInHistory(payment, prevMonthKey, prevMonthEnd) {
@@ -76,10 +85,9 @@ function getPaymentInHistory(payment, prevMonthKey, prevMonthEnd) {
   return false;
 }
 
-function updateClosingBalanceWithPayment(closing, key, payment) {
-  const amt = Number(payment.amount) || 0;
-  if (payment.type === "adjustment") closing[key] += amt;
-  if (payment.type === "advance" || payment.type === "payment") closing[key] -= amt;
+function updateClosingBalanceWithPayment(closing, key, payment, ruleData) {
+  const rule = getStaffPaymentTypeRule(ruleData, payment.type);
+  closing[key] = applyPaymentEffect(payment.amount, rule?.history_effect, closing[key] || 0);
 }
 
 async function buildAllowanceByMonth(monthKeys) {
@@ -92,9 +100,9 @@ async function buildAllowanceByMonth(monthKeys) {
         const { to } = toMonthWindow(month);
         const cfg = await fetchProductionConfig(to);
         const allowance = Number(cfg?.data?.allowance);
-        return [month, Number.isFinite(allowance) ? allowance : DEFAULT_ALLOWANCE];
+        return [month, Number.isFinite(allowance) ? allowance : 0];
       } catch {
-        return [month, DEFAULT_ALLOWANCE];
+        return [month, 0];
       }
     })
   );
@@ -108,6 +116,7 @@ function buildPreviousClosingBalance({
   prevMonthKey,
   prevMonthEnd,
   allowanceByMonth,
+  ruleData,
 }) {
   const closingByStaff = {};
   const monthBuckets = {};
@@ -146,8 +155,12 @@ function buildPreviousClosingBalance({
   );
 
   sortedBuckets.forEach((bucket) => {
-    const allowance = allowanceByMonth[bucket.monthKey] ?? DEFAULT_ALLOWANCE;
-    const allowed = isAllowanceEligible(bucket) ? allowance : 0;
+    const allowance = allowanceByMonth[bucket.monthKey] ?? 0;
+    const allowed = isAllowanceEligibleWithRule({
+      record_count: bucket.recordCount,
+      absent_count: bucket.absentCount,
+      half_count: bucket.halfCount,
+    }, ruleData) ? allowance : 0;
     closingByStaff[bucket.staffKey] += bucket.finalAmount + allowed;
   });
 
@@ -159,7 +172,7 @@ function buildPreviousClosingBalance({
     if (closingByStaff[key] === undefined) {
       closingByStaff[key] = Number(payment.staff_id?.opening_balance) || 0;
     }
-    updateClosingBalanceWithPayment(closingByStaff, key, payment);
+    updateClosingBalanceWithPayment(closingByStaff, key, payment, ruleData);
   });
 
   return closingByStaff;
@@ -316,6 +329,7 @@ export default function SalarySlipsPage() {
         prevMonthRecordsRes,
         prevMonthPaymentsRes,
         staffRes,
+        ruleRes,
       ] = await Promise.all([
         fetchStaffRecords({ date_from: from, date_to: to, limit: 1000 }),
         fetchStaffPayments({ month: selectedMonth, limit: 5000 }),
@@ -324,7 +338,9 @@ export default function SalarySlipsPage() {
         fetchStaffRecords({ date_from: prevMonthMeta.from, date_to: prevMonthMeta.to, limit: 5000 }),
         fetchStaffPayments({ month: prevMonthKey, limit: 5000 }),
         fetchStaffs({ limit: 5000 }),
+        fetchMyRuleData().catch(() => ({ rule_data: {} })),
       ]);
+      const ruleData = ruleRes?.rule_data || {};
 
       const staffList = staffRes?.data || [];
       const embroideryStaffIds = new Set(
@@ -354,7 +370,7 @@ export default function SalarySlipsPage() {
         .filter((m) => m <= prevMonthKey);
 
       const allowanceByMonth = await buildAllowanceByMonth([...historyMonths, selectedMonth]);
-      const monthlyAllowance = allowanceByMonth[selectedMonth] ?? DEFAULT_ALLOWANCE;
+      const monthlyAllowance = allowanceByMonth[selectedMonth] ?? 0;
 
       const grouped = {};
       const ensureGroup = (id, name, openingBalance = 0) => {
@@ -373,7 +389,7 @@ export default function SalarySlipsPage() {
         const id = payment.staff_id?._id ?? payment.staff_id;
         const name = payment.staff_id?.name ?? "Unknown";
         const g = ensureGroup(id, name, payment.staff_id?.opening_balance ?? 0);
-        applyPaymentMetrics(g, payment);
+        applyPaymentMetrics(g, payment, ruleData);
       });
 
       const prevMonthDataStaffs = new Set();
@@ -392,6 +408,7 @@ export default function SalarySlipsPage() {
         prevMonthKey,
         prevMonthEnd: prevMonthMeta.to,
         allowanceByMonth,
+        ruleData,
       });
 
       Object.values(grouped).forEach((g) => {
@@ -401,8 +418,23 @@ export default function SalarySlipsPage() {
           : g.openingBalance;
 
         g.arrears = previousBalance;
-        g.allowance = isAllowanceEligible(g) ? monthlyAllowance : 0;
-        g.total = g.amount + g.bonusAmt + g.allowance + g.arrears - g.advance - g.payment - g.adjustment;
+        g.allowance = isAllowanceEligibleWithRule({
+          record_count: g.recordCount,
+          absent_count: g.absentCount,
+          half_count: g.halfCount,
+        }, ruleData) ? monthlyAllowance : 0;
+        g.total = g.amount + g.bonusAmt + g.allowance + g.arrears + g.payment_addition - g.payment_deduction;
+        g.display_preferences = getDisplayPreferences(ruleData);
+        g.labels = {
+          arrears: getLabelOverride(ruleData, "arrears"),
+          amount: getLabelOverride(ruleData, "amount"),
+          bonus: getLabelOverride(ruleData, "bonus"),
+          allowance: getLabelOverride(ruleData, "allowance"),
+          gross_total: getLabelOverride(ruleData, "gross_total"),
+          deduction_total: getLabelOverride(ruleData, "deduction_total"),
+          net_amount: getLabelOverride(ruleData, "net_amount"),
+          payments: getLabelOverride(ruleData, "payments"),
+        };
       });
 
       setSlips(Object.values(grouped));
@@ -433,7 +465,7 @@ export default function SalarySlipsPage() {
           acc.allowance += Number(slip?.allowance || 0);
           acc.bonus += Number(slip?.bonusAmt || 0);
           acc.arrears += Number(slip?.arrears || 0);
-          acc.advance += Number(slip?.advance || 0);
+          acc.advance += Number(slip?.payment_deduction || 0);
           acc.grandTotal += Number(slip?.total || 0);
           return acc;
         },

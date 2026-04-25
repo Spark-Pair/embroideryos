@@ -14,44 +14,26 @@ import { useFormKeyboard } from "../../hooks/useFormKeyboard";
 import { useShortcut } from "../../hooks/useShortcuts";
 import { isEventMatchingShortcut } from "../../utils/shortcuts";
 import { useToast } from "../../context/ToastContext";
+import { fetchMyRuleData } from "../../api/business";
+import {
+  EMPTY_PRODUCTION_CONFIG,
+  calculateProductionRow,
+  calculateProductionTotals,
+  getModeSummary,
+  getProductionAmountLabels,
+  getTargetProgress,
+  isTargetMode,
+  normalizeProductionConfig,
+  shouldShowProductionAmount,
+} from "../../utils/productionPayout";
+import {
+  ATTENDANCE_PAY_MODES,
+  defaultAttendanceRules,
+  getAttendanceRule,
+  normalizeRuleData,
+} from "../../utils/businessRuleData";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const ATTENDANCE_OPTIONS = [
-  { label: "Day",    value: "Day" },
-  { label: "Night",  value: "Night" },
-  { label: "Half",   value: "Half" },
-  { label: "Absent", value: "Absent" },
-  { label: "Off",    value: "Off" },
-  { label: "Close",  value: "Close" },
-  { label: "Sunday", value: "Sunday" },
-];
-
-const ATTENDANCE_META = {
-  Day:    { color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
-  Night:  { color: "bg-indigo-100  text-indigo-700  border-indigo-200"  },
-  Half:   { color: "bg-amber-100   text-amber-700   border-amber-200"   },
-  Absent: { color: "bg-red-100     text-red-700     border-red-200"     },
-  Off:    { color: "bg-sky-100     text-sky-700     border-sky-200"     },
-  Close:  { color: "bg-gray-100    text-gray-600    border-gray-200"    },
-  Sunday: { color: "bg-violet-100  text-violet-700  border-violet-200"  },
-};
-
-const NO_PRODUCTION = new Set(["Absent", "Off", "Close", "Sunday"]);
-const NO_BONUS      = new Set(["Absent", "Close"]);
-
-const DEFAULT_CONFIG = {
-  stitch_rate:      0.001,
-  applique_rate:    1.111,
-  on_target_pct:    30,
-  after_target_pct: 34,
-  target_amount:    900,
-  pcs_per_round:    12,
-  bonus_rate:       200,
-  allowance:        1500,
-  off_amount:       300,
-  stitch_cap:       5000,
-};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -75,26 +57,7 @@ function resolveDate(joiningDate, lastRecordDate) {
 // ─── Calculation Engine ───────────────────────────────────────────────────────
 
 function calcRow(row, cfg) {
-  const stitchRaw = parseFloat(row.d_stitch) || 0;
-  const pcs       = parseFloat(row.pcs)      || 0;
-  const rounds    = parseFloat(row.rounds)   || 0;
-  const applique  = parseFloat(row.applique) || 0;
-  const stitch    = stitchRaw > 0 && stitchRaw <= (cfg.stitch_cap ?? DEFAULT_CONFIG.stitch_cap)
-    ? (cfg.stitch_cap ?? DEFAULT_CONFIG.stitch_cap) : stitchRaw;
-
-  const stitch_rate      = cfg.stitch_rate      ?? DEFAULT_CONFIG.stitch_rate;
-  const applique_rate    = cfg.applique_rate    ?? DEFAULT_CONFIG.applique_rate;
-  const on_target_pct    = cfg.on_target_pct    ?? DEFAULT_CONFIG.on_target_pct;
-  const after_target_pct = cfg.after_target_pct ?? DEFAULT_CONFIG.after_target_pct;
-
-  const total_stitch     = stitchRaw * rounds;
-  const stitch_base      = stitch * stitch_rate * pcs / 100;
-  const applique_base    = applique_rate * applique * pcs / 100;
-  const combined         = stitch_base + applique_base;
-  const on_target_amt    = combined * on_target_pct;
-  const after_target_amt = combined * after_target_pct;
-
-  return { total_stitch, on_target_amt, after_target_amt };
+  return calculateProductionRow(row, cfg);
 }
 
 function syncPcsRounds(field, value, pcsPerRound) {
@@ -106,19 +69,7 @@ function syncPcsRounds(field, value, pcsPerRound) {
 }
 
 function calcTotals(rows, cfg) {
-  return rows.reduce(
-    (acc, row) => {
-      const { total_stitch, on_target_amt, after_target_amt } = calcRow(row, cfg);
-      return {
-        pcs:              acc.pcs    + (parseFloat(row.pcs)    || 0),
-        rounds:           acc.rounds + (parseFloat(row.rounds) || 0),
-        total_stitch:     acc.total_stitch     + total_stitch,
-        on_target_amt:    acc.on_target_amt    + on_target_amt,
-        after_target_amt: acc.after_target_amt + after_target_amt,
-      };
-    },
-    { pcs: 0, rounds: 0, total_stitch: 0, on_target_amt: 0, after_target_amt: 0 }
-  );
+  return calculateProductionTotals(rows, cfg);
 }
 
 // ─── Production Row ───────────────────────────────────────────────────────────
@@ -126,13 +77,14 @@ function calcTotals(rows, cfg) {
 
 function ProductionRow({ row, index, cfg, onChange, onRemove, canRemove, onAddRow, isLast }) {
   const { total_stitch, on_target_amt, after_target_amt } = calcRow(row, cfg);
+  const amountLabels = getProductionAmountLabels(cfg);
 
   const handleFocus = (e) => e.target.select();
 
   const handle = (field) => (e) => {
     const val = e.target.value;
     if (field === "pcs" || field === "rounds")
-      onChange(row._key, { ...row, ...syncPcsRounds(field, val, cfg.pcs_per_round ?? DEFAULT_CONFIG.pcs_per_round) });
+      onChange(row._key, { ...row, ...syncPcsRounds(field, val, cfg.pcs_per_round || 0) });
     else
       onChange(row._key, { ...row, [field]: val });
   };
@@ -167,7 +119,9 @@ function ProductionRow({ row, index, cfg, onChange, onRemove, canRemove, onAddRo
       </td>
       <td className="px-3 py-2 text-right text-sm text-gray-600 tabular-nums">{formatNumbers(total_stitch)}</td>
       <td className="px-3 py-2 text-right text-sm font-medium text-rose-700 tabular-nums">{formatNumbers(on_target_amt, 2)}</td>
-      <td className="px-3 py-2 text-right text-sm font-medium text-emerald-700 tabular-nums">{formatNumbers(after_target_amt, 2)}</td>
+      {amountLabels.secondary && (
+        <td className="px-3 py-2 text-right text-sm font-medium text-emerald-700 tabular-nums">{formatNumbers(after_target_amt, 2)}</td>
+      )}
       <td className="px-3 py-2 text-center w-8">
         <button
           type="button"
@@ -181,7 +135,8 @@ function ProductionRow({ row, index, cfg, onChange, onRemove, canRemove, onAddRo
   );
 }
 
-function TotalsRow({ totals }) {
+function TotalsRow({ totals, cfg }) {
+  const amountLabels = getProductionAmountLabels(cfg);
   return (
     <tr className="border-t border-gray-300 bg-gray-50/80 font-semibold text-sm">
       <td className="px-3.5 py-2.5 text-xs text-gray-500 uppercase tracking-wider" colSpan={3}>Totals</td>
@@ -189,7 +144,9 @@ function TotalsRow({ totals }) {
       <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{formatNumbers(totals.pcs)}</td>
       <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{formatNumbers(totals.total_stitch)}</td>
       <td className="px-3 py-2.5 text-right tabular-nums text-rose-700">{formatNumbers(totals.on_target_amt, 2)}</td>
-      <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700">{formatNumbers(totals.after_target_amt, 2)}</td>
+      {amountLabels.secondary && (
+        <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700">{formatNumbers(totals.after_target_amt, 2)}</td>
+      )}
       <td />
     </tr>
   );
@@ -213,8 +170,9 @@ export default function StaffRecordFormModal({
   const attendanceRef = useRef(null);
 
   // ── State ──
-  const [cfg,           setCfg]           = useState(DEFAULT_CONFIG);
+  const [cfg,           setCfg]           = useState(EMPTY_PRODUCTION_CONFIG);
   const [cfgLoading,    setCfgLoading]    = useState(false);
+  const [ruleData,      setRuleData]      = useState({ attendance_rules: [] });
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [date,          setDate]          = useState("");
   const [attendance,    setAttendance]    = useState("");
@@ -242,9 +200,9 @@ export default function StaffRecordFormModal({
       try {
         const res = await fetchProductionConfig(date);
         const data = res?.data;
-        setCfg(data ? { ...DEFAULT_CONFIG, ...data } : DEFAULT_CONFIG);
+        setCfg(data ? normalizeProductionConfig(data) : normalizeProductionConfig(EMPTY_PRODUCTION_CONFIG));
       } catch {
-        setCfg(DEFAULT_CONFIG);
+        setCfg(normalizeProductionConfig(EMPTY_PRODUCTION_CONFIG));
         showToast({ type: "error", message: "Failed to load production config" });
       } finally {
         setCfgLoading(false);
@@ -266,16 +224,20 @@ export default function StaffRecordFormModal({
       setFixAmount("");
       setForceAfterTargetForNonTarget(false);
       setForceFullTargetForNonTarget(false);
-      setCfg(DEFAULT_CONFIG);
+      setCfg(EMPTY_PRODUCTION_CONFIG);
       autoSelectedRef.current = false;
     }
 
     const load = async () => {
       setStaffLoading(true);
       try {
-        const r = await fetchStaffNames({ status: "active", category: "Embroidery" });
+        const [r, ruleRes] = await Promise.all([
+          fetchStaffNames({ status: "active", category: "Embroidery" }),
+          fetchMyRuleData().catch(() => ({ rule_data: {} })),
+        ]);
         const list = r.data || [];
         setStaffList(list);
+        setRuleData(ruleRes?.rule_data || { attendance_rules: [] });
 
         if (!isEdit && lastUsed?.staffId) {
           // Pass list directly — don't rely on stale state
@@ -397,7 +359,7 @@ export default function StaffRecordFormModal({
 
     setTimeout(() => {
       // Production visible — d_stitch focus
-      if (!NO_PRODUCTION.has(val)) {
+      if (getAttendanceRule(ruleData, val)?.counts_production) {
         const dStitch = document.querySelector('input[data-field="d_stitch"]');
         if (dStitch) { dStitch.focus(); return; }
       }
@@ -415,9 +377,22 @@ export default function StaffRecordFormModal({
   };
 
   // ── Derived ──
-  const showProduction = attendance && !NO_PRODUCTION.has(attendance);
-  const showBonus      = attendance && !NO_BONUS.has(attendance);
+  const attendanceRules = normalizeRuleData(ruleData).attendance_rules;
+  const attendanceOptions = (attendanceRules.length
+    ? attendanceRules
+    : defaultAttendanceRules()
+  ).map((rule) => ({ label: rule.label, value: rule.label }));
+  const attendanceRule = attendance ? getAttendanceRule(ruleData, attendance) : null;
+  const showProduction = Boolean(attendanceRule?.counts_production);
+  const showBonus      = Boolean(attendanceRule?.allows_bonus);
   const totals         = calcTotals(rows, cfg);
+  const amountLabels   = getProductionAmountLabels(cfg);
+  const targetState    = getTargetProgress(totals, cfg, {
+    force_after_target_for_non_target: forceAfterTargetForNonTarget,
+    force_full_target_for_non_target: forceFullTargetForNonTarget,
+  });
+  const targetMode = isTargetMode(cfg);
+  const productionEnabled = shouldShowProductionAmount(cfg);
 
   const handleRowChange = useCallback((key, updated) =>
     setRows((p) => p.map((r) => r._key === key ? updated : r)), []);
@@ -425,48 +400,44 @@ export default function StaffRecordFormModal({
     setRows((p) => p.filter((r) => r._key !== key)), []);
 
   // ── Final amount preview ──
-  const effectiveBonusRate = parseFloat(bonusRate) || cfg.bonus_rate || DEFAULT_CONFIG.bonus_rate;
+  const effectiveBonusRate = parseFloat(bonusRate) || cfg.bonus_rate || 0;
   const bonusAmount        = (parseFloat(bonusQty) || 0) * effectiveBonusRate;
 
   const hasSalary     = selectedStaff?.salary > 0;
   const salary        = selectedStaff?.salary || 0;
-  const targetMet     = totals.on_target_amt >= (cfg.target_amount ?? DEFAULT_CONFIG.target_amount);
+  const targetMet     = targetState.targetMet;
   const canForceAfterTargetForNonTarget =
     showProduction &&
+    targetMode &&
     !hasSalary &&
     totals.on_target_amt > 0 &&
     !targetMet &&
-    (attendance === "Day" || attendance === "Night" || attendance === "Half");
+    Boolean(attendanceRule?.counts_production);
   const canForceFullTargetForNonTarget =
     canForceAfterTargetForNonTarget &&
-    Number(cfg.on_target_pct ?? DEFAULT_CONFIG.on_target_pct) > 0;
-  const fullTargetAfterAmount =
-    Number(cfg.on_target_pct ?? DEFAULT_CONFIG.on_target_pct) > 0
-      ? ((cfg.target_amount ?? DEFAULT_CONFIG.target_amount) /
-          (cfg.on_target_pct ?? DEFAULT_CONFIG.on_target_pct)) *
-        (cfg.after_target_pct ?? DEFAULT_CONFIG.after_target_pct)
-      : (cfg.target_amount ?? DEFAULT_CONFIG.target_amount);
+    Number(cfg.on_target_pct || 0) > 0;
+  const fullTargetAfterAmount = getTargetProgress(totals, cfg, {
+    force_full_target_for_non_target: true,
+  }).effectiveAmount;
   const productionAmt = showProduction
-    ? (
-        (canForceFullTargetForNonTarget && forceFullTargetForNonTarget)
-      ? fullTargetAfterAmount
-      : (targetMet || (canForceAfterTargetForNonTarget && forceAfterTargetForNonTarget))
-      ? totals.after_target_amt
-      : totals.on_target_amt
-      )
+    ? (productionEnabled ? targetState.effectiveAmount : 0)
     : 0;
 
   let previewBase = 0;
-  if (attendance === "Absent" || attendance === "Close") {
-    previewBase = 0;
-  } else if (attendance === "Sunday") {
-    previewBase = hasSalary ? salary / 30 : 0;
-  } else if (attendance === "Off") {
-    previewBase = hasSalary ? salary / 30 : (cfg.off_amount ?? DEFAULT_CONFIG.off_amount);
-  } else if (attendance === "Half") {
-    previewBase = hasSalary ? salary / 60 : productionAmt;
-  } else {
-    previewBase = hasSalary ? salary / 30 : productionAmt;
+  switch (attendanceRule?.pay_mode) {
+    case ATTENDANCE_PAY_MODES.ZERO:
+      previewBase = 0;
+      break;
+    case ATTENDANCE_PAY_MODES.SALARY_DAY_OR_OFF_AMOUNT:
+      previewBase = hasSalary ? salary / 30 : (cfg.off_amount || 0);
+      break;
+    case ATTENDANCE_PAY_MODES.SALARY_HALF_OR_PRODUCTION:
+      previewBase = hasSalary ? salary / 60 : productionAmt;
+      break;
+    case ATTENDANCE_PAY_MODES.SALARY_DAY_OR_PRODUCTION:
+    default:
+      previewBase = hasSalary ? salary / 30 : productionAmt;
+      break;
   }
 
   const previewFinal  = fixAmount !== "" ? parseFloat(fixAmount) || 0 : previewBase + bonusAmount;
@@ -619,7 +590,7 @@ export default function StaffRecordFormModal({
               label="Attendance"
               value={attendance}
               onChange={handleAttendance}
-              options={ATTENDANCE_OPTIONS}
+              options={attendanceOptions}
               placeholder="Select type..."
               disabled={!date}
             />
@@ -632,7 +603,7 @@ export default function StaffRecordFormModal({
             <SectionHeader
               step="2"
               title="Production Entry"
-              subtitle={`Rate: ${cfg.stitch_rate} · Applique: ${cfg.applique_rate} · On Target: ${cfg.on_target_pct}% · After Target: ${cfg.after_target_pct}% · ${cfg.pcs_per_round ?? DEFAULT_CONFIG.pcs_per_round} PCs/Round`}
+              subtitle={`${getModeSummary(cfg)}${cfg.pcs_per_round ? ` · ${cfg.pcs_per_round} PCs/Round` : ""}`}
               right={
                 <Button size="sm" variant="primary" outline icon={Plus}
                   onClick={handleAddRow}>
@@ -651,8 +622,10 @@ export default function StaffRecordFormModal({
                     <th className="px-1.5 py-2.5 text-left">Rounds</th>
                     <th className="px-1.5 py-2.5 text-left">PCs</th>
                     <th className="px-3 py-2.5 text-right text-nowrap">Total Stitch</th>
-                    <th className="px-3 py-2.5 text-right text-nowrap text-rose-700">({cfg.on_target_pct}%)</th>
-                    <th className="px-3 py-2.5 text-right text-nowrap text-emerald-700">({cfg.after_target_pct}%)</th>
+                    <th className="px-3 py-2.5 text-right text-nowrap text-rose-700">{amountLabels.primary}</th>
+                    {amountLabels.secondary && (
+                      <th className="px-3 py-2.5 text-right text-nowrap text-emerald-700">{amountLabels.secondary}</th>
+                    )}
                     <th className="px-2 py-2.5 w-8" />
                   </tr>
                 </thead>
@@ -671,12 +644,12 @@ export default function StaffRecordFormModal({
                     />
                   ))}
                 </tbody>
-                <tfoot><TotalsRow totals={totals} /></tfoot>
+                <tfoot><TotalsRow totals={totals} cfg={cfg} /></tfoot>
               </table>
             </div>
 
             {/* Target status bar */}
-            {totals.on_target_amt > 0 && (
+            {targetMode && totals.on_target_amt > 0 && (
               <div className={`flex items-center mt-2 gap-3 rounded-xl px-4 py-2.5 text-xs
                 ${targetMet ? "bg-emerald-50 border border-emerald-200" : "bg-amber-50 border border-amber-200"}`}>
                 {targetMet
@@ -692,11 +665,11 @@ export default function StaffRecordFormModal({
                 ) : (
                   <span className="text-amber-700">
                     <span className="font-semibold">
-                      {formatNumbers((cfg.target_amount ?? DEFAULT_CONFIG.target_amount) - totals.on_target_amt, 2)} short
+                      {formatNumbers((cfg.target_amount || 0) - totals.on_target_amt, 2)} short
                     </span>
                     {" "}of target · Current:{" "}
                     <span className="font-semibold">{formatNumbers(totals.on_target_amt, 2)}</span>
-                    {" "}· Target: {formatNumbers(cfg.target_amount ?? DEFAULT_CONFIG.target_amount, 2)}
+                    {" "}· Target: {formatNumbers(cfg.target_amount || 0, 2)}
                   </span>
                 )}
               </div>
@@ -768,7 +741,7 @@ export default function StaffRecordFormModal({
                   type="number"
                   value={bonusRate}
                   onChange={(e) => setBonusRate(e.target.value)}
-                  placeholder={String(cfg.bonus_rate ?? DEFAULT_CONFIG.bonus_rate)}
+                  placeholder={cfg.bonus_rate ? String(cfg.bonus_rate) : ""}
                   required={false}
                 />
               </div>
@@ -785,7 +758,7 @@ export default function StaffRecordFormModal({
         )}
 
         {/* ── Step 4: Fix Amount ── */}
-        {attendance && !NO_BONUS.has(attendance) && (
+        {showBonus && (
           <div className="flex flex-col">
             <SectionHeader
               step={showProduction ? "4" : showBonus ? "3" : "2"}

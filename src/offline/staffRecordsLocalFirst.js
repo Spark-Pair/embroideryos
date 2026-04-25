@@ -10,6 +10,16 @@ import {
 } from "./idb";
 import { logDataSource } from "./logger";
 import { fetchProductionConfigLocalFirst } from "./productionConfigLocalFirst";
+import {
+  EMPTY_PRODUCTION_CONFIG,
+  PAYOUT_MODES,
+  calculateProductionRow,
+  calculateProductionTotals,
+  getTargetProgress,
+  isTargetMode,
+  normalizeProductionConfig,
+  shouldShowProductionAmount,
+} from "../utils/productionPayout";
 
 const STAFF_RECORDS_URL = "/staff-records";
 const ALL_KEY = "staffRecords:all";
@@ -20,19 +30,6 @@ const OVERLAY_KEY = "staffRecords:overlay";
 let syncInFlight = false;
 let onlineHandlerAttached = false;
 let syncLoopAttached = false;
-
-const DEFAULT_CONFIG = {
-  stitch_rate: 0.001,
-  applique_rate: 1.111,
-  on_target_pct: 30,
-  after_target_pct: 34,
-  target_amount: 900,
-  pcs_per_round: 12,
-  bonus_rate: 200,
-  allowance: 1500,
-  off_amount: 300,
-  stitch_cap: 5000,
-};
 
 const NO_PRODUCTION = new Set(["Absent", "Off", "Close", "Sunday"]);
 const NO_AMOUNT = new Set(["Absent", "Close"]);
@@ -85,42 +82,11 @@ const getStaffSnapshot = async () => {
 const normalizeAttendance = (attendance) => String(attendance || "").trim();
 
 const calcRow = (row, cfg) => {
-  const stitchRaw = Number(row?.d_stitch || 0);
-  const pcs = Number(row?.pcs || 0);
-  const rounds = Number(row?.rounds || 0);
-  const applique = Number(row?.applique || 0);
-  const stitchCap = cfg?.stitch_cap ?? DEFAULT_CONFIG.stitch_cap;
-  const stitch = stitchRaw > 0 && stitchRaw <= stitchCap ? stitchCap : stitchRaw;
-
-  const stitch_rate = cfg?.stitch_rate ?? DEFAULT_CONFIG.stitch_rate;
-  const applique_rate = cfg?.applique_rate ?? DEFAULT_CONFIG.applique_rate;
-  const on_target_pct = cfg?.on_target_pct ?? DEFAULT_CONFIG.on_target_pct;
-  const after_target_pct = cfg?.after_target_pct ?? DEFAULT_CONFIG.after_target_pct;
-
-  const total_stitch = stitchRaw * rounds;
-  const stitch_base = (stitch * stitch_rate * pcs) / 100;
-  const applique_base = (applique_rate * applique * pcs) / 100;
-  const combined = stitch_base + applique_base;
-  const on_target_amt = combined * on_target_pct;
-  const after_target_amt = combined * after_target_pct;
-
-  return { total_stitch, on_target_amt, after_target_amt };
+  return calculateProductionRow(row, cfg);
 };
 
 const calcTotals = (rows, cfg) =>
-  rows.reduce(
-    (acc, row) => {
-      const { total_stitch, on_target_amt, after_target_amt } = calcRow(row, cfg);
-      return {
-        pcs: acc.pcs + (Number(row?.pcs || 0)),
-        rounds: acc.rounds + (Number(row?.rounds || 0)),
-        total_stitch: acc.total_stitch + total_stitch,
-        on_target_amt: acc.on_target_amt + on_target_amt,
-        after_target_amt: acc.after_target_amt + after_target_amt,
-      };
-    },
-    { pcs: 0, rounds: 0, total_stitch: 0, on_target_amt: 0, after_target_amt: 0 }
-  );
+  calculateProductionTotals(rows, cfg);
 
 const resolveBaseAmount = ({
   attendance,
@@ -130,15 +96,17 @@ const resolveBaseAmount = ({
   forceAfterTargetForNonTarget = false,
   forceFullTargetForNonTarget = false,
 }) => {
+  const normalizedConfig = normalizeProductionConfig(config);
+  const targetMode = isTargetMode(normalizedConfig);
+  const productionEnabled = shouldShowProductionAmount(normalizedConfig);
   const hasSalary = salary != null && salary > 0;
   const perDay = hasSalary ? salary / 30 : 0;
   const perHalfDay = hasSalary ? salary / 60 : 0;
-  const targetAmount = config?.target_amount ?? DEFAULT_CONFIG.target_amount;
-  const offAmount = config?.off_amount ?? DEFAULT_CONFIG.off_amount;
-  const onTargetPct = config?.on_target_pct ?? DEFAULT_CONFIG.on_target_pct;
-  const afterTargetPct = config?.after_target_pct ?? DEFAULT_CONFIG.after_target_pct;
-  const fullTargetAfterAmount =
-    onTargetPct > 0 ? (targetAmount / onTargetPct) * afterTargetPct : targetAmount;
+  const offAmount = normalizedConfig?.off_amount ?? 0;
+  const target = getTargetProgress(totals, normalizedConfig, {
+    force_after_target_for_non_target: forceAfterTargetForNonTarget,
+    force_full_target_for_non_target: forceFullTargetForNonTarget,
+  });
 
   let base_amount = 0;
   let resolvedAttendance = attendance;
@@ -153,16 +121,8 @@ const resolveBaseAmount = ({
     if (hasSalary) {
       base_amount = perHalfDay;
     } else {
-      const productionAmt = totals
-        ? (
-            forceFullTargetForNonTarget
-              ? fullTargetAfterAmount
-              : (totals.on_target_amt >= targetAmount || forceAfterTargetForNonTarget)
-          ? totals.after_target_amt
-          : totals.on_target_amt
-          )
-        : 0;
-      if (totals && totals.on_target_amt >= targetAmount) {
+      const productionAmt = productionEnabled ? target.effectiveAmount : 0;
+      if (targetMode && target.targetMet) {
         resolvedAttendance = "Day";
       }
       base_amount = productionAmt;
@@ -171,15 +131,7 @@ const resolveBaseAmount = ({
     if (hasSalary) {
       base_amount = perDay;
     } else {
-      base_amount = totals
-        ? (
-            forceFullTargetForNonTarget
-              ? fullTargetAfterAmount
-              : (totals.on_target_amt >= targetAmount || forceAfterTargetForNonTarget)
-          ? totals.after_target_amt
-          : totals.on_target_amt
-          )
-        : 0;
+      base_amount = productionEnabled ? target.effectiveAmount : 0;
     }
   }
 
@@ -197,7 +149,9 @@ const buildLocalRecordPayload = async (payload) => {
   const salary = Number(staffRow?.salary || 0);
 
   const configRes = await fetchProductionConfigLocalFirst(payload?.date);
-  const config = configRes?.data ? { ...DEFAULT_CONFIG, ...configRes.data } : DEFAULT_CONFIG;
+  const config = configRes?.data
+    ? normalizeProductionConfig(configRes.data)
+    : normalizeProductionConfig(EMPTY_PRODUCTION_CONFIG);
 
   const hasProduction = attendance && !NO_PRODUCTION.has(attendance);
   const cleanRows = hasProduction ? payload?.production || [] : [];
@@ -217,11 +171,14 @@ const buildLocalRecordPayload = async (payload) => {
 
   const totals = hasProduction && recalculatedRows.length > 0 ? calcTotals(recalculatedRows, config) : null;
   const canUseTargetOverrides = !(salary != null && salary > 0);
+  const targetMode = isTargetMode(config);
   const useFullTargetForNonTarget =
+    targetMode &&
     Boolean(payload?.force_full_target_for_non_target) &&
     canUseTargetOverrides &&
-    !(totals && totals.on_target_amt >= (config.target_amount ?? 0));
+    !getTargetProgress(totals, config).targetMet;
   const useAfterTargetForNonTarget =
+    targetMode &&
     Boolean(payload?.force_after_target_for_non_target) &&
     canUseTargetOverrides &&
     !useFullTargetForNonTarget;
@@ -237,7 +194,7 @@ const buildLocalRecordPayload = async (payload) => {
 
   const canHaveBonus = !NO_BONUS.has(resolvedAttendance);
   const effectiveBonusRate =
-    payload?.bonus_rate != null ? Number(payload.bonus_rate) : Number(config?.bonus_rate ?? DEFAULT_CONFIG.bonus_rate);
+    payload?.bonus_rate != null ? Number(payload.bonus_rate) : Number(config?.bonus_rate ?? 0);
   const effectiveBonusQty = canHaveBonus ? Number(payload?.bonus_qty || 0) : 0;
   const bonus_amount = effectiveBonusQty * effectiveBonusRate;
 
@@ -259,15 +216,20 @@ const buildLocalRecordPayload = async (payload) => {
       useFullTargetForNonTarget,
     final_amount,
     config_snapshot: {
+      payout_mode: config.payout_mode,
       stitch_rate: config.stitch_rate,
       applique_rate: config.applique_rate,
       on_target_pct: config.on_target_pct,
       after_target_pct: config.after_target_pct,
+      production_pct: config.production_pct,
+      stitch_block_size: config.stitch_block_size,
+      amount_per_block: config.amount_per_block,
       pcs_per_round: config.pcs_per_round,
       target_amount: config.target_amount,
       off_amount: config.off_amount,
       bonus_rate: config.bonus_rate,
       allowance: config.allowance,
+      stitch_cap: config.stitch_cap,
     },
     staff_id: staffRow ? { ...staffRow, _id: staffRow._id } : payload?.staff_id,
   };
@@ -304,6 +266,12 @@ const getEffectivePercent = (row) => {
   if (!row || row?.fix_amount != null) return null;
   const totals = row?.totals;
   if (!totals) return null;
+  const payoutMode = row?.config_snapshot?.payout_mode || PAYOUT_MODES.TARGET_DUAL_PCT;
+  if (payoutMode === PAYOUT_MODES.SINGLE_PCT) {
+    const pct = Number(row?.config_snapshot?.production_pct);
+    return Number.isFinite(pct) ? pct : null;
+  }
+  if (payoutMode !== PAYOUT_MODES.TARGET_DUAL_PCT) return null;
   const onTargetAmount = Number(totals?.on_target_amt || 0);
   if (onTargetAmount <= 0) return null;
   const targetAmount = Number(row?.config_snapshot?.target_amount);
@@ -519,9 +487,17 @@ export const fetchStaffRecordsLocalFirst = async (params = {}) => {
     return res.data;
   }
 
-  const overlay = await getOverlay();
-  const base = await getAllBaseRecords();
-  const merged = withOverlayList(base, overlay);
+  let overlay = await getOverlay();
+  let base = await getAllBaseRecords();
+  let merged = withOverlayList(base, overlay);
+  if (!merged.length && typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      await refreshAllSnapshotFromCloud();
+      overlay = await getOverlay();
+      base = await getAllBaseRecords();
+      merged = withOverlayList(base, overlay);
+    } catch {}
+  }
   const withStaff = await attachStaffInfo(merged);
   const filtered = applyFilters(withStaff, params);
 
@@ -593,6 +569,10 @@ export const fetchStaffRecordStatsLocalFirst = async (params = {}) => {
     },
   };
 
+  if (merged.length > 0 && typeof navigator !== "undefined" && navigator.onLine) {
+    apiClient.get(`${STAFF_RECORDS_URL}/stats`, { params }).then((res) => upsertEntitySnapshot(STATS_KEY, res.data)).catch(() => null);
+  }
+
   await upsertEntitySnapshot(STATS_KEY, stats);
   logDataSource("IDB", "staffRecords.stats.local", stats.data);
   return stats;
@@ -621,6 +601,17 @@ export const fetchStaffRecordMonthsLocalFirst = async () => {
   ).sort((a, b) => (a < b ? 1 : -1));
 
   const payload = { success: true, data: months };
+  if (months.length > 0 && typeof navigator !== "undefined" && navigator.onLine) {
+    apiClient.get(`${STAFF_RECORDS_URL}/months`).then((res) => upsertEntitySnapshot(MONTHS_KEY, res.data)).catch(() => null);
+  }
+  if (!months.length && typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      await refreshAllSnapshotFromCloud();
+      return fetchStaffRecordMonthsLocalFirst();
+    } catch {
+      // fall back to empty local result
+    }
+  }
   await upsertEntitySnapshot(MONTHS_KEY, payload);
   logDataSource("IDB", "staffRecords.months.local", { count: months.length });
   return payload;
@@ -644,6 +635,14 @@ export const fetchStaffLastRecordLocalFirst = async (staffId) => {
     success: true,
     data: last ? { last_record_date: last.date, last_attendance: last.attendance } : null,
   };
+  if (!last && typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      await refreshAllSnapshotFromCloud();
+      return fetchStaffLastRecordLocalFirst(staffId);
+    } catch {
+      // fall back to empty local result
+    }
+  }
   logDataSource("IDB", "staffRecords.last.local", { staffId: String(staffId || "") });
   return payload;
 };
@@ -656,7 +655,21 @@ export const fetchStaffRecordLocalFirst = async (id) => {
 
   const local = await findRecordByIdLocal(id);
   logDataSource("IDB", "staffRecords.get.local", { id: String(id || "") });
-  if (local) return { success: true, data: local };
+  if (local) {
+    if (typeof navigator !== "undefined" && navigator.onLine) {
+      refreshAllSnapshotFromCloud().catch(() => null);
+    }
+    return { success: true, data: local };
+  }
+  if (typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      await refreshAllSnapshotFromCloud();
+      const retried = await findRecordByIdLocal(id);
+      if (retried) return { success: true, data: retried };
+    } catch {
+      // fall through
+    }
+  }
   throw new Error("Staff record not available locally");
 };
 

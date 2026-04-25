@@ -1,11 +1,17 @@
 import { apiClient } from "../api/apiClient";
-import { getEntitySnapshot, offlineAccess } from "./idb";
+import { getEntitySnapshot, offlineAccess, upsertEntitySnapshot } from "./idb";
 import { logDataSource } from "./logger";
+import {
+  applyPaymentEffect,
+  getAttendanceRule,
+  getStaffPaymentTypeRule,
+  isAllowanceEligibleWithRule,
+} from "../utils/businessRuleData";
 
-const DEFAULT_ALLOWANCE = 1500;
 const SNAPSHOT_CACHE_TTL_MS = 1200;
 const mergedSnapshotInFlight = new Map();
 const mergedSnapshotCache = new Map();
+let dashboardHydrationPromise = null;
 
 const getMergedSnapshot = async (allKey, overlayKey) => {
   const base = await getEntitySnapshot(allKey);
@@ -50,6 +56,139 @@ const getMergedSnapshotCached = async (allKey, overlayKey) => {
   return promise;
 };
 
+const hasAnyRows = (rows) => Array.isArray(rows) && rows.length > 0;
+
+const hydrateDashboardSnapshotsFromCloud = async () => {
+  if (dashboardHydrationPromise) return dashboardHydrationPromise;
+  dashboardHydrationPromise = Promise.all([
+    apiClient.get("/orders?page=1&limit=5000"),
+    apiClient.get("/invoices?page=1&limit=5000"),
+    apiClient.get("/expenses?page=1&limit=5000"),
+    apiClient.get("/customer-payments?page=1&limit=5000"),
+    apiClient.get("/supplier-payments?page=1&limit=5000"),
+    apiClient.get("/staff-payments?page=1&limit=5000"),
+    apiClient.get("/staff-records?page=1&limit=5000"),
+    apiClient.get("/crp-staff-records?page=1&limit=5000"),
+    apiClient.get("/customers?page=1&limit=5000"),
+    apiClient.get("/suppliers?page=1&limit=5000"),
+    apiClient.get("/staffs?page=1&limit=5000"),
+    apiClient.get("/businesses/me/rule-data"),
+  ])
+    .then(async (responses) => {
+      const [
+        ordersRes,
+        invoicesRes,
+        expensesRes,
+        customerPaymentsRes,
+        supplierPaymentsRes,
+        staffPaymentsRes,
+        staffRecordsRes,
+        crpRecordsRes,
+        customersRes,
+        suppliersRes,
+        staffRes,
+        ruleDataRes,
+      ] = responses;
+
+      await Promise.all([
+        upsertEntitySnapshot("orders:all", Array.isArray(ordersRes?.data?.data) ? ordersRes.data.data : []),
+        upsertEntitySnapshot("invoices:all", Array.isArray(invoicesRes?.data?.data) ? invoicesRes.data.data : []),
+        upsertEntitySnapshot("expenses:all", Array.isArray(expensesRes?.data?.data) ? expensesRes.data.data : []),
+        upsertEntitySnapshot("customerPayments:all", Array.isArray(customerPaymentsRes?.data?.data) ? customerPaymentsRes.data.data : []),
+        upsertEntitySnapshot("supplierPayments:all", Array.isArray(supplierPaymentsRes?.data?.data) ? supplierPaymentsRes.data.data : []),
+        upsertEntitySnapshot("staffPayments:all", Array.isArray(staffPaymentsRes?.data?.data) ? staffPaymentsRes.data.data : []),
+        upsertEntitySnapshot("staffRecords:all", Array.isArray(staffRecordsRes?.data?.data) ? staffRecordsRes.data.data : []),
+        upsertEntitySnapshot("crpStaffRecords:all", Array.isArray(crpRecordsRes?.data?.data) ? crpRecordsRes.data.data : []),
+        upsertEntitySnapshot("customers:all", Array.isArray(customersRes?.data?.data) ? customersRes.data.data : []),
+        upsertEntitySnapshot("suppliers:all", Array.isArray(suppliersRes?.data?.data) ? suppliersRes.data.data : []),
+        upsertEntitySnapshot("staffs:all", Array.isArray(staffRes?.data?.data) ? staffRes.data.data : []),
+        upsertEntitySnapshot("business:rule_data", ruleDataRes?.data?.rule_data || {}),
+      ]);
+      mergedSnapshotCache.clear();
+    })
+    .finally(() => {
+      dashboardHydrationPromise = null;
+    });
+
+  return dashboardHydrationPromise;
+};
+
+const ensureDashboardSnapshotsReady = async () => {
+  const [
+    orders,
+    invoices,
+    expenses,
+    customerPayments,
+    supplierPayments,
+    staffPayments,
+    staffRecords,
+    crpRecords,
+    customers,
+    suppliers,
+    staff,
+  ] = await Promise.all([
+    getMergedSnapshotCached("orders:all", "orders:overlay"),
+    getMergedSnapshotCached("invoices:all", "invoices:overlay"),
+    getMergedSnapshotCached("expenses:all", "expenses:overlay"),
+    getMergedSnapshotCached("customerPayments:all", "customerPayments:overlay"),
+    getMergedSnapshotCached("supplierPayments:all", "supplierPayments:overlay"),
+    getMergedSnapshotCached("staffPayments:all", "staffPayments:overlay"),
+    getMergedSnapshotCached("staffRecords:all", "staffRecords:overlay"),
+    getMergedSnapshotCached("crpStaffRecords:all", "crpStaffRecords:overlay"),
+    getMergedSnapshotCached("customers:all", "customers:overlay"),
+    getMergedSnapshotCached("suppliers:all", "suppliers:overlay"),
+    getMergedSnapshotCached("staffs:all", "staffs:overlay"),
+  ]);
+
+  const hasSeedData =
+    hasAnyRows(orders) ||
+    hasAnyRows(invoices) ||
+    hasAnyRows(expenses) ||
+    hasAnyRows(customerPayments) ||
+    hasAnyRows(supplierPayments) ||
+    hasAnyRows(staffPayments) ||
+    hasAnyRows(staffRecords) ||
+    hasAnyRows(crpRecords) ||
+    hasAnyRows(customers) ||
+    hasAnyRows(suppliers) ||
+    hasAnyRows(staff);
+
+  if (!hasSeedData && typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      await hydrateDashboardSnapshotsFromCloud();
+      return ensureDashboardSnapshotsReady();
+    } catch {
+      return {
+        orders,
+        invoices,
+        expenses,
+        customerPayments,
+        supplierPayments,
+        staffPayments,
+        staffRecords,
+        crpRecords,
+        customers,
+        suppliers,
+        staff,
+      };
+    }
+  }
+
+  return {
+    orders,
+    invoices,
+    expenses,
+    customerPayments,
+    supplierPayments,
+    staffPayments,
+    staffRecords,
+    crpRecords,
+    customers,
+    suppliers,
+    staff,
+  };
+};
+
 const toMillis = (value) => {
   if (!value) return 0;
   const d = new Date(value).getTime();
@@ -92,8 +231,11 @@ const monthKeyFromDate = (value) => {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 };
 
-const isAllowanceEligible = ({ recordCount, absentCount, halfCount }) =>
-  recordCount >= 26 && absentCount === 0 && halfCount <= 1;
+const applyAttendanceAllowanceCounters = (target, attendanceRule) => {
+  if (!target || !attendanceRule) return;
+  if (attendanceRule.allowance_code === "absent") target.absentCount += 1;
+  if (attendanceRule.allowance_code === "half") target.halfCount += 1;
+};
 
 const formatYmdLocal = (date) => {
   const d = new Date(date);
@@ -445,7 +587,7 @@ const buildCrpStaffMonthlySummaryLocal = ({ staff, crpRecords, staffPayments, se
   return total;
 };
 
-const buildStaffMonthlySummaryLocal = ({ staff, staffRecords, staffPayments, selectedMonth }) => {
+const buildStaffMonthlySummaryLocal = ({ staff, staffRecords, staffPayments, selectedMonth, ruleData }) => {
   const prevMonthKey = previousMonth(selectedMonth);
 
   const embroideryStaff = (staff || []).filter((row) => String(row?.category || "Embroidery") === "Embroidery");
@@ -488,6 +630,7 @@ const buildStaffMonthlySummaryLocal = ({ staff, staffRecords, staffPayments, sel
         currentAdvance: 0,
         currentPayment: 0,
         currentAdjustment: 0,
+        paymentBreakdown: {},
       },
     ])
   );
@@ -512,8 +655,7 @@ const buildStaffMonthlySummaryLocal = ({ staff, staffRecords, staffPayments, sel
         allowanceCandidate: null,
       };
       prev.recordCount += 1;
-      if (rec?.attendance === "Absent") prev.absentCount += 1;
-      if (rec?.attendance === "Half") prev.halfCount += 1;
+      applyAttendanceAllowanceCounters(prev, getAttendanceRule(ruleData, rec?.attendance));
       prev.finalAmount += Number(rec?.final_amount || 0);
       const allowance = Number(rec?.config_snapshot?.allowance);
       if (Number.isFinite(allowance) && allowance >= 0) prev.allowanceCandidate = allowance;
@@ -528,8 +670,9 @@ const buildStaffMonthlySummaryLocal = ({ staff, staffRecords, staffPayments, sel
     current.currentFinal += Number(rec?.final_amount || 0);
     current.currentBonusQty += Number(rec?.bonus_qty || 0);
     current.currentBonusAmt += Number(rec?.bonus_amount || 0);
-    if (rec?.attendance === "Absent") current.currentAbsent += 1;
-    if (rec?.attendance === "Half") current.currentHalf += 1;
+    const attendanceRule = getAttendanceRule(ruleData, rec?.attendance);
+    if (attendanceRule?.allowance_code === "absent") current.currentAbsent += 1;
+    if (attendanceRule?.allowance_code === "half") current.currentHalf += 1;
     const allowance = Number(rec?.config_snapshot?.allowance);
     if (Number.isFinite(allowance) && allowance >= 0) current.currentAllowanceCandidate = allowance;
   });
@@ -540,8 +683,12 @@ const buildStaffMonthlySummaryLocal = ({ staff, staffRecords, staffPayments, sel
       const current = summaryByStaff.get(row.staffId);
       if (!current) return;
       current.arrears += Number(row.finalAmount || 0);
-      if (isAllowanceEligible(row)) {
-        current.arrears += Number(row.allowanceCandidate ?? DEFAULT_ALLOWANCE);
+      if (isAllowanceEligibleWithRule({
+        record_count: row.recordCount,
+        absent_count: row.absentCount,
+        half_count: row.halfCount,
+      }, ruleData)) {
+        current.arrears += Number(row.allowanceCandidate ?? 0);
       }
     });
 
@@ -554,18 +701,21 @@ const buildStaffMonthlySummaryLocal = ({ staff, staffRecords, staffPayments, sel
     const paymentMonth = typeof payment?.month === "string" && payment.month ? payment.month : "";
     if (!paymentMonth) return;
     const isHistoryPayment = paymentMonth <= prevMonthKey;
+    const paymentType = String(payment?.type || "").trim();
+    const paymentRule = getStaffPaymentTypeRule(ruleData, paymentType);
 
     if (isHistoryPayment) {
-      current.arrears -= amount;
+      current.arrears = applyPaymentEffect(amount, paymentRule?.history_effect, current.arrears);
       return;
     }
 
     if (paymentMonth !== selectedMonth) return;
 
-    current.currentDeduction += amount;
-    if (payment?.type === "advance") current.currentAdvance += amount;
-    if (payment?.type === "payment") current.currentPayment += amount;
-    if (payment?.type === "adjustment") current.currentAdjustment += amount;
+    current.paymentBreakdown[paymentType] = Number(current.paymentBreakdown[paymentType] || 0) + amount;
+    if (paymentType === "advance") current.currentAdvance += amount;
+    if (paymentType === "payment") current.currentPayment += amount;
+    if (paymentType === "adjustment") current.currentAdjustment += amount;
+    if (paymentRule?.current_effect === "subtract") current.currentDeduction += amount;
   });
 
   let staffWithRecords = 0;
@@ -589,15 +739,20 @@ const buildStaffMonthlySummaryLocal = ({ staff, staffRecords, staffPayments, sel
 
   summaryByStaff.forEach((row) => {
     if (row.currentRecordCount > 0) staffWithRecords += 1;
-    const allowance = isAllowanceEligible({
-      recordCount: row.currentRecordCount,
-      absentCount: row.currentAbsent,
-      halfCount: row.currentHalf,
-    })
-      ? Number(row.currentAllowanceCandidate ?? DEFAULT_ALLOWANCE)
+    const allowance = isAllowanceEligibleWithRule({
+      record_count: row.currentRecordCount,
+      absent_count: row.currentAbsent,
+      half_count: row.currentHalf,
+    }, ruleData)
+      ? Number(row.currentAllowanceCandidate ?? 0)
       : 0;
 
     const workAmount = row.currentFinal - row.currentBonusAmt;
+    const startingBalance = row.arrears + row.currentFinal + allowance;
+    const balance = Object.entries(row.paymentBreakdown || {}).reduce((acc, [type, amount]) => {
+      const paymentRule = getStaffPaymentTypeRule(ruleData, type);
+      return applyPaymentEffect(amount, paymentRule?.current_effect, acc);
+    }, startingBalance);
 
     total.record_count += row.currentRecordCount;
     total.work_amount += workAmount;
@@ -609,7 +764,6 @@ const buildStaffMonthlySummaryLocal = ({ staff, staffRecords, staffPayments, sel
     total.deduction_advance_amount += row.currentAdvance;
     total.deduction_payment_amount += row.currentPayment;
     total.deduction_adjustment_amount += row.currentAdjustment;
-    const balance = row.arrears + row.currentFinal + allowance - row.currentDeduction;
     total.balance_amount += balance;
     total.by_staff.push({
       staff_id: row.staff_id,
@@ -625,6 +779,7 @@ const buildStaffMonthlySummaryLocal = ({ staff, staffRecords, staffPayments, sel
       deduction_advance_amount: row.currentAdvance,
       deduction_payment_amount: row.currentPayment,
       deduction_adjustment_amount: row.currentAdjustment,
+      payment_breakdown: row.paymentBreakdown,
       balance_amount: balance,
     });
   });
@@ -647,17 +802,20 @@ export const fetchDashboardSummaryLocalFirst = async (params = {}) => {
   const monthRange = toMonthRange(selectedMonth);
   const today = formatYmdLocal(new Date());
 
-  const orders = await getMergedSnapshotCached("orders:all", "orders:overlay");
-  const invoices = await getMergedSnapshotCached("invoices:all", "invoices:overlay");
-  const expenses = await getMergedSnapshotCached("expenses:all", "expenses:overlay");
-  const customerPayments = await getMergedSnapshotCached("customerPayments:all", "customerPayments:overlay");
-  const supplierPayments = await getMergedSnapshotCached("supplierPayments:all", "supplierPayments:overlay");
-  const staffPayments = await getMergedSnapshotCached("staffPayments:all", "staffPayments:overlay");
-  const staffRecords = await getMergedSnapshotCached("staffRecords:all", "staffRecords:overlay");
-  const crpRecords = await getMergedSnapshotCached("crpStaffRecords:all", "crpStaffRecords:overlay");
-  const customers = await getMergedSnapshotCached("customers:all", "customers:overlay");
-  const suppliers = await getMergedSnapshotCached("suppliers:all", "suppliers:overlay");
-  const staff = await getMergedSnapshotCached("staffs:all", "staffs:overlay");
+  const {
+    orders,
+    invoices,
+    expenses,
+    customerPayments,
+    supplierPayments,
+    staffPayments,
+    staffRecords,
+    crpRecords,
+    customers,
+    suppliers,
+    staff,
+  } = await ensureDashboardSnapshotsReady();
+  const ruleData = (await getEntitySnapshot("business:rule_data")) || {};
 
   const todayOrders = orders.filter((row) => inDateRange(row?.date, today, today));
   const todayInvoices = invoices.filter((row) => inDateRange(row?.invoice_date, today, today));
@@ -719,6 +877,7 @@ export const fetchDashboardSummaryLocalFirst = async (params = {}) => {
         staffRecords,
         staffPayments,
         selectedMonth,
+        ruleData,
       }),
       payment_in: { count: monthCustomerPayments.length, amount: sumBy(monthCustomerPayments, "amount") },
       payment_out: {
@@ -761,11 +920,7 @@ export const fetchDashboardTrendLocalFirst = async (params = {}) => {
   const trend = buildTrendDays(from, to);
   const trendMap = new Map(trend.map((row) => [row.day, row]));
 
-  const orders = await getMergedSnapshotCached("orders:all", "orders:overlay");
-  const expenses = await getMergedSnapshotCached("expenses:all", "expenses:overlay");
-  const customerPayments = await getMergedSnapshotCached("customerPayments:all", "customerPayments:overlay");
-  const supplierPayments = await getMergedSnapshotCached("supplierPayments:all", "supplierPayments:overlay");
-  const staffPayments = await getMergedSnapshotCached("staffPayments:all", "staffPayments:overlay");
+  const { orders, expenses, customerPayments, supplierPayments, staffPayments } = await ensureDashboardSnapshotsReady();
 
   orders.forEach((row) => {
     if (!inDateRange(row?.date, from, to)) return;

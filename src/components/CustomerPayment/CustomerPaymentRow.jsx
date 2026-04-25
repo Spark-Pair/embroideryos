@@ -3,14 +3,6 @@ import { useState } from "react";
 import ContextMenu from "../ContextMenu";
 import { formatDate, formatNumbers } from "../../utils";
 
-const METHOD_LABEL = {
-  cash: "Cash",
-  cheque: "Cheque",
-  slip: "Slip",
-  online: "Online",
-  adjustment: "Adjustment",
-};
-
 const needsClearDate = (method) => method === "cheque" || method === "slip";
 
 export default function CustomerPaymentRow({ item, index, startIndex, onView, onEdit }) {
@@ -29,7 +21,7 @@ export default function CustomerPaymentRow({ item, index, startIndex, onView, on
         {formatDate(item.date, "dd-MMM-YYYY, DDD")}
       </td>
       <td className="px-7 py-4 text-sm text-gray-500 font-light">
-        {METHOD_LABEL[item.method] || item.method || "-"}
+        {item.method || "-"}
       </td>
       <td className="px-7 py-4 text-sm font-medium tracking-wider text-gray-800">
         {formatNumbers(item.amount, 2)}

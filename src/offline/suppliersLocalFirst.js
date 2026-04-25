@@ -354,9 +354,17 @@ export const fetchSuppliersLocalFirst = async (params = {}) => {
     return res.data;
   }
 
-  const overlay = await getOverlay();
-  const base = await getAllBaseSuppliers();
-  const merged = withOverlayList(base, overlay);
+  let overlay = await getOverlay();
+  let base = await getAllBaseSuppliers();
+  let merged = withOverlayList(base, overlay);
+  if (!merged.length && typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      await refreshAllSnapshotFromCloud();
+      overlay = await getOverlay();
+      base = await getAllBaseSuppliers();
+      merged = withOverlayList(base, overlay);
+    } catch {}
+  }
   const filtered = applyFilters(merged, params);
   const withBalances = await attachSupplierBalances(filtered);
 

@@ -5,18 +5,18 @@ import Button from "./Button";
 import { SectionHeader } from "./SectionHeader";
 import { formatNumbers } from "../utils";
 import { fetchProductionConfig } from "../api/productionConfig";
+import {
+  EMPTY_PRODUCTION_CONFIG,
+  calculateProductionRow,
+  calculateProductionTotals,
+  getModeSummary,
+  getProductionAmountLabels,
+  getTargetProgress,
+  isTargetMode,
+  normalizeProductionConfig,
+} from "../utils/productionPayout";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const DEFAULT_CONFIG = {
-  stitch_rate:      0.001,
-  applique_rate:    1.111,
-  on_target_pct:    30,
-  after_target_pct: 34,
-  pcs_per_round:    12,
-  stitch_cap:       5000,
-  target_amount:    900,
-};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -24,26 +24,7 @@ const todayInput = () => new Date().toISOString().slice(0, 10);
 const emptyRow   = () => ({ _key: crypto.randomUUID(), d_stitch: "", applique: "", pcs: "", rounds: "" });
 
 function calcRow(row, cfg) {
-  const stitchRaw = parseFloat(row.d_stitch) || 0;
-  const pcs       = parseFloat(row.pcs)      || 0;
-  const rounds    = parseFloat(row.rounds)   || 0;
-  const applique  = parseFloat(row.applique) || 0;
-
-  const stitch_cap      = cfg.stitch_cap      ?? DEFAULT_CONFIG.stitch_cap;
-  const stitch          = stitchRaw > 0 && stitchRaw <= stitch_cap ? stitch_cap : stitchRaw;
-  const stitch_rate     = cfg.stitch_rate      ?? DEFAULT_CONFIG.stitch_rate;
-  const applique_rate   = cfg.applique_rate    ?? DEFAULT_CONFIG.applique_rate;
-  const on_target_pct   = cfg.on_target_pct    ?? DEFAULT_CONFIG.on_target_pct;
-  const after_target_pct = cfg.after_target_pct ?? DEFAULT_CONFIG.after_target_pct;
-
-  const total_stitch     = stitchRaw * rounds;
-  const stitch_base      = (stitch * stitch_rate * pcs) / 100;
-  const applique_base    = (applique_rate * applique * pcs) / 100;
-  const combined         = stitch_base + applique_base;
-  const on_target_amt    = combined * on_target_pct;
-  const after_target_amt = combined * after_target_pct;
-
-  return { total_stitch, on_target_amt, after_target_amt };
+  return calculateProductionRow(row, cfg);
 }
 
 function syncPcsRounds(field, value, pcsPerRound) {
@@ -56,32 +37,21 @@ function syncPcsRounds(field, value, pcsPerRound) {
 }
 
 function calcTotals(rows, cfg) {
-  return rows.reduce(
-    (acc, row) => {
-      const { total_stitch, on_target_amt, after_target_amt } = calcRow(row, cfg);
-      return {
-        pcs:              acc.pcs    + (parseFloat(row.pcs)    || 0),
-        rounds:           acc.rounds + (parseFloat(row.rounds) || 0),
-        total_stitch:     acc.total_stitch     + total_stitch,
-        on_target_amt:    acc.on_target_amt    + on_target_amt,
-        after_target_amt: acc.after_target_amt + after_target_amt,
-      };
-    },
-    { pcs: 0, rounds: 0, total_stitch: 0, on_target_amt: 0, after_target_amt: 0 }
-  );
+  return calculateProductionTotals(rows, cfg);
 }
 
 // ─── Production Row ───────────────────────────────────────────────────────────
 
 function ProductionRow({ row, index, cfg, onChange, onRemove, canRemove, onAddRow, isLast }) {
   const { total_stitch, on_target_amt, after_target_amt } = calcRow(row, cfg);
+  const amountLabels = getProductionAmountLabels(cfg);
 
   const handleFocus = (e) => e.target.select();
 
   const handle = (field) => (e) => {
     const val = e.target.value;
     if (field === "pcs" || field === "rounds")
-      onChange(row._key, { ...row, ...syncPcsRounds(field, val, cfg.pcs_per_round ?? DEFAULT_CONFIG.pcs_per_round) });
+      onChange(row._key, { ...row, ...syncPcsRounds(field, val, cfg.pcs_per_round || 0) });
     else
       onChange(row._key, { ...row, [field]: val });
   };
@@ -111,7 +81,9 @@ function ProductionRow({ row, index, cfg, onChange, onRemove, canRemove, onAddRo
       </td>
       <td className="px-3 py-2 text-right text-sm text-gray-600 tabular-nums">{formatNumbers(total_stitch, 0)}</td>
       <td className="px-3 py-2 text-right text-sm font-medium text-rose-700 tabular-nums">{formatNumbers(on_target_amt, 2)}</td>
-      <td className="px-3 py-2 text-right text-sm font-medium text-emerald-700 tabular-nums">{formatNumbers(after_target_amt, 2)}</td>
+      {amountLabels.secondary && (
+        <td className="px-3 py-2 text-right text-sm font-medium text-emerald-700 tabular-nums">{formatNumbers(after_target_amt, 2)}</td>
+      )}
       <td className="px-3 py-2 text-center w-8">
         <button
           type="button"
@@ -125,7 +97,8 @@ function ProductionRow({ row, index, cfg, onChange, onRemove, canRemove, onAddRo
   );
 }
 
-function TotalsRow({ totals }) {
+function TotalsRow({ totals, cfg }) {
+  const amountLabels = getProductionAmountLabels(cfg);
   return (
     <tr className="border-t border-gray-300 bg-gray-50/80 font-semibold text-sm">
       <td className="px-3.5 py-2.5 text-xs text-gray-500 uppercase tracking-wider" colSpan={3}>Totals</td>
@@ -133,7 +106,9 @@ function TotalsRow({ totals }) {
       <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{formatNumbers(totals.pcs, 0)}</td>
       <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{formatNumbers(totals.total_stitch, 0)}</td>
       <td className="px-3 py-2.5 text-right tabular-nums text-rose-700">{formatNumbers(totals.on_target_amt, 2)}</td>
-      <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700">{formatNumbers(totals.after_target_amt, 2)}</td>
+      {amountLabels.secondary && (
+        <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700">{formatNumbers(totals.after_target_amt, 2)}</td>
+      )}
       <td />
     </tr>
   );
@@ -145,7 +120,7 @@ function TotalsRow({ totals }) {
 
 export default function TargetCalculatorModal({ onClose }) {
   const [cfgDate,    setCfgDate]    = useState(todayInput());
-  const [cfg,        setCfg]        = useState(DEFAULT_CONFIG);
+  const [cfg,        setCfg]        = useState(EMPTY_PRODUCTION_CONFIG);
   const [cfgLoading, setCfgLoading] = useState(false);
   const [rows,       setRows]       = useState([emptyRow()]);
 
@@ -156,9 +131,9 @@ export default function TargetCalculatorModal({ onClose }) {
       setCfgLoading(true);
       try {
         const res = await fetchProductionConfig(cfgDate);
-        setCfg(res?.data ? { ...DEFAULT_CONFIG, ...res.data } : DEFAULT_CONFIG);
+        setCfg(res?.data ? normalizeProductionConfig(res.data) : normalizeProductionConfig(EMPTY_PRODUCTION_CONFIG));
       } catch {
-        setCfg(DEFAULT_CONFIG);
+        setCfg(normalizeProductionConfig(EMPTY_PRODUCTION_CONFIG));
       } finally {
         setCfgLoading(false);
       }
@@ -167,9 +142,11 @@ export default function TargetCalculatorModal({ onClose }) {
   }, [cfgDate]);
 
   const totals = useMemo(() => calcTotals(rows, cfg), [rows, cfg]);
-
-  const targetAmount = cfg.target_amount ?? DEFAULT_CONFIG.target_amount;
-  const targetMet    = totals.on_target_amt >= targetAmount;
+  const amountLabels = getProductionAmountLabels(cfg);
+  const targetState = getTargetProgress(totals, cfg);
+  const targetAmount = cfg.target_amount || 0;
+  const targetMet = targetState.targetMet;
+  const targetMode = isTargetMode(cfg);
 
   // ── Row handlers ──
   const handleRowChange = (key, updated) =>
@@ -240,8 +217,7 @@ export default function TargetCalculatorModal({ onClose }) {
             {[
               { label: "Stitch Rate",    value: formatNumbers(cfg.stitch_rate, 3) },
               { label: "Applique Rate",  value: formatNumbers(cfg.applique_rate, 3) },
-              { label: "On Target",      value: `${formatNumbers(cfg.on_target_pct, 0)}%` },
-              { label: "After Target",   value: `${formatNumbers(cfg.after_target_pct, 0)}%` },
+              { label: "Payout Mode",    value: getModeSummary(cfg) },
             ].map(({ label, value }) => (
               <div key={label} className="flex flex-col gap-1">
                 <label className="text-xs font-medium text-gray-500">{label}</label>
@@ -259,7 +235,7 @@ export default function TargetCalculatorModal({ onClose }) {
           <SectionHeader
             step="2"
             title="Production Entry"
-            subtitle={`${cfg.pcs_per_round ?? DEFAULT_CONFIG.pcs_per_round} PCs/Round · Stitch Cap: ${formatNumbers(cfg.stitch_cap ?? DEFAULT_CONFIG.stitch_cap, 0)}`}
+            subtitle={`${cfg.pcs_per_round ? `${cfg.pcs_per_round} PCs/Round` : "PCs/Round not set"}${cfg.stitch_cap ? ` · Stitch Cap: ${formatNumbers(cfg.stitch_cap, 0)}` : ""}`}
             right={
               <Button size="sm" variant="primary" outline icon={Plus} onClick={handleAddRow}>
                 Add Row
@@ -283,8 +259,10 @@ export default function TargetCalculatorModal({ onClose }) {
                     <th className="px-1.5 py-2.5 text-left">Rounds</th>
                     <th className="px-1.5 py-2.5 text-left">PCs</th>
                     <th className="px-3 py-2.5 text-right text-nowrap">Total Stitch</th>
-                    <th className="px-3 py-2.5 text-right text-nowrap text-rose-600">On Target ({cfg.on_target_pct}%)</th>
-                    <th className="px-3 py-2.5 text-right text-nowrap text-emerald-600">After Target ({cfg.after_target_pct}%)</th>
+                    <th className="px-3 py-2.5 text-right text-nowrap text-rose-600">{amountLabels.primary}</th>
+                    {amountLabels.secondary && (
+                      <th className="px-3 py-2.5 text-right text-nowrap text-emerald-600">{amountLabels.secondary}</th>
+                    )}
                     <th className="px-2 py-2.5 w-8" />
                   </tr>
                 </thead>
@@ -304,14 +282,14 @@ export default function TargetCalculatorModal({ onClose }) {
                   ))}
                 </tbody>
                 <tfoot>
-                  <TotalsRow totals={totals} />
+                  <TotalsRow totals={totals} cfg={cfg} />
                 </tfoot>
               </table>
             </div>
           )}
 
           {/* ── Target Status Bar ── */}
-          {totals.on_target_amt > 0 && (
+          {targetMode && totals.on_target_amt > 0 && (
             <div className={`flex items-center mt-2 gap-3 rounded-xl px-4 py-2.5 text-xs
               ${targetMet ? "bg-emerald-50 border border-emerald-200" : "bg-amber-50 border border-amber-200"}`}>
               {targetMet
@@ -344,8 +322,8 @@ export default function TargetCalculatorModal({ onClose }) {
             { label: "Total Pcs",    value: formatNumbers(totals.pcs, 0),              color: "text-gray-800" },
             { label: "Total Rounds", value: formatNumbers(totals.rounds, 0),            color: "text-gray-800" },
             { label: "Total Stitch", value: formatNumbers(totals.total_stitch, 0),      color: "text-gray-800" },
-            { label: "On Target",    value: formatNumbers(totals.on_target_amt, 2),     color: "text-rose-700",    bg: "bg-rose-50",    border: "border-rose-200" },
-            { label: "After Target", value: formatNumbers(totals.after_target_amt, 2),  color: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200" },
+            { label: amountLabels.summaryPrimary, value: formatNumbers(totals.on_target_amt, 2), color: "text-rose-700", bg: "bg-rose-50", border: "border-rose-200" },
+            ...(amountLabels.summarySecondary ? [{ label: amountLabels.summarySecondary, value: formatNumbers(totals.after_target_amt, 2), color: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200" }] : []),
           ].map(({ label, value, color, bg = "bg-white", border = "border-gray-200" }) => (
             <div key={label} className={`rounded-2xl border ${border} ${bg} px-4 py-3.5`}>
               <p className="text-[10px] uppercase tracking-wider font-medium text-gray-400 mb-1">{label}</p>

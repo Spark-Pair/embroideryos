@@ -1,15 +1,14 @@
-import { apiClient } from "./apiClient";
+import {
+  createSubscriptionPaymentLocalFirst,
+  fetchSubscriptionPaymentStatsLocalFirst,
+  fetchSubscriptionPaymentsLocalFirst,
+  updateSubscriptionPaymentLocalFirst,
+} from "../offline/billingLocalFirst";
 
-const SUBSCRIPTION_PAYMENTS_URL = "/subscription-payments";
+export const fetchSubscriptionPayments = (params) => fetchSubscriptionPaymentsLocalFirst(params);
 
-export const fetchSubscriptionPayments = (params) =>
-  apiClient.get(SUBSCRIPTION_PAYMENTS_URL, { params }).then((r) => r.data);
+export const fetchSubscriptionPaymentStats = (params) => fetchSubscriptionPaymentStatsLocalFirst(params);
 
-export const fetchSubscriptionPaymentStats = (params) =>
-  apiClient.get(`${SUBSCRIPTION_PAYMENTS_URL}/stats`, { params }).then((r) => r.data);
+export const createSubscriptionPayment = (data) => createSubscriptionPaymentLocalFirst(data);
 
-export const createSubscriptionPayment = (data) =>
-  apiClient.post(SUBSCRIPTION_PAYMENTS_URL, data).then((r) => r.data);
-
-export const updateSubscriptionPayment = (id, data) =>
-  apiClient.put(`${SUBSCRIPTION_PAYMENTS_URL}/${id}`, data).then((r) => r.data);
+export const updateSubscriptionPayment = (id, data) => updateSubscriptionPaymentLocalFirst(id, data);

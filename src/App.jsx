@@ -32,44 +32,86 @@ const SalarySlips = lazy(() => import("./pages/SalarySlips"));
 const KeyboardShortcuts = lazy(() => import("./pages/KeyboardShortcuts"));
 const StaffPayments = lazy(() => import("./pages/StaffPayments"));
 
+const NEGATIVE_NUMBER_REGEX = /^\(?\s*(?:PKR|RS\.?)?\s*-\s*\d[\d,]*(?:\.\d+)?\s*\)?$/i;
+const NEGATIVE_NUMBER_CLASS = "is-negative-number";
+const NON_NEGATIVE_TAGS = new Set(["INPUT", "TEXTAREA", "OPTION", "SCRIPT", "STYLE"]);
+
 export default function App() {
   useEffect(() => {
     let rafId = 0;
+    const pendingElements = new Set();
 
-    const NEGATIVE_NUMBER_REGEX = /^\(?\s*(?:PKR|RS\.?)?\s*-\s*\d[\d,]*(?:\.\d+)?\s*\)?$/i;
+    const updateElementNegativeClass = (element) => {
+      if (!(element instanceof Element)) return;
+      if (NON_NEGATIVE_TAGS.has(element.tagName)) return;
 
-    const applyNegativeClass = () => {
-      const root = document.getElementById("root");
-      if (!root) return;
+      const directText = Array.from(element.childNodes)
+        .filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => node.nodeValue || "")
+        .join(" ")
+        .trim()
+        .replace(/\s+/g, " ");
 
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-      let node = walker.nextNode();
-
-      while (node) {
-        const parent = node.parentElement;
-        if (parent) {
-          const tag = parent.tagName;
-          if (tag !== "INPUT" && tag !== "TEXTAREA" && tag !== "OPTION") {
-            const text = (node.nodeValue || "").trim().replace(/\s+/g, " ");
-            const isNegative = NEGATIVE_NUMBER_REGEX.test(text);
-            parent.classList.toggle("is-negative-number", isNegative);
-          }
-        }
-        node = walker.nextNode();
-      }
+      element.classList.toggle(
+        NEGATIVE_NUMBER_CLASS,
+        Boolean(directText) && NEGATIVE_NUMBER_REGEX.test(directText)
+      );
     };
 
-    const scheduleApply = () => {
+    const flushPendingElements = () => {
+      pendingElements.forEach((element) => updateElementNegativeClass(element));
+      pendingElements.clear();
+      rafId = 0;
+    };
+
+    const queueElement = (element) => {
+      if (!(element instanceof Element)) return;
+      pendingElements.add(element);
       if (rafId) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(applyNegativeClass);
+      rafId = requestAnimationFrame(flushPendingElements);
     };
-
-    scheduleApply();
 
     const root = document.getElementById("root");
     if (!root) return undefined;
 
-    const observer = new MutationObserver(scheduleApply);
+    queueElement(root);
+    root.querySelectorAll("*").forEach((element) => pendingElements.add(element));
+    rafId = requestAnimationFrame(flushPendingElements);
+
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === "characterData") {
+          queueElement(mutation.target.parentElement);
+          return;
+        }
+
+        if (mutation.target instanceof Element) {
+          queueElement(mutation.target);
+        }
+
+        mutation.addedNodes.forEach((node) => {
+          if (!(node instanceof Element)) return;
+          queueElement(node);
+          node.querySelectorAll("*").forEach((element) => pendingElements.add(element));
+        });
+
+        mutation.removedNodes.forEach((node) => {
+          const parent = mutation.target instanceof Element ? mutation.target : null;
+          if (parent) queueElement(parent);
+          if (node instanceof Element) {
+            node.classList.remove(NEGATIVE_NUMBER_CLASS);
+            node.querySelectorAll(`.${NEGATIVE_NUMBER_CLASS}`).forEach((element) => {
+              element.classList.remove(NEGATIVE_NUMBER_CLASS);
+            });
+          }
+        });
+      });
+
+      if (!rafId && pendingElements.size > 0) {
+        rafId = requestAnimationFrame(flushPendingElements);
+      }
+    });
+
     observer.observe(root, {
       childList: true,
       subtree: true,
@@ -162,44 +204,72 @@ export default function App() {
               >
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/businesses" element={<Businesses />} />
+                <Route
+                  path="/businesses"
+                  element={
+                    <RoleRoute allow={["developer"]}>
+                      <Businesses />
+                    </RoleRoute>
+                  }
+                />
                 <Route
                   path="/users"
                   element={
-                    <RoleRoute allow={["developer", "admin"]}>
+                    <RoleRoute allow={["developer"]} accessKey="users_manage">
                       <Users />
                     </RoleRoute>
                   }
                 />
-                <Route path="/subscriptions" element={<Subscriptions />} />
-                <Route path="/plans" element={<Plans />} />
-                <Route path="/payments" element={<Payments />} />
+                <Route
+                  path="/subscriptions"
+                  element={
+                    <RoleRoute allow={["developer"]}>
+                      <Subscriptions />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="/plans"
+                  element={
+                    <RoleRoute allow={["developer"]}>
+                      <Plans />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="/payments"
+                  element={
+                    <RoleRoute allow={["developer"]}>
+                      <Payments />
+                    </RoleRoute>
+                  }
+                />
                 <Route path="/sessions" element={<Sessions />} />
                 <Route
                   path="/settings"
                   element={
-                    <RoleRoute allow={["admin", "staff"]}>
+                    <RoleRoute accessKey="settings">
                       <Settings />
                     </RoleRoute>
                   }
                 />
-                <Route path="/staff" element={<Staff />} />
-                <Route path="/customers" element={<Customers />} />
-                <Route path="/suppliers" element={<Suppliers />} />
-                <Route path="/expenses" element={<Expenses />} />
-                <Route path="/orders" element={<Orders />} />
-                <Route path="/invoices" element={<Invoices />} />
-                <Route path="/customer_payments" element={<CustomerPayments />} />
-                <Route path="/supplier_payments" element={<SupplierPayments />} />
-                <Route path="/statements" element={<Statements />} />
-                <Route path="/staff-records" element={<StaffRecords />} />
-                <Route path="/crp-staff-records" element={<CrpStaffRecords />} />
-                <Route path="/salary-slips" element={<SalarySlips />} />
-                <Route path="/staff-payments" element={<StaffPayments />} />
+                <Route path="/staff" element={<RoleRoute accessKey="staff"><Staff /></RoleRoute>} />
+                <Route path="/customers" element={<RoleRoute accessKey="customers"><Customers /></RoleRoute>} />
+                <Route path="/suppliers" element={<RoleRoute accessKey="suppliers"><Suppliers /></RoleRoute>} />
+                <Route path="/expenses" element={<RoleRoute accessKey="expenses"><Expenses /></RoleRoute>} />
+                <Route path="/orders" element={<RoleRoute accessKey="orders"><Orders /></RoleRoute>} />
+                <Route path="/invoices" element={<RoleRoute accessKey="invoices"><Invoices /></RoleRoute>} />
+                <Route path="/customer_payments" element={<RoleRoute accessKey="customer_payments"><CustomerPayments /></RoleRoute>} />
+                <Route path="/supplier_payments" element={<RoleRoute accessKey="supplier_payments"><SupplierPayments /></RoleRoute>} />
+                <Route path="/statements" element={<RoleRoute accessKey="statements"><Statements /></RoleRoute>} />
+                <Route path="/staff-records" element={<RoleRoute accessKey="staff_records"><StaffRecords /></RoleRoute>} />
+                <Route path="/crp-staff-records" element={<RoleRoute accessKey="crp_staff_records"><CrpStaffRecords /></RoleRoute>} />
+                <Route path="/salary-slips" element={<RoleRoute accessKey="salary_slips"><SalarySlips /></RoleRoute>} />
+                <Route path="/staff-payments" element={<RoleRoute accessKey="staff_payments"><StaffPayments /></RoleRoute>} />
                 <Route
                   path="/keyboard-shortcuts"
                   element={
-                    <RoleRoute allow={["admin", "staff"]}>
+                    <RoleRoute accessKey="keyboard_shortcuts">
                       <KeyboardShortcuts />
                     </RoleRoute>
                   }

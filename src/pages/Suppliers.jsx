@@ -93,11 +93,18 @@ export default function Suppliers() {
     try {
       const res = await fetchExpenseItems({ status: "active" });
       const options = (res?.data || [])
-        .filter((item) => item?.expense_type !== "fixed")
+        .filter((item) => !String(item?.fixed_source || "").trim())
         .map((item) => String(item?.name || "").trim())
         .filter(Boolean)
         .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
-      setExpenseItemOptions(Array.from(new Set(options)));
+      const uniqueOptions = options.reduce((acc, name) => {
+        if (acc.some((entry) => entry.localeCompare(name, undefined, { sensitivity: "base" }) === 0)) {
+          return acc;
+        }
+        acc.push(name);
+        return acc;
+      }, []);
+      setExpenseItemOptions(uniqueOptions);
     } catch {
       setExpenseItemOptions([]);
     }

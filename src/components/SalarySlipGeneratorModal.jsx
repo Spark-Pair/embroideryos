@@ -150,6 +150,13 @@ export default function SalarySlipGeneratorModal({ onClose }) {
                       -webkit-print-color-adjust: exact !important; 
                       print-color-adjust: exact !important; 
                   } 
+
+                  #printable-area .net-amount-row,
+                  #printable-area .net-amount-row * {
+                      background-color: #0f766e !important;
+                      color: #ffffff !important;
+                      -webkit-text-fill-color: #ffffff !important;
+                  }
                 }
               `}</style>
 
@@ -204,9 +211,22 @@ export default function SalarySlipGeneratorModal({ onClose }) {
                                     </div>
                                 </div>
                                 
-                                <div className="bg-teal-700/20 py-2 px-3.5 flex items-center justify-between rounded-lg">
-                                    <h3 className="font-bold tracking-wide text-gray-900 capitalize text-xs">Net Amount:</h3>
-                                    <p className="text-teal-800 font-semibold text-sm">{calc.total.toLocaleString()}</p>
+                                <div
+                                    className="net-amount-row bg-teal-700 py-2 px-3.5 flex items-center justify-between rounded-lg"
+                                    style={{ backgroundColor: "#0f766e" }}
+                                >
+                                    <h3
+                                        className="font-bold tracking-wide text-white capitalize text-xs"
+                                        style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}
+                                    >
+                                        Net Amount:
+                                    </h3>
+                                    <p
+                                        className="text-white font-semibold text-sm"
+                                        style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}
+                                    >
+                                        {calc.total.toLocaleString()}
+                                    </p>
                                 </div>
 
                                 <div className="mt-2 py-2 px-3 text-xs border border-gray-500 rounded-xl">

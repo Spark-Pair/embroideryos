@@ -25,12 +25,7 @@ import CrpMonthlyReportModal from "../components/StaffRecord/CrpMonthlyReportMod
 import { useFormKeyboard } from "../hooks/useFormKeyboard";
 import { useToast } from "../context/ToastContext";
 import { formatDate, formatNumbers } from "../utils";
-
-const CATEGORY_OPTIONS = [
-  { label: "Cropping", value: "Cropping" },
-  { label: "Press", value: "Press" },
-  { label: "Other", value: "Other" },
-];
+import { fetchMyReferenceData } from "../api/business";
 
 function getMonthDateRange(month) {
   if (!month) return { date_from: "", date_to: "" };
@@ -61,7 +56,7 @@ function toQtyDzn(order) {
   return order.unit === "Pcs" ? Number(order.quantity || 0) / 12 : Number(order.quantity || 0);
 }
 
-function CrpRecordFormModal({ isOpen, onClose, onAction, initialData }) {
+function CrpRecordFormModal({ isOpen, onClose, onAction, initialData, categoryOptions = [] }) {
   const monthRef = useRef(null);
   const repeatRef = useRef(null);
   const orderDateRef = useRef(null);
@@ -86,7 +81,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData }) {
     order_description: "",
     quantity_dzn: "",
     staff_id: "",
-    category: "Cropping",
+    category: "",
     type_name: "",
     repeat_record_id: "",
   });
@@ -135,7 +130,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData }) {
         order_description: initialData?.order_description || "",
         quantity_dzn: String(Number(initialData?.quantity_dzn || 0)),
         staff_id: String(initialData?.staff_id?._id || initialData?.staff_id || ""),
-        category: initialData?.category || "Cropping",
+        category: initialData?.category || categoryOptions[0]?.value || "",
         type_name: initialData?.type_name || "",
         repeat_record_id: "",
       });
@@ -147,7 +142,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData }) {
         order_description: "",
         quantity_dzn: "",
         staff_id: "",
-        category: "Cropping",
+        category: categoryOptions[0]?.value || "",
         type_name: "",
         repeat_record_id: "",
       });
@@ -159,7 +154,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData }) {
       setLoadingData(true);
       try {
         const [staffRes, configRes, recordsRes] = await Promise.all([
-          fetchStaffNames({ status: "active", category: "Cropping" }),
+          fetchStaffNames({ status: "active" }),
           fetchCrpRateConfigs({ status: "active" }),
           fetchCrpStaffRecords({ page: 1, limit: 300 }),
         ]);
@@ -176,7 +171,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData }) {
     };
 
     loadInitial();
-  }, [isOpen, isEdit, initialData]);
+  }, [isOpen, isEdit, initialData, categoryOptions]);
 
   useEffect(() => {
     if (!isOpen || !formData.month) return;
@@ -519,7 +514,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData }) {
 
             <Select
               ref={staffRef}
-              label="Staff (Cropping)"
+              label="Staff"
               value={formData.staff_id}
               onChange={(value) => {
                 setFormData((prev) => ({ ...prev, staff_id: value }));
@@ -537,7 +532,8 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData }) {
                 setFormData((prev) => ({ ...prev, category: value, type_name: "" }));
                 focusRef(typeRef);
               }}
-              options={CATEGORY_OPTIONS}
+              options={categoryOptions}
+              placeholder={categoryOptions.length ? "Select category" : "No categories in settings"}
             />
 
             <Select
@@ -573,6 +569,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData }) {
 
 export default function CrpStaffRecords() {
   const { showToast } = useToast();
+  const [referenceData, setReferenceData] = useState({ crp_categories: [] });
 
   const [stats, setStats] = useState({ total_records: 0, total_quantity_dzn: 0, total_amount: 0 });
   const [records, setRecords] = useState([]);
@@ -585,6 +582,10 @@ export default function CrpStaffRecords() {
   const [reportModal, setReportModal] = useState(false);
   const [filters, setFilters] = useState({ month: "", staff_id: "", category: "", type_name: "", date_from: "", date_to: "" });
   const [staffFilterOptions, setStaffFilterOptions] = useState([]);
+  const categoryOptions = useMemo(
+    () => (referenceData.crp_categories || []).map((item) => ({ label: item, value: item })),
+    [referenceData.crp_categories]
+  );
 
   const tableScrollRef = useRef(null);
 
@@ -614,6 +615,18 @@ export default function CrpStaffRecords() {
   useEffect(() => {
     loadRecords();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const loadReferenceData = async () => {
+      try {
+        const res = await fetchMyReferenceData();
+        setReferenceData(res?.reference_data || { crp_categories: [] });
+      } catch {
+        setReferenceData({ crp_categories: [] });
+      }
+    };
+    loadReferenceData();
   }, []);
 
   useEffect(() => {
@@ -757,6 +770,7 @@ export default function CrpStaffRecords() {
         isOpen={formModal.isOpen}
         onClose={() => setFormModal({ isOpen: false, initialData: null })}
         initialData={formModal.initialData}
+        categoryOptions={categoryOptions}
         onAction={async (action, payload) => {
           try {
             if (action === "edit" && payload?.id) {
@@ -791,7 +805,7 @@ export default function CrpStaffRecords() {
             label: "Category",
             type: "select",
             value: filters.category,
-            options: [{ label: "All", value: "" }, ...CATEGORY_OPTIONS],
+            options: [{ label: "All", value: "" }, ...categoryOptions],
             onChange: (v) => setFilters((prev) => ({ ...prev, category: v })),
           },
           { label: "Type", type: "text", value: filters.type_name, onChange: (e) => setFilters((prev) => ({ ...prev, type_name: e.target.value })) },

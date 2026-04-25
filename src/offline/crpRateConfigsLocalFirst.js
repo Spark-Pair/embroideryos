@@ -204,8 +204,33 @@ export const fetchCrpRateConfigsLocalFirst = async (params = {}) => {
       if (typeName && !String(row?.type_name || "").toLowerCase().includes(typeName)) return false;
       return true;
     });
+  let sorted = sortLatestFirst(filtered);
+  if (sorted.length > 0) {
+    if (typeof navigator !== "undefined" && navigator.onLine) {
+      refreshAllSnapshotFromCloud().catch(() => null);
+    }
+    return { success: true, data: sorted };
+  }
 
-  return { success: true, data: sortLatestFirst(filtered) };
+  if (typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      await refreshAllSnapshotFromCloud();
+      const nextMerged = withOverlayList(await getAllBase(), await getOverlay());
+      sorted = sortLatestFirst(
+        nextMerged.filter((row) => {
+          if (status === "active" && !row?.isActive) return false;
+          if (status === "inactive" && row?.isActive) return false;
+          if (category && row?.category !== category) return false;
+          if (typeName && !String(row?.type_name || "").toLowerCase().includes(typeName)) return false;
+          return true;
+        })
+      );
+    } catch {
+      // fall back to local empty state
+    }
+  }
+
+  return { success: true, data: sorted };
 };
 
 export const createCrpRateConfigLocalFirst = async (payload) => {

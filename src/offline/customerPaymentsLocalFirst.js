@@ -301,9 +301,17 @@ export const fetchCustomerPaymentsLocalFirst = async (params = {}) => {
     return res.data;
   }
 
-  const overlay = await getOverlay();
-  const base = await getAllBasePayments();
-  const merged = withOverlayList(base, overlay);
+  let overlay = await getOverlay();
+  let base = await getAllBasePayments();
+  let merged = withOverlayList(base, overlay);
+  if (!merged.length && typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      await refreshAllSnapshotFromCloud();
+      overlay = await getOverlay();
+      base = await getAllBasePayments();
+      merged = withOverlayList(base, overlay);
+    } catch {}
+  }
   const withCustomer = await attachCustomerInfo(merged);
   const filtered = applyFilters(withCustomer, params);
 
@@ -326,30 +334,39 @@ export const fetchCustomerPaymentStatsLocalFirst = async () => {
   const base = await getAllBasePayments();
   const merged = withOverlayList(base, overlay);
 
+  const countsByKey = {};
+  const amountsByKey = {};
   const stats = merged.reduce(
     (acc, row) => {
       acc.total += 1;
-      acc.total_amount += Number(row?.amount || 0);
-      const method = String(row?.method || "");
-      if (method === "cash") acc.cash += 1;
-      if (method === "cheque") acc.cheque += 1;
-      if (method === "slip") acc.slip += 1;
-      if (method === "online") acc.online += 1;
-      if (method === "adjustment") acc.adjustment += 1;
+      const amount = Number(row?.amount || 0);
+      acc.total_amount += amount;
+      const key = String(row?.method || "").trim();
+      if (key) {
+        countsByKey[key] = Number(countsByKey[key] || 0) + 1;
+        amountsByKey[key] = Number(amountsByKey[key] || 0) + amount;
+      }
       return acc;
     },
     {
       total: 0,
-      cash: 0,
-      cheque: 0,
-      slip: 0,
-      online: 0,
-      adjustment: 0,
       total_amount: 0,
     }
   );
 
+  stats.breakdown = Object.keys(countsByKey)
+    .sort((a, b) => countsByKey[b] - countsByKey[a] || a.localeCompare(b))
+    .map((key) => ({
+      key,
+      count: Number(countsByKey[key] || 0),
+      amount: Number(amountsByKey[key] || 0),
+    }));
+  stats.counts_by_key = countsByKey;
+
   const payload = { success: true, data: stats };
+  if (merged.length > 0 && typeof navigator !== "undefined" && navigator.onLine) {
+    apiClient.get(`${CUSTOMER_PAYMENTS_URL}/stats`).then((res) => upsertEntitySnapshot(STATS_KEY, res.data)).catch(() => null);
+  }
   await upsertEntitySnapshot(STATS_KEY, payload);
   logDataSource("IDB", "customerPayments.stats.local", payload.data);
   return payload;
@@ -374,6 +391,17 @@ export const fetchCustomerPaymentMonthsLocalFirst = async () => {
   ).sort((a, b) => (a < b ? 1 : -1));
 
   const payload = { success: true, data: months };
+  if (months.length > 0 && typeof navigator !== "undefined" && navigator.onLine) {
+    apiClient.get(`${CUSTOMER_PAYMENTS_URL}/months`).then((res) => upsertEntitySnapshot(MONTHS_KEY, res.data)).catch(() => null);
+  }
+  if (!months.length && typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      await refreshAllSnapshotFromCloud();
+      return fetchCustomerPaymentMonthsLocalFirst();
+    } catch {
+      // fall back to empty local result
+    }
+  }
   await upsertEntitySnapshot(MONTHS_KEY, payload);
   logDataSource("IDB", "customerPayments.months.local", { count: months.length });
   return payload;
@@ -475,6 +503,14 @@ export const fetchCustomerStatementLocalFirst = async (params = {}) => {
 
   const customers = await getCustomerSnapshot();
   const customer = customers.find((row) => String(row?._id || "") === customerId);
+  if (!customer && typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      await refreshAllSnapshotFromCloud();
+      return fetchCustomerStatementLocalFirst(params);
+    } catch {
+      // fall through
+    }
+  }
   if (!customer) throw new Error("Customer not found");
 
   const overlay = await getOverlay();

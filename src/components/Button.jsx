@@ -26,6 +26,7 @@ const Button = forwardRef(
       variant = "primary",
       outline = false,
       icon: Icon,
+      iconRight: IconRight,
       iconPosition = "left",
       loading = false,
       disabled = false,
@@ -36,6 +37,9 @@ const Button = forwardRef(
     },
     ref
   ) => {
+    const ResolvedIcon = IconRight || Icon;
+    const resolvedIconPosition = IconRight ? "right" : iconPosition;
+
     return (
       <button
         ref={ref}
@@ -55,14 +59,14 @@ const Button = forwardRef(
           <span className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin" />
         )}
 
-        {!loading && Icon && iconPosition === "left" && (
-          <Icon className={size == 'sm' ? 'w-3.5 h-3.5' : 'w-5 h-5'} />
+        {!loading && ResolvedIcon && resolvedIconPosition === "left" && (
+          <ResolvedIcon className={size == 'sm' ? 'w-3.5 h-3.5' : 'w-5 h-5'} />
         )}
 
         <span>{children}</span>
 
-        {!loading && Icon && iconPosition === "right" && (
-          <Icon className={size == 'sm' ? 'w-3.5 h-3.5' : 'w-5 h-5'} />
+        {!loading && ResolvedIcon && resolvedIconPosition === "right" && (
+          <ResolvedIcon className={size == 'sm' ? 'w-3.5 h-3.5' : 'w-5 h-5'} />
         )}
       </button>
     );

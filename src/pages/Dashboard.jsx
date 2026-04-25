@@ -1,81 +1,34 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Activity, Banknote, Building2, CreditCard, FileText, Receipt, RefreshCcw, Users, Users2, } from "lucide-react";
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, } from "recharts";
 import useAuth from "../hooks/useAuth";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 import StatCard from "../components/StatCard";
 import Select from "../components/Select";
 import Input from "../components/Input";
-import TargetCalculatorModal from "../components/TargetCalculatorModal";
 import { useToast } from "../context/ToastContext";
 import { formatDate, formatNumbers } from "../utils";
-import { fetchBusinessStats, fetchBusinesses } from "../api/business";
+import { fetchBusinessStats, fetchBusinesses, fetchMyRuleData } from "../api/business";
 import { fetchUserStats, fetchUsers } from "../api/user";
 import { fetchDashboardSummary, fetchDashboardTrend } from "../api/dashboard";
 import { fetchSubscriptionPaymentStats, fetchSubscriptionPayments } from "../api/subscriptionPayment";
 import { fetchSubscriptions } from "../api/subscription.admin";
+import { getDisplayPreferences, getLabelOverride } from "../utils/businessRuleData";
+
+const DashboardTrendChart = lazy(() => import("../components/DashboardTrendChart"));
+const TargetCalculatorModal = lazy(() => import("../components/TargetCalculatorModal"));
 
 function formatYmdLocal(date) {
   const d = new Date(date);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function CustomTooltip({ active, payload, label }) {
-  if (!active || !payload?.length) return null;
-
+function TrendChartFallback({ height = 130, message = "Loading chart..." }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-lg text-xs">
-      <p className="font-medium text-gray-600 mb-1">{label}</p>
-      {payload.map((p) => (
-        <p key={p.dataKey} style={{ color: p.color }} className="font-semibold">
-          {p.name}: {p.dataKey === "orders" ? formatNumbers(Number(p.value || 0), 0) : formatNumbers(Number(p.value || 0), 2)}
-        </p>
-      ))}
+    <div className="flex items-center justify-center rounded-2xl bg-gray-50 text-sm text-gray-400" style={{ height }}>
+      {message}
     </div>
-  );
-}
-
-function TrendChart({ data, height = 130, idPrefix = "trend" }) {
-  return (
-    <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={data} margin={{ top: 8, right: 0, left: 0, bottom: 0 }}>
-        <defs>
-          <linearGradient id={`${idPrefix}-orders`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#0d9488" stopOpacity={0.18} />
-            <stop offset="95%" stopColor="#0d9488" stopOpacity={0} />
-          </linearGradient>
-          <linearGradient id={`${idPrefix}-expenses`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#e11d48" stopOpacity={0.15} />
-            <stop offset="95%" stopColor="#e11d48" stopOpacity={0} />
-          </linearGradient>
-          <linearGradient id={`${idPrefix}-out`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.15} />
-            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
-          </linearGradient>
-          <linearGradient id={`${idPrefix}-in`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#16a34a" stopOpacity={0.15} />
-            <stop offset="95%" stopColor="#16a34a" stopOpacity={0} />
-          </linearGradient>
-        </defs>
-
-        <XAxis
-          dataKey="day"
-          tick={{ fontSize: 10, fill: "#9ca3af" }}
-          axisLine={false}
-          tickLine={false}
-          tickFormatter={(value) => (typeof value === "string" && value.includes("-") ? formatDate(value, "DD MMM") : value)}
-        />
-        <YAxis hide />
-        <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#e5e7eb", strokeWidth: 1 }} />
-
-        <Area type="monotone" dataKey="orders" name="Orders" stroke="#0d9488" strokeWidth={2} fill={`url(#${idPrefix}-orders)`} dot={false} />
-        <Area type="monotone" dataKey="expenses" name="Expenses" stroke="#e11d48" strokeWidth={2} fill={`url(#${idPrefix}-expenses)`} dot={false} />
-        <Area type="monotone" dataKey="paymentsOut" name="Payment Out" stroke="#f59e0b" strokeWidth={2} fill={`url(#${idPrefix}-out)`} dot={false} />
-        <Area type="monotone" dataKey="paymentsIn" name="Payment In" stroke="#16a34a" strokeWidth={2} fill={`url(#${idPrefix}-in)`} dot={false} />
-      </AreaChart>
-    </ResponsiveContainer>
   );
 }
 
@@ -255,6 +208,7 @@ export default function Dashboard() {
   const [customDateTo, setCustomDateTo] = useState(() => formatYmdLocal(new Date()));
   const [monthSummaryType, setMonthSummaryType] = useState("summary");
   const [monthSummarySearch, setMonthSummarySearch] = useState("");
+  const [ruleData, setRuleData] = useState({});
   const lastLoadRef = useRef({ month: "", at: 0 });
 
   const [ops, setOps] = useState({
@@ -420,12 +374,14 @@ export default function Dashboard() {
           recentPayments: spRes?.data || [],
         });
       } else {
-        const [summaryRes] = await Promise.all([
+        const [summaryRes, ruleRes] = await Promise.all([
           fetchDashboardSummary({ month: selectedMonth }),
           loadTrend({ range: "7d" }, "card"),
+          fetchMyRuleData().catch(() => ({ rule_data: {} })),
         ]);
 
         const data = summaryRes?.data || {};
+        setRuleData(ruleRes?.rule_data || {});
 
         setOps({
           todayOrdersCount: Number(data?.today?.orders?.count || 0),
@@ -617,6 +573,9 @@ export default function Dashboard() {
   const filteredCrpSummaryRows = (ops.monthCrpStaffSummary.by_staff || []).filter((row) =>
     String(row?.staff_name || "").toLowerCase().includes(summarySearch)
   );
+  const displayPrefs = getDisplayPreferences(ruleData || {});
+  const visibleDashboardColumns = new Set(displayPrefs.dashboard_staff_columns || []);
+  const dashboardLabel = (key, fallback) => getLabelOverride(ruleData || {}, key) || fallback;
   const combinedSummaryRows = useMemo(() => {
     const rows = [
       {
@@ -674,7 +633,11 @@ export default function Dashboard() {
 
   return (
     <>
-      {openTarget && <TargetCalculatorModal onClose={() => setOpenTarget(false)} />}
+      {openTarget && (
+        <Suspense fallback={null}>
+          <TargetCalculatorModal onClose={() => setOpenTarget(false)} />
+        </Suspense>
+      )}
 
       <Modal
         isOpen={trendModalOpen}
@@ -739,7 +702,9 @@ export default function Dashboard() {
             ) : (modalTrend.data || []).length === 0 ? (
               <div className="h-[360px] flex items-center justify-center text-sm text-gray-400">No trend data found for selected range.</div>
             ) : (
-              <TrendChart data={modalTrend.data} height={360} idPrefix="modal-trend" />
+              <Suspense fallback={<TrendChartFallback height={360} />}>
+                <DashboardTrendChart data={modalTrend.data} height={360} idPrefix="modal-trend" />
+              </Suspense>
             )}
           </div>
         </div>
@@ -893,7 +858,9 @@ export default function Dashboard() {
                     ) : (cardTrend.data || []).length === 0 ? (
                       <div className="h-[130px] flex items-center justify-center text-sm text-gray-400">No trend data found.</div>
                     ) : (
-                      <TrendChart data={cardTrend.data} idPrefix="card-trend" />
+                      <Suspense fallback={<TrendChartFallback />}>
+                        <DashboardTrendChart data={cardTrend.data} idPrefix="card-trend" />
+                      </Suspense>
                     )}
                   </div>
                 </div>
@@ -1012,20 +979,20 @@ export default function Dashboard() {
                     <table className="w-full text-left border-collapse font-medium">
                       <thead className="sticky top-0 z-10 bg-gray-200/95 boder-t border-b border-gray-300">
                         <tr className="text-xs uppercase tracking-wide text-gray-500">
-                          <th className="px-4 py-2.5 font-semibold">Staff</th>
-                          <th className="px-4 py-2.5 font-semibold text-right">Records</th>
-                          <th className="px-4 py-2.5 font-semibold text-right">Work</th>
-                          <th className="px-4 py-2.5 font-semibold text-right">Arrears</th>
-                          <th className="px-4 py-2.5 font-semibold text-right">Allowance</th>
-                          <th className="px-4 py-2.5 font-semibold text-right">Bonus</th>
-                          <th className="px-4 py-2.5 font-semibold text-right">Deductions</th>
-                          <th className="px-4 py-2.5 font-semibold text-right">Balance</th>
+                          <th className="px-4 py-2.5 font-semibold">{dashboardLabel("staff", "Staff")}</th>
+                          {visibleDashboardColumns.has("records") && <th className="px-4 py-2.5 font-semibold text-right">{dashboardLabel("records", "Records")}</th>}
+                          {visibleDashboardColumns.has("work") && <th className="px-4 py-2.5 font-semibold text-right">{dashboardLabel("work", "Work")}</th>}
+                          {visibleDashboardColumns.has("arrears") && <th className="px-4 py-2.5 font-semibold text-right">{dashboardLabel("arrears", "Arrears")}</th>}
+                          {visibleDashboardColumns.has("allowance") && <th className="px-4 py-2.5 font-semibold text-right">{dashboardLabel("allowance", "Allowance")}</th>}
+                          {visibleDashboardColumns.has("bonus") && <th className="px-4 py-2.5 font-semibold text-right">{dashboardLabel("bonus", "Bonus")}</th>}
+                          {visibleDashboardColumns.has("deductions") && <th className="px-4 py-2.5 font-semibold text-right">{dashboardLabel("deductions", "Deductions")}</th>}
+                          {visibleDashboardColumns.has("balance") && <th className="px-4 py-2.5 font-semibold text-right">{dashboardLabel("balance", "Balance")}</th>}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-300">
                         {filteredStaffSummaryRows.length === 0 ? (
                           <tr>
-                            <td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-400">
+                            <td colSpan={1 + visibleDashboardColumns.size} className="px-4 py-8 text-center text-sm text-gray-400">
                               {ops.monthStaffSummary.by_staff.length === 0 ? "No staff summary available for selected month." : "No matching records found."}
                             </td>
                           </tr>
@@ -1033,13 +1000,13 @@ export default function Dashboard() {
                           filteredStaffSummaryRows.map((row) => (
                             <tr key={row.staff_id || row.staff_name} className="hover:bg-gray-50/70">
                               <td className="px-4 py-2.5">{row.staff_name}</td>
-                              <td className="px-4 py-2.5 text-sm text-right tabular-nums text-gray-700">{formatNumbers(row.records, 0)}</td>
-                              <td className="px-4 py-2.5 text-sm text-right tabular-nums text-gray-800">{formatNumbers(row.work_amount, 2)}</td>
-                              <td className="px-4 py-2.5 text-sm text-right tabular-nums">{formatNumbers(row.arrears_amount, 2)}</td>
-                              <td className="px-4 py-2.5 text-sm text-right tabular-nums text-indigo-700">{formatNumbers(row.allowance_amount)}</td>
-                              <td className="px-4 py-2.5 text-sm text-right tabular-nums text-emerald-700">{formatNumbers(row.bonus_amount)} ({formatNumbers(row.bonus_qty, 1)})</td>
-                              <td className="px-4 py-2.5 text-xs text-right tabular-nums text-rose-600">{formatNumbers(row.deduction_amount, 2)}</td>
-                              <td className="px-4 py-2.5 text-sm text-right tabular-nums font-semibold text-teal-700">{formatNumbers(row.balance_amount, 2)}</td>
+                              {visibleDashboardColumns.has("records") && <td className="px-4 py-2.5 text-sm text-right tabular-nums text-gray-700">{formatNumbers(row.records, 0)}</td>}
+                              {visibleDashboardColumns.has("work") && <td className="px-4 py-2.5 text-sm text-right tabular-nums text-gray-800">{formatNumbers(row.work_amount, 2)}</td>}
+                              {visibleDashboardColumns.has("arrears") && <td className="px-4 py-2.5 text-sm text-right tabular-nums">{formatNumbers(row.arrears_amount, 2)}</td>}
+                              {visibleDashboardColumns.has("allowance") && <td className="px-4 py-2.5 text-sm text-right tabular-nums text-indigo-700">{formatNumbers(row.allowance_amount)}</td>}
+                              {visibleDashboardColumns.has("bonus") && <td className="px-4 py-2.5 text-sm text-right tabular-nums text-emerald-700">{formatNumbers(row.bonus_amount)} ({formatNumbers(row.bonus_qty, 1)})</td>}
+                              {visibleDashboardColumns.has("deductions") && <td className="px-4 py-2.5 text-xs text-right tabular-nums text-rose-600">{formatNumbers(row.deduction_amount, 2)}</td>}
+                              {visibleDashboardColumns.has("balance") && <td className="px-4 py-2.5 text-sm text-right tabular-nums font-semibold text-teal-700">{formatNumbers(row.balance_amount, 2)}</td>}
                             </tr>
                           ))
                         )}
@@ -1047,15 +1014,17 @@ export default function Dashboard() {
                       <tfoot className="sticky bottom-0 z-10">
                         <tr className="bg-gray-200/95 border-t border-gray-300">
                           <td className="px-4 py-3 text-sm font-semibold text-gray-900">Total</td>
-                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-gray-800">{formatNumbers(ops.monthStaffSummary.record_count, 0)}</td>
-                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-gray-900">{formatNumbers(ops.monthStaffSummary.work_amount, 2)}</td>
-                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-amber-700">{formatNumbers(ops.monthStaffSummary.arrears_amount, 2)}</td>
-                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-indigo-700">{formatNumbers(ops.monthStaffSummary.allowance_amount)}</td>
-                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-emerald-700">
-                            {formatNumbers(ops.monthStaffSummary.bonus_amount)} ({formatNumbers(ops.monthStaffSummary.bonus_qty, 1)})
-                          </td>
-                          <td className="px-4 py-3 text-xs text-right font-semibold tabular-nums text-rose-600">{formatNumbers(ops.monthStaffSummary.deduction_amount, 2)}</td>
-                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-teal-700">{formatNumbers(ops.monthStaffSummary.balance_amount, 2)}</td>
+                          {visibleDashboardColumns.has("records") && <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-gray-800">{formatNumbers(ops.monthStaffSummary.record_count, 0)}</td>}
+                          {visibleDashboardColumns.has("work") && <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-gray-900">{formatNumbers(ops.monthStaffSummary.work_amount, 2)}</td>}
+                          {visibleDashboardColumns.has("arrears") && <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-amber-700">{formatNumbers(ops.monthStaffSummary.arrears_amount, 2)}</td>}
+                          {visibleDashboardColumns.has("allowance") && <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-indigo-700">{formatNumbers(ops.monthStaffSummary.allowance_amount)}</td>}
+                          {visibleDashboardColumns.has("bonus") && (
+                            <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-emerald-700">
+                              {formatNumbers(ops.monthStaffSummary.bonus_amount)} ({formatNumbers(ops.monthStaffSummary.bonus_qty, 1)})
+                            </td>
+                          )}
+                          {visibleDashboardColumns.has("deductions") && <td className="px-4 py-3 text-xs text-right font-semibold tabular-nums text-rose-600">{formatNumbers(ops.monthStaffSummary.deduction_amount, 2)}</td>}
+                          {visibleDashboardColumns.has("balance") && <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-teal-700">{formatNumbers(ops.monthStaffSummary.balance_amount, 2)}</td>}
                         </tr>
                       </tfoot>
                     </table>

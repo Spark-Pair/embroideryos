@@ -320,9 +320,17 @@ export const fetchExpensesLocalFirst = async (params = {}) => {
     return res.data;
   }
 
-  const overlay = await getOverlay();
-  const base = await getAllBaseExpenses();
-  const merged = withOverlayList(base, overlay);
+  let overlay = await getOverlay();
+  let base = await getAllBaseExpenses();
+  let merged = withOverlayList(base, overlay);
+  if (!merged.length && typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      await refreshAllSnapshotFromCloud();
+      overlay = await getOverlay();
+      base = await getAllBaseExpenses();
+      merged = withOverlayList(base, overlay);
+    } catch {}
+  }
   const filtered = applyFilters(merged, params);
 
   logDataSource("IDB", "expenses.fetch.local", {
@@ -344,26 +352,47 @@ export const fetchExpenseStatsLocalFirst = async () => {
   const base = await getAllBaseExpenses();
   const merged = withOverlayList(base, overlay);
 
+  const countsByKey = {};
+  const amountsByKey = {};
   const stats = merged.reduce(
     (acc, row) => {
       acc.total += 1;
-      acc.total_amount += Number((row?.total_amount ?? row?.amount ?? 0));
-      const type = String(row?.expense_type || "");
-      if (type === "cash") acc.cash_count += 1;
-      if (type === "supplier") acc.supplier_count += 1;
-      if (type === "fixed") acc.fixed_count += 1;
+      const amount = Number((row?.total_amount ?? row?.amount ?? 0));
+      acc.total_amount += amount;
+      const key = String(row?.expense_type || "").trim();
+      if (key) {
+        countsByKey[key] = Number(countsByKey[key] || 0) + 1;
+        amountsByKey[key] = Number(amountsByKey[key] || 0) + amount;
+      }
       return acc;
     },
     {
       total: 0,
       total_amount: 0,
-      cash_count: 0,
-      supplier_count: 0,
-      fixed_count: 0,
     }
   );
 
+  stats.breakdown = Object.keys(countsByKey)
+    .sort((a, b) => countsByKey[b] - countsByKey[a] || a.localeCompare(b))
+    .map((key) => ({
+      key,
+      count: Number(countsByKey[key] || 0),
+      amount: Number(amountsByKey[key] || 0),
+    }));
+  stats.counts_by_key = countsByKey;
+
   const payload = { success: true, data: stats };
+  if (merged.length > 0 && typeof navigator !== "undefined" && navigator.onLine) {
+    apiClient.get(`${EXPENSES_URL}/stats`).then((res) => upsertEntitySnapshot(STATS_KEY, res.data || null)).catch(() => null);
+  }
+  if (!merged.length && typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      await refreshAllSnapshotFromCloud();
+      return fetchExpenseStatsLocalFirst();
+    } catch {
+      // fall back to empty local payload
+    }
+  }
   await upsertEntitySnapshot(STATS_KEY, payload);
   logDataSource("IDB", "expenses.stats.local", payload.data);
   return payload;

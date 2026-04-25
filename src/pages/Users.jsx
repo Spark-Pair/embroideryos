@@ -1,13 +1,15 @@
 // pages/Users.jsx
-import React, { useState, useRef, useEffect, useMemo } from "react";
-import { Plus, CircleCheck, XCircle, Users2 } from "lucide-react";
+import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { Plus, CircleCheck, XCircle, Users2, Globe, Monitor, Smartphone, Tablet, Clock, LogOut } from "lucide-react";
 import {
   fetchUsers,
   fetchUserStats,
+  fetchLoggedInUsers,
   toggleUserStatus,
   resetUserPassword,
   fetchBusinessUsers,
   fetchBusinessUserStats,
+  logoutUserFromAllDevices,
   toggleBusinessUserStatus,
   resetBusinessUserPassword,
   createBusinessUser,
@@ -26,13 +28,40 @@ import UserFormModal from "../components/User/UserFormModal";
 import { useToast } from '../context/ToastContext';
 import useAuth from "../hooks/useAuth";
 import { fetchMySubscription } from "../api/subscription";
+import { fetchMyReferenceData, fetchMyRuleData } from "../api/business";
+import { hasAccessForRole, normalizeBusinessUserRoles } from "../utils/accessConfig";
+import Button from "../components/Button";
+
+const getRelativeTime = (date) => {
+  if (!date) return "-";
+  const now = new Date();
+  const past = new Date(date);
+  const diffMs = now - past;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return past.toLocaleDateString();
+};
+
+const getDeviceIcon = (device) => {
+  const normalized = String(device || "").toLowerCase();
+  if (normalized === "mobile") return Smartphone;
+  if (normalized === "tablet") return Tablet;
+  return Monitor;
+};
 
 export default function Users() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { showToast } = useToast();
   const isDeveloper = user?.role === "developer";
-  const isAdmin = user?.role === "admin";
   const isReadOnly = Boolean(user?.subscription?.readOnly);
+  const [referenceData, setReferenceData] = useState({ user_roles: [] });
+  const [ruleData, setRuleData] = useState({ access_rules: [] });
   const [stats, setStats] = useState({
     total: 0,
     active: 0,
@@ -47,6 +76,9 @@ export default function Users() {
     itemsPerPage: 30,
   });
   const [loading, setLoading] = useState(false);
+  const [activeUsers, setActiveUsers] = useState([]);
+  const [activeUsersLoading, setActiveUsersLoading] = useState(false);
+  const [busyLogoutUserId, setBusyLogoutUserId] = useState("");
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
     title: "",
@@ -72,7 +104,7 @@ export default function Users() {
     status: "",
   });
 
-  const loadUsersStats = async () => {
+  const loadUsersStats = useCallback(async () => {
     try {
       const res = isDeveloper ? await fetchUserStats() : await fetchBusinessUserStats();
       setStats(res.data);
@@ -83,12 +115,30 @@ export default function Users() {
         message: 'Failed to load users stats'
       });
     }
-  };
+  }, [isDeveloper, showToast]);
 
   const tableScrollRef = useRef(null);
 
+  const loadActiveUsers = useCallback(async () => {
+    if (!isDeveloper) return;
+
+    try {
+      setActiveUsersLoading(true);
+      const res = await fetchLoggedInUsers();
+      setActiveUsers(res.data || []);
+    } catch (err) {
+      console.error(err);
+      showToast({
+        type: "error",
+        message: "Failed to load logged in users",
+      });
+    } finally {
+      setActiveUsersLoading(false);
+    }
+  }, [isDeveloper, showToast]);
+
   // Load users from server
-  const loadUsers = async (page = 1, filterParams = filters) => {
+  const loadUsers = useCallback(async (page = 1, filterParams = filters) => {
     try {
       setLoading(true);
       const res = isDeveloper
@@ -115,16 +165,26 @@ export default function Users() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters, isDeveloper, loadUsersStats, showToast]);
 
   // Initial load
   useEffect(() => {
     if (!user) return;
     loadUsers();
-  }, [user]);
+  }, [loadUsers, user]);
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!isDeveloper || !user) return;
+    loadActiveUsers();
+  }, [isDeveloper, loadActiveUsers, user]);
+
+  const canManageUsers = useMemo(() => {
+    if (isDeveloper) return false;
+    return hasAccessForRole(ruleData, referenceData, "users_manage", user?.role);
+  }, [isDeveloper, referenceData, ruleData, user?.role]);
+
+  useEffect(() => {
+    if (!canManageUsers) return;
     const loadSubscription = async () => {
       try {
         const res = await fetchMySubscription();
@@ -134,7 +194,25 @@ export default function Users() {
       }
     };
     loadSubscription();
-  }, [isAdmin]);
+  }, [canManageUsers]);
+
+  useEffect(() => {
+    if (isDeveloper) return;
+    const loadBusinessAccess = async () => {
+      try {
+        const [referenceRes, ruleRes] = await Promise.all([
+          fetchMyReferenceData().catch(() => ({ reference_data: {} })),
+          fetchMyRuleData().catch(() => ({ rule_data: {} })),
+        ]);
+        setReferenceData(referenceRes?.reference_data || { user_roles: [] });
+        setRuleData(ruleRes?.rule_data || { access_rules: [] });
+      } catch {
+        setReferenceData({ user_roles: [] });
+        setRuleData({ access_rules: [] });
+      }
+    };
+    loadBusinessAccess();
+  }, [isDeveloper]);
 
   // Scroll to top on page change
   useEffect(() => {
@@ -238,7 +316,7 @@ export default function Users() {
   };
 
   const handleCreateUser = async (payload) => {
-    if (!isAdmin) return;
+    if (!canManageUsers) return;
     setCreating(true);
     try {
       await createBusinessUser(payload);
@@ -265,10 +343,10 @@ export default function Users() {
   }, [subscription]);
 
   const isLimitReached = useMemo(() => {
-    if (!isAdmin || !Number.isFinite(userLimit)) return false;
+    if (!canManageUsers || !Number.isFinite(userLimit)) return false;
     if (userLimit <= 0) return true;
     return stats.total >= userLimit;
-  }, [isAdmin, userLimit, stats.total]);
+  }, [canManageUsers, userLimit, stats.total]);
 
   const filterConfig = [
     {
@@ -292,7 +370,51 @@ export default function Users() {
   ];
 
   const showBusinessColumn = isDeveloper;
-  const canCreateUser = isAdmin && !isReadOnly && !isLimitReached;
+  const canCreateUser = canManageUsers && !isReadOnly && !isLimitReached;
+  const userRoleOptions = useMemo(
+    () => normalizeBusinessUserRoles(referenceData?.user_roles || []).map((role) => ({
+      label: role.charAt(0).toUpperCase() + role.slice(1),
+      value: role,
+    })),
+    [referenceData?.user_roles]
+  );
+
+  const activeUserStats = useMemo(() => ({
+    totalUsers: activeUsers.length,
+    totalSessions: activeUsers.reduce((sum, item) => sum + Number(item.sessionCount || 0), 0),
+  }), [activeUsers]);
+
+  const handleLogoutEverywhere = async (targetUser) => {
+    setBusyLogoutUserId(targetUser.userId);
+    try {
+      await logoutUserFromAllDevices(targetUser.userId);
+      const isCurrentUser = String(targetUser.userId) === String(user?.id || user?._id || "");
+
+      if (isCurrentUser) {
+        showToast({
+          type: "success",
+          message: "Your account was logged out from all devices",
+        });
+        await logout();
+        return;
+      }
+
+      setActiveUsers((prev) => prev.filter((entry) => entry.userId !== targetUser.userId));
+      showToast({
+        type: "success",
+        message: `${targetUser.name} logged out successfully`,
+      });
+      loadUsersStats();
+    } catch (err) {
+      console.error(err);
+      showToast({
+        type: "error",
+        message: err.response?.data?.message || "Failed to logout user",
+      });
+    } finally {
+      setBusyLogoutUserId("");
+    }
+  };
 
   return (
     <>
@@ -300,12 +422,12 @@ export default function Users() {
         <PageHeader
           title="User"
           subtitle="Manage all your users effortlessly."
-          actionLabel={isAdmin ? "Add User" : undefined}
+          actionLabel={canManageUsers ? "Add User" : undefined}
           onAction={canCreateUser ? () => setFormModal({ isOpen: true }) : undefined}
           actionIcon={Plus}
         />
 
-        {isAdmin && (
+        {canManageUsers && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 mb-5 text-xs text-amber-900">
             <div className="flex items-center justify-between gap-2">
               <div>
@@ -345,6 +467,94 @@ export default function Users() {
             variant="danger"
           />
         </div>
+
+        {isDeveloper && (
+          <div className="rounded-3xl bg-white border border-gray-300 overflow-hidden mb-6">
+            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-800">Currently Logged In</p>
+                <p className="text-xs text-gray-500">
+                  {activeUserStats.totalUsers} active user{activeUserStats.totalUsers === 1 ? "" : "s"} · {activeUserStats.totalSessions} session{activeUserStats.totalSessions === 1 ? "" : "s"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={loadActiveUsers}
+                className="text-xs font-medium text-[#127475] hover:text-[#0f6465] text-left sm:text-right"
+              >
+                Refresh
+              </button>
+            </div>
+
+            <div className="divide-y divide-gray-200">
+              {activeUsersLoading ? (
+                <div className="px-6 py-10 text-sm text-gray-500">Loading logged in users...</div>
+              ) : activeUsers.length === 0 ? (
+                <div className="px-6 py-10 text-sm text-gray-500">No users are currently logged in.</div>
+              ) : (
+                activeUsers.map((loggedInUser) => {
+                  const recentSession = loggedInUser.sessions?.[0] || {};
+                  const DeviceIcon = getDeviceIcon(recentSession.device);
+
+                  return (
+                    <div key={loggedInUser.userId} className="px-6 py-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0 flex items-start gap-3">
+                        <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl bg-sky-100 text-sky-700">
+                          <DeviceIcon className="w-5 h-5" />
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-semibold text-gray-900">{loggedInUser.name}</p>
+                            <span className="text-xs text-gray-500">@{loggedInUser.username}</span>
+                            <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-700 capitalize">
+                              {loggedInUser.role}
+                            </span>
+                            {!loggedInUser.isActive && (
+                              <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-700">
+                                Inactive user
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-1.5 text-xs text-gray-600">
+                            <p className="flex items-center gap-1.5">
+                              <Users2 className="w-3.5 h-3.5 text-gray-400" />
+                              {loggedInUser.businessName || "No business"}
+                            </p>
+                            <p className="flex items-center gap-1.5">
+                              <Globe className="w-3.5 h-3.5 text-gray-400" />
+                              {loggedInUser.sessionCount} active session{loggedInUser.sessionCount === 1 ? "" : "s"}
+                            </p>
+                            <p className="flex items-center gap-1.5">
+                              <Clock className="w-3.5 h-3.5 text-gray-400" />
+                              Last active {getRelativeTime(loggedInUser.lastActivity)}
+                            </p>
+                            <p className="flex items-center gap-1.5">
+                              <Monitor className="w-3.5 h-3.5 text-gray-400" />
+                              {recentSession.browser || "-"} · {recentSession.os || "-"} · {recentSession.ipAddress || "-"}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        className="self-start whitespace-nowrap"
+                        icon={LogOut}
+                        loading={busyLogoutUserId === loggedInUser.userId}
+                        onClick={() => handleLogoutEverywhere(loggedInUser)}
+                      >
+                        Logout User
+                      </Button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Table Container */}
         <div className="rounded-3xl bg-white border border-gray-300 overflow-hidden flex-1 flex flex-col">
@@ -430,6 +640,7 @@ export default function Users() {
         onClose={() => setFormModal({ isOpen: false })}
         onSubmit={handleCreateUser}
         loading={creating}
+        roleOptions={userRoleOptions}
       />
 
       <ConfirmModal

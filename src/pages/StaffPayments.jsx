@@ -15,17 +15,13 @@ import ContextMenu from "../components/ContextMenu";
 import StaffPaymentFormModal from "../components/StaffPayment/StaffPaymentFormModal";
 import { useToast } from "../context/ToastContext";
 import { formatDate, formatNumbers } from "../utils";
+import { fetchMyReferenceData } from "../api/business";
 
+const STAT_VARIANTS = ["warning", "success", "info", "default"];
 const TYPE_BADGE_CLASS = {
   advance: "bg-amber-100 text-amber-700",
   payment: "bg-emerald-100 text-emerald-700",
   adjustment: "bg-sky-100 text-sky-700",
-};
-
-const TYPE_LABEL = {
-  advance: "Advance",
-  payment: "Payment",
-  adjustment: "Adjustment",
 };
 
 export default function StaffPayments() {
@@ -35,9 +31,7 @@ export default function StaffPayments() {
   const [payments, setPayments] = useState([]);
   const [stats, setStats] = useState({
     total: 0,
-    advance: 0,
-    payment: 0,
-    adjustment: 0,
+    breakdown: [],
   });
   const [pagination, setPagination] = useState({
     currentPage: 1,
@@ -55,13 +49,14 @@ export default function StaffPayments() {
     date_from: "",
     date_to: "",
   });
+  const [referenceData, setReferenceData] = useState({ staff_payment_types: [] });
 
   const tableScrollRef = useRef(null);
 
   const loadStats = async () => {
     try {
       const res = await fetchStaffPaymentStats();
-      setStats(res.data || { total: 0, advance: 0, payment: 0, adjustment: 0 });
+      setStats(res.data || { total: 0, breakdown: [] });
     } catch {
       showToast({ type: "error", message: "Failed to load staff payment stats" });
     }
@@ -83,6 +78,18 @@ export default function StaffPayments() {
 
   useEffect(() => {
     loadPayments();
+  }, []);
+
+  useEffect(() => {
+    const loadReferenceData = async () => {
+      try {
+        const res = await fetchMyReferenceData();
+        setReferenceData(res?.reference_data || { staff_payment_types: [] });
+      } catch {
+        setReferenceData({ staff_payment_types: [] });
+      }
+    };
+    loadReferenceData();
   }, []);
 
   useEffect(() => {
@@ -132,12 +139,9 @@ export default function StaffPayments() {
       label: "Type",
       type: "select",
       value: filters.type,
-      options: [
-        { label: "All", value: "" },
-        { label: "Advance", value: "advance" },
-        { label: "Payment", value: "payment" },
-        { label: "Adjustment", value: "adjustment" },
-      ],
+      options: [{ label: "All", value: "" }].concat(
+        (referenceData.staff_payment_types || []).map((item) => ({ label: item, value: item }))
+      ),
       onChange: (val) => setFilters((prev) => ({ ...prev, type: val })),
     },
     {
@@ -160,6 +164,14 @@ export default function StaffPayments() {
     },
   ];
 
+  const statBreakdown = (referenceData.staff_payment_types || [])
+    .map((type) => ({
+      key: type,
+      count: Number(stats?.counts_by_key?.[type] || 0),
+    }))
+    .filter((item) => item.key)
+    .slice(0, 3);
+
   return (
     <>
       <div className="relative z-10 max-w-7xl mx-auto h-full flex flex-col">
@@ -173,9 +185,15 @@ export default function StaffPayments() {
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
           <StatCard label="Total Payments" value={stats.total} icon={Banknote} />
-          <StatCard label="Advance" value={stats.advance} icon={CircleDollarSign} variant="warning" />
-          <StatCard label="Payment" value={stats.payment} icon={CircleDollarSign} variant="success" />
-          <StatCard label="Adjustment" value={stats.adjustment} icon={Wrench} variant="info" />
+          {statBreakdown.map((item, index) => (
+            <StatCard
+              key={item.key}
+              label={item.key}
+              value={item.count}
+              icon={index === 2 ? Wrench : CircleDollarSign}
+              variant={STAT_VARIANTS[index] || "default"}
+            />
+          ))}
         </div>
 
         <div className="rounded-3xl bg-white border border-gray-300 overflow-hidden flex-1 flex flex-col">
@@ -225,8 +243,8 @@ export default function StaffPayments() {
                         <td className="px-7 py-4 text-sm text-gray-600">{formatDate(item.date, "dd-MMM-YYYY, DDD")}</td>
                         <td className="px-7 py-4 text-sm text-gray-600">{item.month || "-"}</td>
                         <td className="px-7 py-4">
-                          <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${TYPE_BADGE_CLASS[item.type] || "bg-gray-100 text-gray-700"}`}>
-                            {TYPE_LABEL[item.type] || item.type}
+                            <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${TYPE_BADGE_CLASS[item.type] || "bg-gray-100 text-gray-700"}`}>
+                            {item.type || "-"}
                           </span>
                         </td>
                         <td className="px-7 py-4 text-sm text-gray-600">{formatNumbers(item.amount, 2) || "0.00"}</td>

@@ -3,8 +3,9 @@ import Button from "../Button";
 import Input from "../Input";
 import Modal from "../Modal";
 import Select from "../Select";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatDate } from "../../utils";
+import { fetchMyReferenceData } from "../../api/business";
 
 export default function StaffFormModal({
   isOpen,
@@ -14,17 +15,40 @@ export default function StaffFormModal({
 }) {
   const mode = initialData ? 'edit' : 'add';
   const [formData, setFormData] = useState({});
+  const [referenceData, setReferenceData] = useState({ staff_categories: [] });
+  const categoryOptions = useMemo(
+    () => (referenceData.staff_categories || []).map((item) => ({ label: item, value: item })),
+    [referenceData.staff_categories]
+  );
 
   useEffect(() => {
     setFormData({
       id: initialData?._id || initialData?.id || "",
       name: initialData?.name || "",
-      category: initialData?.category || "Embroidery",
+      category: initialData?.category || "",
       joining_date: formatDate(initialData?.joining_date, "yyyy-mm-dd") || "",
       salary: initialData?.salary || "",
       opening_balance: initialData?.opening_balance ?? "",
     });
   }, [initialData]); // ✅ dependency array
+
+  useEffect(() => {
+    const loadReferenceData = async () => {
+      try {
+        const res = await fetchMyReferenceData();
+        setReferenceData(res?.reference_data || { staff_categories: [] });
+      } catch {
+        setReferenceData({ staff_categories: [] });
+      }
+    };
+    if (isOpen) loadReferenceData();
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (formData.category || !categoryOptions.length) return;
+    setFormData((prev) => ({ ...prev, category: categoryOptions[0].value }));
+  }, [isOpen, formData.category, categoryOptions]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -74,10 +98,8 @@ export default function StaffFormModal({
             onChange={(value) =>
               setFormData((prev) => ({ ...prev, category: value }))
             }
-            options={[
-              { label: "Embroidery", value: "Embroidery" },
-              { label: "Cropping", value: "Cropping" },
-            ]}
+            options={categoryOptions}
+            placeholder={categoryOptions.length ? "Select category..." : "No categories in settings"}
           />
           <Input
             label="Joining Date"

@@ -235,9 +235,17 @@ export const fetchCrpStaffRecordsLocalFirst = async (params = {}) => {
     return res.data;
   }
 
-  const overlay = await getOverlay();
-  const base = await getAllBase();
-  const merged = withOverlayList(base, overlay);
+  let overlay = await getOverlay();
+  let base = await getAllBase();
+  let merged = withOverlayList(base, overlay);
+  if (!merged.length && typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      await refreshAllSnapshotFromCloud();
+      overlay = await getOverlay();
+      base = await getAllBase();
+      merged = withOverlayList(base, overlay);
+    } catch {}
+  }
   const filtered = applyFilters(merged, params);
   return toPaginatedResponse(filtered, params);
 };
@@ -259,6 +267,17 @@ export const fetchCrpStaffRecordStatsLocalFirst = async () => {
   };
 
   const payload = { success: true, data };
+  if (merged.length > 0 && typeof navigator !== "undefined" && navigator.onLine) {
+    apiClient.get(`${CRP_STAFF_RECORDS_URL}/stats`).then((res) => upsertEntitySnapshot(STATS_KEY, res.data || null)).catch(() => null);
+  }
+  if (!merged.length && typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      await refreshAllSnapshotFromCloud();
+      return fetchCrpStaffRecordStatsLocalFirst();
+    } catch {
+      // fall back to empty local payload
+    }
+  }
   await upsertEntitySnapshot(STATS_KEY, payload);
   return payload;
 };

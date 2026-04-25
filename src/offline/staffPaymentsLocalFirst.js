@@ -297,9 +297,17 @@ export const fetchStaffPaymentsLocalFirst = async (params = {}) => {
     return res.data;
   }
 
-  const overlay = await getOverlay();
-  const base = await getAllBasePayments();
-  const merged = withOverlayList(base, overlay);
+  let overlay = await getOverlay();
+  let base = await getAllBasePayments();
+  let merged = withOverlayList(base, overlay);
+  if (!merged.length && typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      await refreshAllSnapshotFromCloud();
+      overlay = await getOverlay();
+      base = await getAllBasePayments();
+      merged = withOverlayList(base, overlay);
+    } catch {}
+  }
   const withStaff = await attachStaffInfo(merged);
   const filtered = applyFilters(withStaff, params);
 
@@ -322,33 +330,35 @@ export const fetchStaffPaymentStatsLocalFirst = async () => {
   const base = await getAllBasePayments();
   const merged = withOverlayList(base, overlay);
 
+  const countsByKey = {};
+  const amountsByKey = {};
   const stats = merged.reduce(
     (acc, row) => {
       acc.total += 1;
-      acc.total_amount += Number(row?.amount || 0);
-      if (row?.type === "advance") {
-        acc.advance += 1;
-        acc.total_advance_amount += Number(row?.amount || 0);
-      } else if (row?.type === "payment") {
-        acc.payment += 1;
-        acc.total_payment_amount += Number(row?.amount || 0);
-      } else if (row?.type === "adjustment") {
-        acc.adjustment += 1;
-        acc.total_adjustment_amount += Number(row?.amount || 0);
+      const amount = Number(row?.amount || 0);
+      acc.total_amount += amount;
+      const key = String(row?.type || "").trim();
+      if (key) {
+        countsByKey[key] = Number(countsByKey[key] || 0) + 1;
+        amountsByKey[key] = Number(amountsByKey[key] || 0) + amount;
       }
       return acc;
     },
     {
       total: 0,
-      advance: 0,
-      payment: 0,
-      adjustment: 0,
       total_amount: 0,
-      total_advance_amount: 0,
-      total_payment_amount: 0,
-      total_adjustment_amount: 0,
     }
   );
+
+  stats.breakdown = Object.keys(countsByKey)
+    .sort((a, b) => countsByKey[b] - countsByKey[a] || a.localeCompare(b))
+    .map((key) => ({
+      key,
+      count: Number(countsByKey[key] || 0),
+      amount: Number(amountsByKey[key] || 0),
+    }));
+  stats.counts_by_key = countsByKey;
+  stats.amounts_by_key = amountsByKey;
 
   const payload = { success: true, data: stats };
   await upsertEntitySnapshot(STATS_KEY, payload);

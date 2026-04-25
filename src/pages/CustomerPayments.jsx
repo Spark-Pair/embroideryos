@@ -15,6 +15,14 @@ import CustomerPaymentFormModal from "../components/CustomerPayment/CustomerPaym
 import CustomerPaymentRow from "../components/CustomerPayment/CustomerPaymentRow";
 import CustomerPaymentDetailsModal from "../components/CustomerPayment/CustomerPaymentDetailsModal";
 import { useToast } from "../context/ToastContext";
+import { fetchMyReferenceData } from "../api/business";
+
+const METHOD_ICON_MAP = {
+  cash: Banknote,
+  cheque: Landmark,
+  online: Smartphone,
+  adjustment: Wrench,
+};
 
 export default function CustomerPayments() {
   const { showToast } = useToast();
@@ -23,11 +31,7 @@ export default function CustomerPayments() {
   const [payments, setPayments] = useState([]);
   const [stats, setStats] = useState({
     total: 0,
-    cash: 0,
-    cheque: 0,
-    slip: 0,
-    online: 0,
-    adjustment: 0,
+    breakdown: [],
   });
   const [pagination, setPagination] = useState({
     currentPage: 1,
@@ -45,13 +49,14 @@ export default function CustomerPayments() {
     date_from: "",
     date_to: "",
   });
+  const [referenceData, setReferenceData] = useState({ customer_payment_methods: [] });
 
   const tableScrollRef = useRef(null);
 
   const loadStats = async () => {
     try {
       const res = await fetchCustomerPaymentStats();
-      setStats(res.data || { total: 0, cash: 0, cheque: 0, slip: 0, online: 0, adjustment: 0 });
+      setStats(res.data || { total: 0, breakdown: [] });
     } catch {
       showToast({ type: "error", message: "Failed to load customer payment stats" });
     }
@@ -74,6 +79,18 @@ export default function CustomerPayments() {
   useEffect(() => {
     loadPayments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const loadReferenceData = async () => {
+      try {
+        const res = await fetchMyReferenceData();
+        setReferenceData(res?.reference_data || { customer_payment_methods: [] });
+      } catch {
+        setReferenceData({ customer_payment_methods: [] });
+      }
+    };
+    loadReferenceData();
   }, []);
 
   useEffect(() => {
@@ -129,14 +146,9 @@ export default function CustomerPayments() {
       label: "Method",
       type: "select",
       value: filters.method,
-      options: [
-        { label: "All", value: "" },
-        { label: "Cash", value: "cash" },
-        { label: "Cheque", value: "cheque" },
-        { label: "Slip", value: "slip" },
-        { label: "Online", value: "online" },
-        { label: "Adjustment", value: "adjustment" },
-      ],
+      options: [{ label: "All", value: "" }].concat(
+        (referenceData.customer_payment_methods || []).map((item) => ({ label: item, value: item }))
+      ),
       onChange: (val) => setFilters((prev) => ({ ...prev, method: val })),
     },
     {
@@ -159,6 +171,14 @@ export default function CustomerPayments() {
     },
   ];
 
+  const statBreakdown = (referenceData.customer_payment_methods || [])
+    .map((method) => ({
+      key: method,
+      count: Number(stats?.counts_by_key?.[method] || 0),
+    }))
+    .filter((item) => item.key)
+    .slice(0, 4);
+
   return (
     <>
       <div className="relative z-10 max-w-7xl mx-auto h-full flex flex-col">
@@ -172,10 +192,11 @@ export default function CustomerPayments() {
 
         <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-6">
           <StatCard label="Total" value={stats.total} icon={Banknote} />
-          <StatCard label="Cash" value={stats.cash} icon={Banknote} variant="success" />
-          <StatCard label="Cheque" value={stats.cheque} icon={Landmark} variant="warning" />
-          <StatCard label="Online" value={stats.online} icon={Smartphone} variant="info" />
-          <StatCard label="Adjustment" value={stats.adjustment} icon={Wrench} variant="default" />
+          {statBreakdown.map((item, index) => {
+            const Icon = METHOD_ICON_MAP[String(item.key || "").toLowerCase()] || Banknote;
+            const variant = ["success", "warning", "info", "default"][index] || "default";
+            return <StatCard key={item.key} label={item.key} value={item.count} icon={Icon} variant={variant} />;
+          })}
         </div>
 
         <div className="rounded-3xl bg-white border border-gray-300 overflow-hidden flex-1 flex flex-col">

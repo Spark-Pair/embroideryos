@@ -10,6 +10,7 @@ import {
   upsertEntitySnapshot,
 } from "./idb";
 import { logDataSource } from "./logger";
+import { applyPaymentEffect, getStaffPaymentTypeRule } from "../utils/businessRuleData";
 
 const STAFF_URL = "/staffs";
 const ALL_KEY = "staffs:all";
@@ -141,10 +142,16 @@ const getCrpStaffRecordsSnapshot = async () => {
   return Array.from(map.values());
 };
 
+const getRuleDataSnapshot = async () => {
+  const rules = await getEntitySnapshot("business:rule_data");
+  return rules && typeof rules === "object" ? rules : {};
+};
+
 const attachStaffBalances = async (rows = []) => {
   const records = await getStaffRecordsSnapshot();
   const crpRecords = await getCrpStaffRecordsSnapshot();
   const payments = await getStaffPaymentsSnapshot();
+  const ruleData = await getRuleDataSnapshot();
 
   const earnedMap = new Map();
   records.forEach((rec) => {
@@ -163,10 +170,10 @@ const attachStaffBalances = async (rows = []) => {
   payments.forEach((p) => {
     const id = String(p?.staff_id?._id || p?.staff_id || "");
     if (!id) return;
-    const existing = paymentMap.get(id) || { advance: 0, payment: 0, adjustment: 0 };
-    if (p?.type === "advance") existing.advance += toNum(p?.amount);
-    if (p?.type === "payment") existing.payment += toNum(p?.amount);
-    if (p?.type === "adjustment") existing.adjustment += toNum(p?.amount);
+    const existing = paymentMap.get(id) || { balance: 0 };
+    const type = String(p?.type || "").trim();
+    const effect = getStaffPaymentTypeRule(ruleData, type)?.history_effect;
+    existing.balance = applyPaymentEffect(toNum(p?.amount), effect, toNum(existing.balance));
     paymentMap.set(id, existing);
   });
 
@@ -174,10 +181,10 @@ const attachStaffBalances = async (rows = []) => {
     const id = normalizeId(row);
     const opening = toNum(row?.opening_balance);
     const earned = earnedMap.get(id) || 0;
-    const paid = paymentMap.get(id) || { advance: 0, payment: 0, adjustment: 0 };
+    const paymentEffectBalance = toNum(paymentMap.get(id)?.balance);
     return {
       ...row,
-      current_balance: opening + earned + paid.adjustment - paid.advance - paid.payment,
+      current_balance: opening + earned + paymentEffectBalance,
     };
   });
 };
@@ -392,9 +399,17 @@ export const fetchStaffsLocalFirst = async (params = {}) => {
     return res.data;
   }
 
-  const overlay = await getOverlay();
-  const base = await getAllBaseStaffs();
-  const merged = withOverlayList(base, overlay);
+  let overlay = await getOverlay();
+  let base = await getAllBaseStaffs();
+  let merged = withOverlayList(base, overlay);
+  if (!merged.length && typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      await refreshAllSnapshotFromCloud();
+      overlay = await getOverlay();
+      base = await getAllBaseStaffs();
+      merged = withOverlayList(base, overlay);
+    } catch {}
+  }
   const filtered = applyFilters(merged, params);
   const withBalances = await attachStaffBalances(filtered);
 
@@ -435,6 +450,24 @@ export const fetchStaffNamesLocalFirst = async (params = {}) => {
     .filter((row) => row?._id && row?.name)
     .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")));
 
+  if (data.length > 0) {
+    if (typeof navigator !== "undefined" && navigator.onLine) {
+      refreshAllSnapshotFromCloud().catch(() => null);
+    }
+    await upsertEntitySnapshot(NAMES_KEY, data);
+    logDataSource("IDB", "staffs.names.local", { count: data.length });
+    return { data };
+  }
+
+  if (typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      await refreshAllSnapshotFromCloud();
+      return fetchStaffNamesLocalFirst(params);
+    } catch {
+      // fall back to empty local result
+    }
+  }
+
   await upsertEntitySnapshot(NAMES_KEY, data);
   logDataSource("IDB", "staffs.names.local", { count: data.length });
   return { data };
@@ -458,6 +491,10 @@ export const fetchStaffStatsLocalFirst = async () => {
     },
   };
 
+  if (merged.length > 0 && typeof navigator !== "undefined" && navigator.onLine) {
+    apiClient.get(`${STAFF_URL}/stats`).then((res) => upsertEntitySnapshot(STATS_KEY, res.data)).catch(() => null);
+  }
+
   await upsertEntitySnapshot(STATS_KEY, stats);
   logDataSource("IDB", "staffs.stats.local", stats.data);
   return stats;
@@ -472,7 +509,22 @@ export const fetchStaffLocalFirst = async (id) => {
   const local = await findStaffByIdLocal(id);
   const enriched = local ? (await attachStaffBalances([local]))[0] : null;
   logDataSource("IDB", "staffs.get.local", { id: String(id || "") });
-  if (enriched) return enriched;
+  if (enriched) {
+    if (typeof navigator !== "undefined" && navigator.onLine) {
+      refreshAllSnapshotFromCloud().catch(() => null);
+    }
+    return enriched;
+  }
+  if (typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      await refreshAllSnapshotFromCloud();
+      const retried = await findStaffByIdLocal(id);
+      const retriedEnriched = retried ? (await attachStaffBalances([retried]))[0] : null;
+      if (retriedEnriched) return retriedEnriched;
+    } catch {
+      // fall through
+    }
+  }
   throw new Error("Staff not available locally");
 };
 

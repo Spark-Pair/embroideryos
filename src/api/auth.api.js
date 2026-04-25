@@ -3,26 +3,33 @@ import { apiClient, storage } from "./apiClient";
 import { updateShortcutsLocalFirst } from "../offline/shortcutsLocalFirst";
 
 export const loginUser = async (data) => {
-  try {
-    const res = await apiClient.post("/auth/login", data);
-    
-    if (res.data.accessToken) {
-      storage.setAuth(
-        res.data.accessToken,
-        res.data.refreshToken,
-        res.data.sessionId
-      );
-    }
-    
-    return res;
-  } catch (error) {
-    throw error;
+  const res = await apiClient.post("/auth/login", data);
+  
+  if (res.data.accessToken) {
+    storage.setAuth(
+      res.data.accessToken,
+      res.data.refreshToken,
+      res.data.sessionId
+    );
   }
+
+  return res;
 };
 
 export const logoutUser = async () => {
+  const { accessToken, sessionId } = storage.getAuth();
+
   try {
-    await apiClient.post("/auth/logout");
+    await apiClient.post(
+      "/auth/logout",
+      {},
+      {
+        headers: {
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          ...(sessionId ? { "x-session-id": sessionId } : {}),
+        },
+      }
+    );
   } catch (error) {
     console.error('Logout error:', error);
   } finally {
@@ -31,8 +38,19 @@ export const logoutUser = async () => {
 };
 
 export const logoutAllDevices = async () => {
+  const { accessToken, sessionId } = storage.getAuth();
+
   try {
-    await apiClient.post("/auth/logout-all");
+    await apiClient.post(
+      "/auth/logout-all",
+      {},
+      {
+        headers: {
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          ...(sessionId ? { "x-session-id": sessionId } : {}),
+        },
+      }
+    );
   } catch (error) {
     console.error('Logout all error:', error);
   } finally {

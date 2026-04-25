@@ -17,6 +17,7 @@ import Input from "../components/Input";
 import Button from "../components/Button";
 import { useToast } from "../context/ToastContext";
 import { formatDate, formatNumbers } from "../utils";
+import { fetchMyReferenceData } from "../api/business";
 
 const METHOD_BADGE_CLASS = {
   cash: "bg-emerald-100 text-emerald-700",
@@ -37,6 +38,7 @@ function SupplierPaymentFormModal({ isOpen, onClose, onAction }) {
   const [loadingSuppliers, setLoadingSuppliers] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [referenceData, setReferenceData] = useState({ supplier_payment_methods: [] });
   const [formData, setFormData] = useState({
     supplier_id: "",
     date: new Date().toISOString().slice(0, 10),
@@ -49,6 +51,10 @@ function SupplierPaymentFormModal({ isOpen, onClose, onAction }) {
   const supplierOptions = useMemo(
     () => supplierList.map((s) => ({ label: s.name, value: s._id })),
     [supplierList]
+  );
+  const methodOptions = useMemo(
+    () => (referenceData.supplier_payment_methods || []).map((item) => ({ label: item, value: item })),
+    [referenceData.supplier_payment_methods]
   );
 
   useEffect(() => {
@@ -66,10 +72,15 @@ function SupplierPaymentFormModal({ isOpen, onClose, onAction }) {
     const load = async () => {
       setLoadingSuppliers(true);
       try {
-        const res = await fetchSuppliers({ page: 1, limit: 5000, status: "active" });
+        const [res, referenceRes] = await Promise.all([
+          fetchSuppliers({ page: 1, limit: 5000, status: "active" }),
+          fetchMyReferenceData().catch(() => ({ reference_data: {} })),
+        ]);
         setSupplierList(res?.data || []);
+        setReferenceData(referenceRes?.reference_data || { supplier_payment_methods: [] });
       } catch {
         setSupplierList([]);
+        setReferenceData({ supplier_payment_methods: [] });
       } finally {
         setLoadingSuppliers(false);
       }
@@ -141,13 +152,8 @@ function SupplierPaymentFormModal({ isOpen, onClose, onAction }) {
           label="Method"
           value={formData.method}
           onChange={(value) => setFormData((prev) => ({ ...prev, method: value }))}
-          options={[
-            { label: "Cash", value: "cash" },
-            { label: "Cheque", value: "cheque" },
-            { label: "Online", value: "online" },
-            { label: "Goods Return", value: "goods_return" },
-          ]}
-          placeholder="Select method"
+          options={methodOptions}
+          placeholder={methodOptions.length ? "Select method" : "No methods in settings"}
         />
         <Input label="Amount" type="number" value={formData.amount} onChange={(e) => setFormData((prev) => ({ ...prev, amount: e.target.value }))} />
         <Input label="Reference No" required={false} value={formData.reference_no} onChange={(e) => setFormData((prev) => ({ ...prev, reference_no: e.target.value }))} />
@@ -166,18 +172,19 @@ export default function SupplierPayments() {
 
   const [loading, setLoading] = useState(false);
   const [payments, setPayments] = useState([]);
-  const [stats, setStats] = useState({ total: 0, cash: 0, cheque: 0, online: 0, goods_return: 0 });
+  const [stats, setStats] = useState({ total: 0, breakdown: [] });
   const [pagination, setPagination] = useState({ currentPage: 1, totalPages: 1, totalItems: 0, itemsPerPage: 30 });
   const [formModal, setFormModal] = useState({ isOpen: false });
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [filters, setFilters] = useState({ name: "", method: "", month: "", date_from: "", date_to: "" });
+  const [referenceData, setReferenceData] = useState({ supplier_payment_methods: [] });
 
   const tableScrollRef = useRef(null);
 
   const loadStats = async () => {
     try {
       const res = await fetchSupplierPaymentStats();
-      setStats(res.data || { total: 0, cash: 0, cheque: 0, online: 0, goods_return: 0 });
+      setStats(res.data || { total: 0, breakdown: [] });
     } catch {
       showToast({ type: "error", message: "Failed to load supplier payment stats" });
     }
@@ -202,9 +209,28 @@ export default function SupplierPayments() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
+    const loadReferenceData = async () => {
+      try {
+        const res = await fetchMyReferenceData();
+        setReferenceData(res?.reference_data || { supplier_payment_methods: [] });
+      } catch {
+        setReferenceData({ supplier_payment_methods: [] });
+      }
+    };
+    loadReferenceData();
+  }, []);
+  useEffect(() => {
     if (!tableScrollRef.current) return;
     tableScrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
   }, [pagination.currentPage]);
+
+  const statBreakdown = (referenceData.supplier_payment_methods || [])
+    .map((method) => ({
+      key: method,
+      count: Number(stats?.counts_by_key?.[method] || 0),
+    }))
+    .filter((item) => item.key)
+    .slice(0, 4);
 
   return (
     <>
@@ -213,10 +239,19 @@ export default function SupplierPayments() {
 
         <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-6">
           <StatCard label="Total" value={stats.total} icon={Banknote} />
-          <StatCard label="Cash" value={stats.cash} icon={Banknote} variant="success" />
-          <StatCard label="Cheque" value={stats.cheque} icon={Landmark} variant="warning" />
-          <StatCard label="Online" value={stats.online} icon={Smartphone} variant="normal" />
-          <StatCard label="Goods Return" value={stats.goods_return} icon={PackageCheck} variant="normal" />
+          {statBreakdown.map((item) => {
+            const key = String(item.key || "").toLowerCase();
+            const Icon = key === "cash"
+              ? Banknote
+              : key === "cheque"
+                ? Landmark
+                : key === "online"
+                  ? Smartphone
+                  : key === "goods_return"
+                    ? PackageCheck
+                    : Banknote;
+            return <StatCard key={item.key} label={item.key} value={item.count} icon={Icon} variant="normal" />;
+          })}
         </div>
 
         <div className="rounded-3xl bg-white border border-gray-300 overflow-hidden flex-1 flex flex-col">
@@ -284,13 +319,9 @@ export default function SupplierPayments() {
             label: "Method",
             type: "select",
             value: filters.method,
-            options: [
-              { label: "All", value: "" },
-              { label: "Cash", value: "cash" },
-              { label: "Cheque", value: "cheque" },
-              { label: "Online", value: "online" },
-              { label: "Goods Return", value: "goods_return" },
-            ],
+            options: [{ label: "All", value: "" }].concat(
+              (referenceData.supplier_payment_methods || []).map((item) => ({ label: item, value: item }))
+            ),
             onChange: (v) => setFilters((prev) => ({ ...prev, method: v })),
           },
           { label: "Month", type: "month", value: filters.month, onChange: (e) => setFilters((prev) => ({ ...prev, month: e.target.value })) },

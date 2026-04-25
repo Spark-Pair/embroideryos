@@ -1,7 +1,7 @@
 // src/api/apiClient.js
 import axios from "axios";
 import { logDataSource } from "../offline/logger";
-import { offlineAccess } from "../offline/idb";
+import { clearOfflineData, offlineAccess } from "../offline/idb";
 
 const API = import.meta.env.VITE_API_URL;
 const READ_ONLY_BYPASS_PATHS = new Set(["/auth/logout", "/auth/logout-all", "/auth/refresh"]);
@@ -84,6 +84,19 @@ const isOfflineBlockedRequest = () => {
 };
 
 let authRedirectInProgress = false;
+const HARD_ACCESS_REVOKED_CODES = new Set([
+  "SESSION_INVALID",
+  "SESSION_MISMATCH",
+  "USER_INACTIVE",
+  "BUSINESS_INACTIVE",
+  "BUSINESS_MISSING",
+  "SUBSCRIPTION_INACTIVE",
+]);
+
+const dispatchWindowEvent = (name, detail = {}) => {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(name, { detail }));
+};
 
 const shouldBypassUnauthorizedRedirect = (config = {}) => {
   const urlPath = String(config?.url || "");
@@ -95,11 +108,26 @@ const shouldBypassUnauthorizedRedirect = (config = {}) => {
   return false;
 };
 
+const isHardAccessRevokedError = ({ status, code }) => {
+  if (status === 401) {
+    return code !== "TOKEN_EXPIRED";
+  }
+  if (status === 402 || status === 403) {
+    return HARD_ACCESS_REVOKED_CODES.has(code);
+  }
+  return false;
+};
+
 const redirectToLoginOnce = () => {
   if (authRedirectInProgress) return;
   authRedirectInProgress = true;
   storage.clearAuth();
   localStorage.removeItem("cachedUser");
+  offlineAccess.lock();
+  clearOfflineData().catch(() => null);
+  dispatchWindowEvent("app:auth-invalidated", {
+    reason: "redirect",
+  });
   if (typeof window !== "undefined") {
     window.location.replace("/login");
   }
@@ -191,17 +219,29 @@ apiClient.interceptors.response.use(
   },
   async (error) => {
     const originalRequest = error.config;
+    const status = Number(error?.response?.status || 0);
+    const code = String(error?.response?.data?.code || "");
+    const message = String(error?.response?.data?.message || "");
 
     logDataSource("CLOUD", "request.error", {
       method: String(originalRequest?.method || "get").toUpperCase(),
       url: String(originalRequest?.url || ""),
-      status: Number(error?.response?.status || 0),
-      code: String(error?.response?.data?.code || ""),
+      status,
+      code,
     });
 
+    if (status === 402 && code === "SUBSCRIPTION_EXPIRED_READ_ONLY") {
+      dispatchWindowEvent("app:subscription-readonly", {
+        code,
+        message,
+        expiresAt: error?.response?.data?.expiresAt || null,
+      });
+      return Promise.reject(error);
+    }
+
     // Handle token expiration
-    if (error.response?.status === 401 && 
-        error.response?.data?.code === 'TOKEN_EXPIRED' && 
+    if (status === 401 &&
+        code === 'TOKEN_EXPIRED' &&
         !originalRequest._retry) {
       
       if (isRefreshing) {
@@ -220,6 +260,11 @@ apiClient.interceptors.response.use(
 
       if (!refreshToken || !sessionId) {
         if (!shouldBypassUnauthorizedRedirect(originalRequest)) {
+          dispatchWindowEvent("app:auth-invalidated", {
+            status,
+            code,
+            message: message || "Session expired. Please sign in again.",
+          });
           redirectToLoginOnce();
         } else {
           storage.clearAuth();
@@ -243,6 +288,11 @@ apiClient.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError, null);
         if (!shouldBypassUnauthorizedRedirect(originalRequest)) {
+          dispatchWindowEvent("app:auth-invalidated", {
+            status: Number(refreshError?.response?.status || 401),
+            code: String(refreshError?.response?.data?.code || "TOKEN_REFRESH_FAILED"),
+            message: String(refreshError?.response?.data?.message || "Session expired. Please sign in again."),
+          });
           redirectToLoginOnce();
         } else {
           storage.clearAuth();
@@ -254,10 +304,28 @@ apiClient.interceptors.response.use(
     }
 
     // Handle invalid session
-    if (error.response?.status === 401 && 
-        (error.response?.data?.code === 'SESSION_INVALID' || 
-         error.response?.data?.code === 'SESSION_MISMATCH')) {
+    if (status === 401 &&
+        (code === 'SESSION_INVALID' ||
+         code === 'SESSION_MISMATCH')) {
       if (!shouldBypassUnauthorizedRedirect(originalRequest)) {
+        dispatchWindowEvent("app:auth-invalidated", {
+          status,
+          code,
+          message: message || "This session is no longer valid.",
+        });
+        redirectToLoginOnce();
+      } else {
+        storage.clearAuth();
+      }
+    }
+
+    if (isHardAccessRevokedError({ status, code })) {
+      if (!shouldBypassUnauthorizedRedirect(originalRequest)) {
+        dispatchWindowEvent("app:auth-invalidated", {
+          status,
+          code,
+          message: message || "Access has been revoked for this account.",
+        });
         redirectToLoginOnce();
       } else {
         storage.clearAuth();
@@ -265,8 +333,13 @@ apiClient.interceptors.response.use(
     }
 
     // Handle other 401 errors
-    if (error.response?.status === 401) {
+    if (status === 401) {
       if (!shouldBypassUnauthorizedRedirect(originalRequest)) {
+        dispatchWindowEvent("app:auth-invalidated", {
+          status,
+          code,
+          message: message || "Authentication failed. Please sign in again.",
+        });
         redirectToLoginOnce();
       } else {
         storage.clearAuth();

@@ -5,27 +5,13 @@ import Button from "../Button";
 import Input from "../Input";
 import Select from "../Select";
 import { fetchCustomers } from "../../api/customer";
+import { fetchMyReferenceData, fetchMyRuleData } from "../../api/business";
 import { useFormKeyboard } from "../../hooks/useFormKeyboard";
 import { useToast } from "../../context/ToastContext";
-
-const METHOD_OPTIONS = [
-  { label: "Cash", value: "cash" },
-  { label: "Cheque", value: "cheque" },
-  { label: "Slip", value: "slip" },
-  { label: "Online", value: "online" },
-  { label: "Adjustment", value: "adjustment" },
-];
-
-const BANK_SUGGESTIONS = ["HBL", "UBL", "Meezan Bank", "Allied Bank", "MCB", "Bank Alfalah"];
-const PARTY_SUGGESTIONS = ["Party A", "Party B", "Agent", "Courier Office", "Customer Representative"];
+import { getCustomerPaymentMethodRule } from "../../utils/businessRuleData";
 
 const todayInput = () => new Date().toISOString().slice(0, 10);
 const monthFromDate = (dateValue) => (dateValue || todayInput()).slice(0, 7);
-
-const needsReference = (method) => method === "online" || method === "cheque" || method === "slip";
-const needsBank = (method) => method === "cheque";
-const needsParty = (method) => method === "slip";
-const needsChequeDates = (method) => method === "cheque" || method === "slip";
 
 export default function CustomerPaymentFormModal({ isOpen, onClose, onAction, initialData }) {
   const { showToast } = useToast();
@@ -35,6 +21,12 @@ export default function CustomerPaymentFormModal({ isOpen, onClose, onAction, in
   const amountRef = useRef(null);
 
   const [customerList, setCustomerList] = useState([]);
+  const [referenceData, setReferenceData] = useState({
+    customer_payment_methods: [],
+    bank_suggestions: [],
+    party_suggestions: [],
+  });
+  const [ruleData, setRuleData] = useState({ customer_payment_method_rules: [] });
   const [customerLoading, setCustomerLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -52,10 +44,15 @@ export default function CustomerPaymentFormModal({ isOpen, onClose, onAction, in
     remarks: "",
   });
   const mode = formData.id ? "edit" : "add";
+  const methodRule = getCustomerPaymentMethodRule(ruleData, formData.method, referenceData);
 
   const customerOptions = useMemo(
     () => customerList.map((c) => ({ label: `${c.name}${c.person ? ` (${c.person})` : ""}`, value: c._id })),
     [customerList]
+  );
+  const methodOptions = useMemo(
+    () => (referenceData.customer_payment_methods || []).map((item) => ({ label: item, value: item })),
+    [referenceData.customer_payment_methods]
   );
 
   const isValid = useMemo(() => {
@@ -64,17 +61,17 @@ export default function CustomerPaymentFormModal({ isOpen, onClose, onAction, in
     const amount = Number(formData.amount);
     if (!Number.isFinite(amount) || amount <= 0) return false;
 
-    if (needsReference(formData.method) && !formData.reference_no.trim()) return false;
-    if (needsBank(formData.method) && !formData.bank_name.trim()) return false;
-    if (needsParty(formData.method) && !formData.party_name.trim()) return false;
+    if (methodRule?.requires_reference && !formData.reference_no.trim()) return false;
+    if (methodRule?.requires_bank && !formData.bank_name.trim()) return false;
+    if (methodRule?.requires_party && !formData.party_name.trim()) return false;
 
-    if (needsChequeDates(formData.method)) {
+    if (methodRule?.requires_issue_date) {
       if (!formData.cheque_date) return false;
       if (formData.clear_date && new Date(formData.clear_date) < new Date(formData.cheque_date)) return false;
     }
 
     return true;
-  }, [formData]);
+  }, [formData, methodRule]);
 
   const resetForm = () => {
     setFormData({
@@ -98,10 +95,11 @@ export default function CustomerPaymentFormModal({ isOpen, onClose, onAction, in
     setFormData((prev) => {
       const next = { ...prev, method };
 
-      if (!needsReference(method)) next.reference_no = "";
-      if (!needsBank(method)) next.bank_name = "";
-      if (!needsParty(method)) next.party_name = "";
-      if (!needsChequeDates(method)) {
+      const nextRule = getCustomerPaymentMethodRule(ruleData, method, referenceData);
+      if (!nextRule?.requires_reference) next.reference_no = "";
+      if (!nextRule?.requires_bank) next.bank_name = "";
+      if (!nextRule?.requires_party) next.party_name = "";
+      if (!nextRule?.requires_issue_date) {
         next.cheque_date = "";
         next.clear_date = "";
       }
@@ -120,11 +118,7 @@ export default function CustomerPaymentFormModal({ isOpen, onClose, onAction, in
       return;
     }
 
-    if (
-      needsChequeDates(formData.method) &&
-      formData.clear_date &&
-      new Date(formData.clear_date) < new Date(formData.cheque_date)
-    ) {
+    if (methodRule?.allows_clear_date && formData.clear_date && formData.cheque_date && new Date(formData.clear_date) < new Date(formData.cheque_date)) {
       const message = "Clear date must be greater than or equal to cheque/slip date.";
       setError(message);
       showToast({ type: "warning", message });
@@ -185,10 +179,18 @@ export default function CustomerPaymentFormModal({ isOpen, onClose, onAction, in
     const loadCustomers = async () => {
       setCustomerLoading(true);
       try {
-        const res = await fetchCustomers({ page: 1, limit: 5000, status: "active" });
+        const [res, referenceRes, ruleRes] = await Promise.all([
+          fetchCustomers({ page: 1, limit: 5000, status: "active" }),
+          fetchMyReferenceData().catch(() => ({ reference_data: {} })),
+          fetchMyRuleData().catch(() => ({ rule_data: {} })),
+        ]);
         setCustomerList(res?.data || []);
+        setReferenceData(referenceRes?.reference_data || {});
+        setRuleData(ruleRes?.rule_data || { customer_payment_method_rules: [] });
       } catch {
         setCustomerList([]);
+        setReferenceData({ customer_payment_methods: [], bank_suggestions: [], party_suggestions: [] });
+        setRuleData({ customer_payment_method_rules: [] });
         showToast({ type: "error", message: "Failed to load customers" });
       } finally {
         setCustomerLoading(false);
@@ -262,7 +264,7 @@ export default function CustomerPaymentFormModal({ isOpen, onClose, onAction, in
             setMethod(value);
             setTimeout(() => amountRef.current?.focus(), 50);
           }}
-          options={METHOD_OPTIONS}
+          options={methodOptions}
           placeholder="Select method..."
         />
 
@@ -280,7 +282,7 @@ export default function CustomerPaymentFormModal({ isOpen, onClose, onAction, in
           placeholder="Enter amount"
         />
 
-        {needsReference(formData.method) && (
+        {methodRule?.requires_reference && (
           <Input
             label="Reference No"
             value={formData.reference_no}
@@ -292,7 +294,7 @@ export default function CustomerPaymentFormModal({ isOpen, onClose, onAction, in
           />
         )}
 
-        {needsBank(formData.method) && (
+        {methodRule?.requires_bank && (
           <div>
             <Input
               label="Bank Name"
@@ -305,14 +307,14 @@ export default function CustomerPaymentFormModal({ isOpen, onClose, onAction, in
               placeholder="Select or type bank name"
             />
             <datalist id="bank-name-suggestions">
-              {BANK_SUGGESTIONS.map((bank) => (
+              {(referenceData.bank_suggestions || []).map((bank) => (
                 <option key={bank} value={bank} />
               ))}
             </datalist>
           </div>
         )}
 
-        {needsParty(formData.method) && (
+        {methodRule?.requires_party && (
           <div>
             <Input
               label="Party Name"
@@ -325,14 +327,14 @@ export default function CustomerPaymentFormModal({ isOpen, onClose, onAction, in
               placeholder="Select or type party name"
             />
             <datalist id="party-name-suggestions">
-              {PARTY_SUGGESTIONS.map((party) => (
+              {(referenceData.party_suggestions || []).map((party) => (
                 <option key={party} value={party} />
               ))}
             </datalist>
           </div>
         )}
 
-        {needsChequeDates(formData.method) && (
+        {methodRule?.requires_issue_date && (
           <Input
             label={formData.method === "slip" ? "Slip Date" : "Cheque Date"}
             type="date"
@@ -344,7 +346,7 @@ export default function CustomerPaymentFormModal({ isOpen, onClose, onAction, in
           />
         )}
 
-        {needsChequeDates(formData.method) && (
+        {methodRule?.allows_clear_date && (
           <Input
             label="Clear Date (Optional)"
             type="date"

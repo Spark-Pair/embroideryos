@@ -4,6 +4,22 @@ import { VitePWA } from "vite-plugin-pwa";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("framer-motion")) return "motion";
+          if (id.includes("recharts")) return "charts";
+          if (id.includes("lucide-react")) return "icons";
+          if (id.includes("react-router")) return "router";
+          if (id.includes("@tanstack")) return "tanstack";
+          if (id.includes("react") || id.includes("scheduler")) return "react-vendor";
+          return "vendor";
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     tailwindcss(),

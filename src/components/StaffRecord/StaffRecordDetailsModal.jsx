@@ -8,6 +8,7 @@ import Modal from "../Modal";
 import { formatDate, formatNumbers } from "../../utils";
 import { FinalAmountCard } from "../FinalAmountCard";
 import { SectionHeader } from "../SectionHeader";
+import { getModeSummary, getProductionAmountLabels, getTargetProgress, isTargetMode, PAYOUT_MODES } from "../../utils/productionPayout";
 
 const ATTENDANCE_META = {
   Day:    "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -38,6 +39,7 @@ function InfoCell({ label, value, valueClass = "", fullWidth = false }) {
 
 function ProductionRowsTable({ rows, snapshot }) {
   if (!rows?.length) return null;
+  const amountLabels = getProductionAmountLabels(snapshot);
 
   return (
     <div className="rounded-xl border border-gray-300 overflow-hidden mt-1">
@@ -50,12 +52,10 @@ function ProductionRowsTable({ rows, snapshot }) {
             <th className="px-3 py-2.5 text-right">Rounds</th>
             <th className="px-3 py-2.5 text-right">PCs</th>
             <th className="px-3 py-2.5 text-right">Total Stitch</th>
-            <th className="px-3 py-2.5 text-right text-rose-500">
-              ({snapshot?.on_target_pct ?? "—"}%)
-            </th>
-            <th className="px-3 py-2.5 text-right text-emerald-600">
-              ({snapshot?.after_target_pct ?? "—"}%)
-            </th>
+            <th className="px-3 py-2.5 text-right text-rose-500">{amountLabels.primary}</th>
+            {amountLabels.secondary && (
+              <th className="px-3 py-2.5 text-right text-emerald-600">{amountLabels.secondary}</th>
+            )}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -68,7 +68,9 @@ function ProductionRowsTable({ rows, snapshot }) {
               <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-gray-700">{formatNumbers(row.pcs)}</td>
               <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{formatNumbers(row.total_stitch)}</td>
               <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-rose-600">{formatNumbers(row.on_target_amt, 2)}</td>
-              <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-emerald-600">{formatNumbers(row.after_target_amt, 2)}</td>
+              {amountLabels.secondary && (
+                <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-emerald-600">{formatNumbers(row.after_target_amt, 2)}</td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -89,9 +91,11 @@ function ProductionRowsTable({ rows, snapshot }) {
               <td className="px-3 py-2.5 text-right tabular-nums text-rose-600">
                 {formatNumbers(rows.reduce((s, r) => s + (r.on_target_amt || 0), 0), 2)}
               </td>
-              <td className="px-3 py-2.5 text-right tabular-nums text-emerald-600">
-                {formatNumbers(rows.reduce((s, r) => s + (r.after_target_amt || 0), 0), 2)}
-              </td>
+              {amountLabels.secondary && (
+                <td className="px-3 py-2.5 text-right tabular-nums text-emerald-600">
+                  {formatNumbers(rows.reduce((s, r) => s + (r.after_target_amt || 0), 0), 2)}
+                </td>
+              )}
             </tr>
           </tfoot>
         )}
@@ -116,15 +120,32 @@ export default function StaffRecordDetailsModal({ isOpen, onClose, initialData, 
 
   // ── Target logic ──────────────────────────────────────────────────────────
   const targetAmount = snapshot?.target_amount ?? null;
-  const targetMet    = totals && targetAmount != null
-    ? totals.on_target_amt >= targetAmount
-    : false;
+  const targetState  = getTargetProgress(totals, snapshot, {
+    force_after_target_for_non_target: initialData.force_after_target_for_non_target,
+    force_full_target_for_non_target: initialData.force_full_target_for_non_target,
+  });
+  const targetMet = targetState.targetMet;
+  const targetMode = isTargetMode(snapshot);
   const forceAfter =
     Boolean(initialData.force_after_target_for_non_target) ||
     Boolean(initialData.force_full_target_for_non_target);
 
+  const amountLabels = getProductionAmountLabels(snapshot);
+  const payoutMode = snapshot?.payout_mode || PAYOUT_MODES.TARGET_DUAL_PCT;
+  const primarySnapshotValue =
+    payoutMode === PAYOUT_MODES.SINGLE_PCT
+      ? `${snapshot.production_pct}%`
+      : payoutMode === PAYOUT_MODES.STITCH_BLOCK_RATE
+      ? `${formatNumbers(snapshot.amount_per_block, 2)} / ${formatNumbers(snapshot.stitch_block_size, 0)}`
+      : snapshot.on_target_pct != null
+      ? `${snapshot.on_target_pct}%`
+      : "—";
+  const secondarySnapshotValue =
+    payoutMode === PAYOUT_MODES.TARGET_DUAL_PCT && amountLabels.secondary
+      ? `${snapshot.after_target_pct}%`
+      : "—";
   const effectivePct = isFixed ? null : (targetMet || forceAfter) ? snapshot?.after_target_pct : snapshot?.on_target_pct;
-  const effectiveAmt = (targetMet || forceAfter) ? totals?.after_target_amt : totals?.on_target_amt;
+  const effectiveAmt = targetState.effectiveAmount;
 
   return (
     <Modal
@@ -165,6 +186,7 @@ export default function StaffRecordDetailsModal({ isOpen, onClose, initialData, 
             <ProductionRowsTable rows={initialData.production} snapshot={snapshot} />
 
             {/* Target status bar */}
+            {targetMode && (
             <div className={`flex items-center mt-2 gap-3 rounded-xl px-4 py-2.5 text-xs
               ${targetMet ? "bg-emerald-50 border border-emerald-200" : "bg-amber-50 border border-amber-200"}`}>
               {targetMet
@@ -188,12 +210,13 @@ export default function StaffRecordDetailsModal({ isOpen, onClose, initialData, 
                 </span>
               )}
             </div>
+            )}
 
             {/* Effective amount row */}
-            {!isFixed && effectivePct != null && (
+            {!isFixed && effectiveAmt != null && (
               <div className="mt-2 flex items-center justify-between px-1">
                 <span className="text-xs text-gray-400 font-medium">
-                  Effective production amount ({effectivePct}% applied)
+                  Effective production amount {effectivePct != null ? `(${effectivePct}% applied)` : ""}
                 </span>
                 <span className="text-sm font-bold text-gray-700 tabular-nums">{formatNumbers(effectiveAmt, 2)}</span>
               </div>
@@ -235,9 +258,10 @@ export default function StaffRecordDetailsModal({ isOpen, onClose, initialData, 
               <div className="grid grid-cols-2 divide-x divide-gray-200">
                 {[
                   { label: "Stitch Rate",        value: snapshot.stitch_rate },
+                  { label: "Payout Mode",        value: getModeSummary(snapshot) },
                   { label: "Applique Rate",       value: snapshot.applique_rate },
-                  { label: "On Target %",         value: `${snapshot.on_target_pct}%` },
-                  { label: "After Target %",      value: `${snapshot.after_target_pct}%` },
+                  { label: amountLabels.primary,  value: primarySnapshotValue },
+                  { label: amountLabels.secondary || "Secondary Amount", value: secondarySnapshotValue },
                   { label: "Target Amount",       value: formatNumbers(snapshot.target_amount, 2) },
                   { label: "PCs / Round",         value: snapshot.pcs_per_round },
                   { label: "Off Amount",          value: formatNumbers(snapshot.off_amount, 2) },
