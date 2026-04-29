@@ -1,6 +1,6 @@
 ﻿import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Activity, Banknote, Building2, CreditCard, FileText, Receipt, RefreshCcw, Users, Users2, } from "lucide-react";
+import { Banknote, Building2, CreditCard, FileText, Home, Receipt, RefreshCcw, Users, Users2, } from "lucide-react";
 import useAuth from "../hooks/useAuth";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
@@ -750,13 +750,13 @@ export default function Dashboard() {
             <div className="space-y-6 pb-6">
             <div className="grid grid-cols-2 md:grid-cols-2 xl:grid-cols-4 gap-4">
               <StatCard label="Total Businesses" value={dev.businessesTotal} icon={Building2} />
-              <StatCard label="Active Businesses" value={dev.businessesActive} icon={Activity} variant="success" />
+              <StatCard label="Active Businesses" value={dev.businessesActive} icon={Home} variant="success" />
               <StatCard label="Total Users" value={dev.usersTotal} icon={Users2} />
               <StatCard label="Active Users" value={dev.usersActive} icon={Users} variant="warning" />
               <StatCard label={`Collected (${selectedMonth})`} value={formatNumbers(dev.monthReceived, 2)} icon={Banknote} variant="success" />
               <StatCard label={`Pending (${selectedMonth})`} value={formatNumbers(dev.monthPending, 2)} icon={CreditCard} variant="danger" />
               <StatCard label="Active Subscriptions" value={dev.activeSubscriptions} icon={Receipt} />
-              <StatCard label="Expire in 7 Days" value={dev.expiringSoon} icon={Activity} variant="warning" />
+              <StatCard label="Expire in 7 Days" value={dev.expiringSoon} icon={Home} variant="warning" />
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
