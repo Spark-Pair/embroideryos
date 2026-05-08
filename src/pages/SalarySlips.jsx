@@ -41,7 +41,7 @@ function buildEmptySlip(id, name, month, openingBalance = 0) {
     arrears: 0,
     bonusQty: 0,
     bonusAmt: 0,
-        payment_breakdown: {},
+    payment_breakdown: {},
     payment_addition: 0,
     payment_deduction: 0,
     allowance: 0,
@@ -69,8 +69,14 @@ function applyPaymentMetrics(target, payment, ruleData) {
   const amt = Number(payment.amount) || 0;
   const type = String(payment.type || "");
   const rule = getStaffPaymentTypeRule(ruleData, type);
-  const signedAmount = rule?.current_effect === "add" ? amt : rule?.current_effect === "subtract" ? -amt : 0;
-  target.payment_breakdown[type] = Number(target.payment_breakdown[type] || 0) + signedAmount;
+  const signedAmount =
+    rule?.current_effect === "add"
+      ? amt
+      : rule?.current_effect === "subtract"
+      ? -amt
+      : 0;
+  target.payment_breakdown[type] =
+    Number(target.payment_breakdown[type] || 0) + signedAmount;
   if (rule?.current_effect === "add") target.payment_addition += amt;
   if (rule?.current_effect === "subtract") target.payment_deduction += amt;
 }
@@ -87,7 +93,11 @@ function getPaymentInHistory(payment, prevMonthKey, prevMonthEnd) {
 
 function updateClosingBalanceWithPayment(closing, key, payment, ruleData) {
   const rule = getStaffPaymentTypeRule(ruleData, payment.type);
-  closing[key] = applyPaymentEffect(payment.amount, rule?.history_effect, closing[key] || 0);
+  closing[key] = applyPaymentEffect(
+    payment.amount,
+    rule?.history_effect,
+    closing[key] || 0
+  );
 }
 
 async function buildAllowanceByMonth(monthKeys) {
@@ -156,11 +166,16 @@ function buildPreviousClosingBalance({
 
   sortedBuckets.forEach((bucket) => {
     const allowance = allowanceByMonth[bucket.monthKey] ?? 0;
-    const allowed = isAllowanceEligibleWithRule({
-      record_count: bucket.recordCount,
-      absent_count: bucket.absentCount,
-      half_count: bucket.halfCount,
-    }, ruleData) ? allowance : 0;
+    const allowed = isAllowanceEligibleWithRule(
+      {
+        record_count: bucket.recordCount,
+        absent_count: bucket.absentCount,
+        half_count: bucket.halfCount,
+      },
+      ruleData
+    )
+      ? allowance
+      : 0;
     closingByStaff[bucket.staffKey] += bucket.finalAmount + allowed;
   });
 
@@ -228,34 +243,6 @@ function normalizePrintStyles() {
       #salary-slips-print-root .flex {
         display: flex !important;
       }
-      #salary-slips-print-root .print-slip {
-        border-color: #0f172a !important;
-        color: #0f172a !important;
-      }
-      #salary-slips-print-root .print-slip * {
-        color: #0f172a !important;
-      }
-      #salary-slips-print-root .print-slip hr {
-        border-color: #0f172a !important;
-      }
-      #salary-slips-print-root .print-slip .border-gray-300,
-      #salary-slips-print-root .print-slip .border-gray-200,
-      #salary-slips-print-root .print-slip .border-gray-400 {
-        border-color: #0f172a !important;
-      }
-      #salary-slips-print-root .print-slip .bg-gray-100,
-      #salary-slips-print-root .print-slip .bg-gray-50 {
-        background: #e5e7eb !important;
-      }
-      #salary-slips-print-root .print-slip .bg-[#127475] {
-        background: #0b3b3a !important;
-      }
-      #salary-slips-print-root .print-slip .text-[#127475] {
-        color: #0b3b3a !important;
-      }
-      #salary-slips-print-root .print-slip .text-red-600 {
-        color: #7f1d1d !important;
-      }
       #salary-slips-print-root .print-slip:nth-child(6n) {
         break-after: page !important;
         page-break-after: always !important;
@@ -265,6 +252,15 @@ function normalizePrintStyles() {
 
   document.head.appendChild(style);
   return styleId;
+}
+
+// Extracts all unique payment types from all payments across all staff
+function collectKnownPaymentTypes(payments) {
+  const types = new Set();
+  payments.forEach((p) => {
+    if (p.type) types.add(String(p.type));
+  });
+  return types;
 }
 
 export default function SalarySlipsPage() {
@@ -295,7 +291,9 @@ export default function SalarySlipsPage() {
           paymentMonthsRes.data || []
         );
         setAvailableMonths(months);
-        setSelectedMonth((prev) => (prev && months.includes(prev) ? prev : (months[0] || "")));
+        setSelectedMonth((prev) =>
+          prev && months.includes(prev) ? prev : months[0] || ""
+        );
       } catch (err) {
         console.error(err);
         showToast({ type: "error", message: "Failed to load available months" });
@@ -309,7 +307,10 @@ export default function SalarySlipsPage() {
 
   const handleGenerate = async () => {
     if (!selectedMonth) {
-      showToast({ type: "error", message: "No month available to generate slips" });
+      showToast({
+        type: "error",
+        message: "No month available to generate slips",
+      });
       return;
     }
 
@@ -335,7 +336,11 @@ export default function SalarySlipsPage() {
         fetchStaffPayments({ month: selectedMonth, limit: 5000 }),
         fetchStaffRecords({ date_to: prevMonthMeta.to, limit: 20000 }),
         fetchStaffPayments({ limit: 20000 }),
-        fetchStaffRecords({ date_from: prevMonthMeta.from, date_to: prevMonthMeta.to, limit: 5000 }),
+        fetchStaffRecords({
+          date_from: prevMonthMeta.from,
+          date_to: prevMonthMeta.to,
+          limit: 5000,
+        }),
         fetchStaffPayments({ month: prevMonthKey, limit: 5000 }),
         fetchStaffs({ limit: 5000 }),
         fetchMyRuleData().catch(() => ({ rule_data: {} })),
@@ -345,7 +350,11 @@ export default function SalarySlipsPage() {
       const staffList = staffRes?.data || [];
       const embroideryStaffIds = new Set(
         staffList
-          .filter((row) => String(row?.category || "Embroidery").toLowerCase() === "embroidery")
+          .filter(
+            (row) =>
+              String(row?.category || "Embroidery").toLowerCase() ===
+              "embroidery"
+          )
           .map((row) => String(row?._id || ""))
           .filter(Boolean)
       );
@@ -358,23 +367,43 @@ export default function SalarySlipsPage() {
 
       const records = filterEmbroideryStaff(currentRecordsRes.data || []);
       const payments = filterEmbroideryStaff(currentPaymentsRes.data || []);
-      const historyRecords = filterEmbroideryStaff(historyRecordsRes.data || []);
-      const historyPayments = filterEmbroideryStaff(historyPaymentsRes.data || []);
-      const prevMonthRecords = filterEmbroideryStaff(prevMonthRecordsRes.data || []);
-      const prevMonthPayments = filterEmbroideryStaff(prevMonthPaymentsRes.data || []);
+      const historyRecords = filterEmbroideryStaff(
+        historyRecordsRes.data || []
+      );
+      const historyPayments = filterEmbroideryStaff(
+        historyPaymentsRes.data || []
+      );
+      const prevMonthRecords = filterEmbroideryStaff(
+        prevMonthRecordsRes.data || []
+      );
+      const prevMonthPayments = filterEmbroideryStaff(
+        prevMonthPaymentsRes.data || []
+      );
       const monthLabel = getMonthLabel(selectedMonth);
+
+      // Collect all payment types used this month across all staff
+      const knownPaymentTypes = collectKnownPaymentTypes(payments);
 
       const historyMonths = historyRecords
         .map((r) => getMonthKeyFromDate(r.date))
         .filter(Boolean)
         .filter((m) => m <= prevMonthKey);
 
-      const allowanceByMonth = await buildAllowanceByMonth([...historyMonths, selectedMonth]);
+      const allowanceByMonth = await buildAllowanceByMonth([
+        ...historyMonths,
+        selectedMonth,
+      ]);
       const monthlyAllowance = allowanceByMonth[selectedMonth] ?? 0;
 
       const grouped = {};
       const ensureGroup = (id, name, openingBalance = 0) => {
-        if (!grouped[id]) grouped[id] = buildEmptySlip(id, name, monthLabel, openingBalance);
+        if (!grouped[id]) {
+          grouped[id] = buildEmptySlip(id, name, monthLabel, openingBalance);
+          // Pre-fill all known payment types with 0 so every slip shows every type
+          knownPaymentTypes.forEach((type) => {
+            grouped[id].payment_breakdown[type] = 0;
+          });
+        }
         return grouped[id];
       };
 
@@ -414,16 +443,27 @@ export default function SalarySlipsPage() {
       Object.values(grouped).forEach((g) => {
         const staffKey = String(g.id);
         const previousBalance = prevMonthDataStaffs.has(staffKey)
-          ? (closingByStaff[staffKey] ?? g.openingBalance)
+          ? closingByStaff[staffKey] ?? g.openingBalance
           : g.openingBalance;
 
         g.arrears = previousBalance;
-        g.allowance = isAllowanceEligibleWithRule({
-          record_count: g.recordCount,
-          absent_count: g.absentCount,
-          half_count: g.halfCount,
-        }, ruleData) ? monthlyAllowance : 0;
-        g.total = g.amount + g.bonusAmt + g.allowance + g.arrears + g.payment_addition - g.payment_deduction;
+        g.allowance = isAllowanceEligibleWithRule(
+          {
+            record_count: g.recordCount,
+            absent_count: g.absentCount,
+            half_count: g.halfCount,
+          },
+          ruleData
+        )
+          ? monthlyAllowance
+          : 0;
+        g.total =
+          g.amount +
+          g.bonusAmt +
+          g.allowance +
+          g.arrears +
+          g.payment_addition -
+          g.payment_deduction;
         g.display_preferences = getDisplayPreferences(ruleData);
         g.labels = {
           arrears: getLabelOverride(ruleData, "arrears"),
@@ -483,12 +523,16 @@ export default function SalarySlipsPage() {
 
       <div className="bg-white border border-gray-300 rounded-3xl p-6 mb-6 flex flex-wrap gap-4 items-end">
         <div className="flex flex-col gap-1.5 min-w-64">
-          <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Month</label>
+          <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+            Month
+          </label>
           <Select
             value={selectedMonth}
             onChange={setSelectedMonth}
             options={monthOptions}
-            placeholder={loadingMonths ? "Loading months..." : "Select month..."}
+            placeholder={
+              loadingMonths ? "Loading months..." : "Select month..."
+            }
             disabled={loadingMonths || monthOptions.length === 0}
           />
         </div>
@@ -499,11 +543,28 @@ export default function SalarySlipsPage() {
           className="flex items-center gap-2 px-6 py-2.5 bg-[#127475] text-white rounded-xl text-sm font-semibold hover:bg-teal-700 transition-colors disabled:opacity-60 shadow-sm"
         >
           {loading ? (
-            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            <svg
+              className="animate-spin h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+              />
             </svg>
-          ) : <Search className="w-4 h-4" />}
+          ) : (
+            <Search className="w-4 h-4" />
+          )}
           {loading ? "Generating..." : "Generate Slips"}
         </button>
 
@@ -522,13 +583,21 @@ export default function SalarySlipsPage() {
         <div className="flex-1 flex flex-col items-center justify-center text-center py-20 bg-white border border-gray-200 rounded-3xl">
           {monthOptions.length === 0 ? (
             <>
-              <p className="text-gray-700 font-semibold text-lg">No Month Data Found</p>
-              <p className="text-gray-400 text-sm mt-1">Add staff records/payments first to generate slips.</p>
+              <p className="text-gray-700 font-semibold text-lg">
+                No Month Data Found
+              </p>
+              <p className="text-gray-400 text-sm mt-1">
+                Add staff records/payments first to generate slips.
+              </p>
             </>
           ) : (
             <>
-              <p className="text-gray-700 font-semibold text-lg">No Slips Generated</p>
-              <p className="text-gray-400 text-sm mt-1">Select a month and click "Generate Slips"</p>
+              <p className="text-gray-700 font-semibold text-lg">
+                No Slips Generated
+              </p>
+              <p className="text-gray-400 text-sm mt-1">
+                Select a month and click "Generate Slips"
+              </p>
             </>
           )}
         </div>
@@ -536,7 +605,9 @@ export default function SalarySlipsPage() {
 
       {generated && slips.length === 0 && (
         <div className="flex-1 flex flex-col items-center justify-center py-20 bg-white border border-gray-200 rounded-3xl">
-          <p className="text-gray-500 font-medium">No records found for the selected month.</p>
+          <p className="text-gray-500 font-medium">
+            No records found for the selected month.
+          </p>
         </div>
       )}
 
@@ -560,15 +631,23 @@ export default function SalarySlipsPage() {
                 { label: "Total Amount", value: totals.amount, cls: "text-gray-800" },
                 { label: "Total Allowance", value: totals.allowance, cls: "text-emerald-700" },
                 { label: "Total Bonus", value: totals.bonus, cls: "text-indigo-700" },
-                { label: "Total Arrears", value: totals.arrears, cls: totals.arrears < 0 ? "text-red-600" : "text-gray-800" },
+                {
+                  label: "Total Arrears",
+                  value: totals.arrears,
+                  cls: totals.arrears < 0 ? "text-red-600" : "text-gray-800",
+                },
                 { label: "Total Advance", value: totals.advance, cls: "text-red-600" },
               ].map((item) => (
                 <div
                   key={item.label}
                   className="rounded-xl border border-gray-300 bg-gray-50 px-4 py-2.5"
                 >
-                  <p className="text-xs uppercase tracking-wider text-gray-500">{item.label}</p>
-                  <p className={`text-base font-semibold tabular-nums ${item.cls}`}>
+                  <p className="text-xs uppercase tracking-wider text-gray-500">
+                    {item.label}
+                  </p>
+                  <p
+                    className={`text-base font-semibold tabular-nums ${item.cls}`}
+                  >
                     {formatNumbers(item.value, 2)}
                   </p>
                 </div>
@@ -576,7 +655,9 @@ export default function SalarySlipsPage() {
             </div>
 
             <div className="flex items-center justify-between bg-white border border-gray-400 px-4 py-2 rounded-xl">
-              <label className="text-gray-700 tracking-wide">Grand Total Payable Amount</label>
+              <label className="text-gray-700 tracking-wide">
+                Grand Total Payable Amount
+              </label>
               <div className="text-lg font-bold text-teal-600 tabular-nums">
                 {formatNumbers(totals.grandTotal, 2)}
               </div>

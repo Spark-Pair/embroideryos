@@ -30,10 +30,11 @@ export default function SlipCard({ emp }) {
       <div className="p-1.5 text-[13px] space-y-1.5">
         <div className="flex justify-between px-1.5">
           <span className="text-gray-800">{labels.arrears || "Arrears"}:</span>
-          <span className={`font-medium ${arrears < 0 ? "text-red-600" : "text-green-600"}`}>
+          <span className={`font-medium ${arrears < 0 ? "text-red-600" : "text-green-700"}`}>
             {formatNumbers(arrears, 2)}
           </span>
         </div>
+
         {showField("amount") && (
           <>
             <hr className="border-gray-300" />
@@ -43,6 +44,7 @@ export default function SlipCard({ emp }) {
             </div>
           </>
         )}
+
         {showField("bonus") && (
           <>
             <hr className="border-gray-300" />
@@ -52,6 +54,7 @@ export default function SlipCard({ emp }) {
             </div>
           </>
         )}
+
         {showField("allowance") && (
           <>
             <hr className="border-gray-300" />
@@ -61,31 +64,45 @@ export default function SlipCard({ emp }) {
             </div>
           </>
         )}
-        {showField("payments") && Object.entries(paymentBreakdown).map(([label, value]) => (
-          Number(value) !== 0 ? (
+
+        {showField("payments") &&
+          Object.entries(paymentBreakdown).map(([label, value]) => (
             <div key={label}>
               <hr className="border-gray-300" />
               <div className="flex justify-between px-1.5">
                 <span className="text-gray-800 capitalize">{label}:</span>
-                <span className={`font-medium ${Number(value) < 0 ? "text-red-600" : "text-emerald-700"}`}>
-                  {Number(value) < 0 ? "-" : "+"}{formatNumbers(Math.abs(Number(value)), 2)}
+                <span
+                  className={`font-medium ${
+                    Number(value) < 0 ? "text-red-600" : "text-emerald-700"
+                  }`}
+                >
+                  {Number(value) < 0 ? "-" : ""}
+                  {formatNumbers(Math.abs(Number(value)), 2)}
                 </span>
               </div>
             </div>
-          ) : null
-        ))}
+          ))}
+
         {(showField("gross_total") || showField("deduction_total")) && (
           <div className="mt-1 rounded-xl border border-gray-300 overflow-hidden">
             {showField("gross_total") && (
               <div className="flex justify-between items-center px-2 py-1.5 bg-gray-50 border-b border-gray-300">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-600">{labels.gross_total || "Gross Total (+)"}</span>
-                <span className="text-[13px] font-extrabold text-[#127475] tabular-nums">{formatNumbers(grossTotal + paymentAddition, 2)}</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-600">
+                  {labels.gross_total || "Gross Total (+)"}
+                </span>
+                <span className="text-[13px] font-extrabold text-[#127475] tabular-nums">
+                  {formatNumbers(grossTotal + paymentAddition, 2)}
+                </span>
               </div>
             )}
             {showField("deduction_total") && (
               <div className="flex justify-between items-center px-2 py-1.5 bg-gray-50">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-600">{labels.deduction_total || "Total Deduction (-)"}</span>
-                <span className="text-[13px] font-extrabold text-red-600 tabular-nums">{formatNumbers(deductionTotal, 2)}</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-600">
+                  {labels.deduction_total || "Total Deduction (-)"}
+                </span>
+                <span className="text-[13px] font-extrabold text-red-600 tabular-nums">
+                  {formatNumbers(deductionTotal, 2)}
+                </span>
               </div>
             )}
           </div>
@@ -94,14 +111,20 @@ export default function SlipCard({ emp }) {
 
       {showField("net_amount") && (
         <div className="bg-[#127475] py-1.5 px-3 flex items-center justify-between rounded-lg">
-          <h3 className="font-semibold tracking-wide text-sm text-white capitalize">{labels.net_amount || "Net Amount"}:</h3>
-          <p className="text-white font-semibold text-sm tabular-nums">{formatNumbers(total, 2)}</p>
+          <h3 className="font-semibold tracking-wide text-sm text-white capitalize">
+            {labels.net_amount || "Net Amount"}:
+          </h3>
+          <p className="text-white font-semibold text-sm tabular-nums">
+            {formatNumbers(total, 2)}
+          </p>
         </div>
       )}
 
       <div className="mt-1.5 py-1.5 px-3 text-[13px] border border-gray-300 rounded-xl">
         <div>
-          <span className="font-medium text-gray-700 mr-2 whitespace-nowrap">{labels.payments || "Payment"}:</span>
+          <span className="font-medium text-gray-700 mr-2 whitespace-nowrap">
+            {labels.payments || "Payment"}:
+          </span>
           <div className="line h-5 border-b border-dashed border-gray-500 w-[98%] mx-auto"></div>
         </div>
       </div>
