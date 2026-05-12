@@ -15,6 +15,7 @@ import {
   isAllowanceEligible,
   toMonthWindow,
 } from "../../utils/salarySlip";
+import { normalizeAllowanceOverrides, resolveAllowanceAmount } from "../../utils/allowanceOverride";
 
 const DEFAULT_ALLOWANCE = 1500;
 
@@ -336,8 +337,11 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
         .map((r) => getMonthKeyFromDate(r.date))
         .filter(Boolean)
         .filter((m) => m <= prevMonthKey);
+      const overrideMonths = normalizeAllowanceOverrides(staffRes?.allowance_overrides)
+        .map((item) => item.month)
+        .filter(Boolean);
 
-      const allowanceByMonth = await buildAllowanceByMonth([...historyMonths, selectedMonth]);
+      const allowanceByMonth = await buildAllowanceByMonth([...historyMonths, ...overrideMonths, selectedMonth]);
       const monthlyAllowance = allowanceByMonth[selectedMonth] ?? DEFAULT_ALLOWANCE;
 
       const monthBuckets = {};
@@ -358,7 +362,12 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
         .sort(([a], [b]) => a.localeCompare(b))
         .forEach(([monthKey, data]) => {
           const al = allowanceByMonth[monthKey] ?? DEFAULT_ALLOWANCE;
-          historyClosing += data.finalAmount + (isAllowanceEligible(data) ? al : 0);
+          historyClosing += data.finalAmount + resolveAllowanceAmount({
+            staff: staffRes,
+            month: monthKey,
+            allowance: al,
+            isEligible: isAllowanceEligible(data),
+          });
         });
 
       historyPayments.forEach((p) => {
@@ -397,7 +406,12 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
         { advance: 0, payment: 0, adjustment: 0 }
       );
 
-      const allowance = isAllowanceEligible(currentStats) ? monthlyAllowance : 0;
+      const allowance = resolveAllowanceAmount({
+        staff: staffRes,
+        month: selectedMonth,
+        allowance: monthlyAllowance,
+        isEligible: isAllowanceEligible(currentStats),
+      });
       const net       = currentStats.final - (currentStats.bonus || 0);
       const balance   =
         currentStats.final + allowance + historyClosing -

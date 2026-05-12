@@ -12,7 +12,7 @@ export default function StaffFormModal({
   onClose,
   initialData,
   onAction,
-}) {
+  }) {
   const mode = initialData ? 'edit' : 'add';
   const [formData, setFormData] = useState({});
   const [referenceData, setReferenceData] = useState({ staff_categories: [] });

@@ -12,7 +12,6 @@ export default function StaffDetailsModal({
   onAction,
 }) {
   const isActive = initialData?.isActive;
-
   return (
     <Modal
       isOpen={isOpen}

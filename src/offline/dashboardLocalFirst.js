@@ -7,6 +7,11 @@ import {
   getStaffPaymentTypeRule,
   isAllowanceEligibleWithRule,
 } from "../utils/businessRuleData";
+import {
+  ALLOWANCE_OVERRIDE_MODES,
+  normalizeAllowanceOverrides,
+  resolveAllowanceAmount,
+} from "../utils/allowanceOverride";
 
 const SNAPSHOT_CACHE_TTL_MS = 1200;
 const mergedSnapshotInFlight = new Map();
@@ -229,6 +234,38 @@ const monthKeyFromDate = (value) => {
   if (!ts) return "";
   const d = new Date(ts);
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+};
+
+const getEffectiveProductionConfigForDate = async (date) => {
+  const rows = await getMergedSnapshotCached("productionConfigs:all", "productionConfigs:overlay");
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+  const target = toMillis(date);
+  const eligible = rows.filter((row) => {
+    const effective = toMillis(row?.effective_date);
+    return effective ? effective <= target : false;
+  });
+  const source = eligible.length ? eligible : rows;
+  return [...source].sort((a, b) => {
+    const aTime = toMillis(a?.effective_date) || toMillis(a?.createdAt);
+    const bTime = toMillis(b?.effective_date) || toMillis(b?.createdAt);
+    return bTime - aTime;
+  })[0] || null;
+};
+
+const buildAllowanceAmountByMonth = async (monthKeys = []) => {
+  const uniqueMonths = [...new Set(monthKeys.filter(Boolean))];
+  if (!uniqueMonths.length) return {};
+
+  const entries = await Promise.all(
+    uniqueMonths.map(async (monthKey) => {
+      const range = toMonthRange(monthKey);
+      const config = await getEffectiveProductionConfigForDate(range.to);
+      const allowance = Number(config?.allowance);
+      return [monthKey, Number.isFinite(allowance) ? allowance : 0];
+    })
+  );
+
+  return Object.fromEntries(entries);
 };
 
 const applyAttendanceAllowanceCounters = (target, attendanceRule) => {
@@ -587,7 +624,7 @@ const buildCrpStaffMonthlySummaryLocal = ({ staff, crpRecords, staffPayments, se
   return total;
 };
 
-const buildStaffMonthlySummaryLocal = ({ staff, staffRecords, staffPayments, selectedMonth, ruleData }) => {
+const buildStaffMonthlySummaryLocal = async ({ staff, staffRecords, staffPayments, selectedMonth, ruleData }) => {
   const prevMonthKey = previousMonth(selectedMonth);
 
   const embroideryStaff = (staff || []).filter((row) => String(row?.category || "Embroidery") === "Embroidery");
@@ -610,6 +647,16 @@ const buildStaffMonthlySummaryLocal = ({ staff, staffRecords, staffPayments, sel
       by_staff: [],
     };
   }
+
+  const staffById = new Map(embroideryStaff.map((row) => [String(row?._id || ""), row]));
+  const overrideMonths = embroideryStaff.flatMap((staffRow) =>
+    normalizeAllowanceOverrides(staffRow?.allowance_overrides).map((item) => item.month)
+  );
+  const allowanceAmountByMonth = await buildAllowanceAmountByMonth([
+    ...(staffRecords || []).map((rec) => monthKeyFromDate(rec?.date)).filter((monthKey) => monthKey && monthKey <= selectedMonth),
+    ...overrideMonths,
+    selectedMonth,
+  ]);
 
   const summaryByStaff = new Map(
     embroideryStaff.map((row) => [
@@ -683,14 +730,31 @@ const buildStaffMonthlySummaryLocal = ({ staff, staffRecords, staffPayments, sel
       const current = summaryByStaff.get(row.staffId);
       if (!current) return;
       current.arrears += Number(row.finalAmount || 0);
-      if (isAllowanceEligibleWithRule({
-        record_count: row.recordCount,
-        absent_count: row.absentCount,
-        half_count: row.halfCount,
-      }, ruleData)) {
-        current.arrears += Number(row.allowanceCandidate ?? 0);
-      }
+      current.arrears += resolveAllowanceAmount({
+        staff: staffById.get(row.staffId),
+        month: row.monthKey,
+        allowance:
+          Number.isFinite(Number(row.allowanceCandidate))
+            ? Number(row.allowanceCandidate)
+            : Number(allowanceAmountByMonth[row.monthKey] || 0),
+        isEligible: isAllowanceEligibleWithRule({
+          record_count: row.recordCount,
+          absent_count: row.absentCount,
+          half_count: row.halfCount,
+        }, ruleData),
+      });
     });
+
+  embroideryStaff.forEach((staffRow) => {
+    normalizeAllowanceOverrides(staffRow?.allowance_overrides).forEach((override) => {
+      if (override.mode !== ALLOWANCE_OVERRIDE_MODES.FORCE_ADD) return;
+      if (!override.month || override.month >= selectedMonth) return;
+      if (historyMonthStats.has(`${String(staffRow?._id || "")}::${override.month}`)) return;
+      const current = summaryByStaff.get(String(staffRow?._id || ""));
+      if (!current) return;
+      current.arrears += Number(allowanceAmountByMonth[override.month] || 0);
+    });
+  });
 
   (staffPayments || []).forEach((payment) => {
     const staffId = String(payment?.staff_id?._id || payment?.staff_id || "");
@@ -739,13 +803,19 @@ const buildStaffMonthlySummaryLocal = ({ staff, staffRecords, staffPayments, sel
 
   summaryByStaff.forEach((row) => {
     if (row.currentRecordCount > 0) staffWithRecords += 1;
-    const allowance = isAllowanceEligibleWithRule({
-      record_count: row.currentRecordCount,
-      absent_count: row.currentAbsent,
-      half_count: row.currentHalf,
-    }, ruleData)
-      ? Number(row.currentAllowanceCandidate ?? 0)
-      : 0;
+    const allowance = resolveAllowanceAmount({
+      staff: staffById.get(row.staff_id),
+      month: selectedMonth,
+      allowance:
+        Number.isFinite(Number(row.currentAllowanceCandidate))
+          ? Number(row.currentAllowanceCandidate)
+          : Number(allowanceAmountByMonth[selectedMonth] || 0),
+      isEligible: isAllowanceEligibleWithRule({
+        record_count: row.currentRecordCount,
+        absent_count: row.currentAbsent,
+        half_count: row.currentHalf,
+      }, ruleData),
+    });
 
     const workAmount = row.currentFinal - row.currentBonusAmt;
     const startingBalance = row.arrears + row.currentFinal + allowance;
@@ -872,7 +942,7 @@ export const fetchDashboardSummaryLocalFirst = async (params = {}) => {
         staffPayments,
         selectedMonth,
       }),
-      staff_summary: buildStaffMonthlySummaryLocal({
+      staff_summary: await buildStaffMonthlySummaryLocal({
         staff,
         staffRecords,
         staffPayments,

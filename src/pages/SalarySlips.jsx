@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Printer, Search } from "lucide-react";
+import { Printer, Search, Settings2 } from "lucide-react";
 import {
   fetchStaffRecords,
   fetchStaffRecordMonths,
@@ -8,18 +8,19 @@ import {
   fetchStaffPaymentMonths,
   fetchStaffPayments,
 } from "../api/staffPayment";
-import { fetchStaffs } from "../api/staff";
+import { fetchStaffs, updateStaff } from "../api/staff";
 import { fetchProductionConfig } from "../api/productionConfig";
 import { fetchMyRuleData } from "../api/business";
 import PageHeader from "../components/PageHeader";
 import Select from "../components/Select";
 import SlipCard from "../components/SalarySlip/SlipCard";
+import Modal from "../components/Modal";
+import Button from "../components/Button";
 import { useToast } from "../context/ToastContext";
 import {
   getMonthKeyFromDate,
   getMonthLabel,
   getPreviousMonthKey,
-  isAllowanceEligible,
   mergeAndSortMonths,
   toMonthWindow,
 } from "../utils/salarySlip";
@@ -31,6 +32,18 @@ import {
   getStaffPaymentTypeRule,
   isAllowanceEligibleWithRule,
 } from "../utils/businessRuleData";
+import {
+  ALLOWANCE_OVERRIDE_MODES,
+  resolveAllowanceAmount,
+  getAllowanceOverrideMode,
+  normalizeAllowanceOverrides,
+} from "../utils/allowanceOverride";
+
+const ALLOWANCE_MODE_OPTIONS = [
+  { value: "", label: "Auto" },
+  { value: ALLOWANCE_OVERRIDE_MODES.FORCE_ADD, label: "Force Add" },
+  { value: ALLOWANCE_OVERRIDE_MODES.FORCE_REMOVE, label: "Force Remove" },
+];
 
 function buildEmptySlip(id, name, month, openingBalance = 0) {
   return {
@@ -127,6 +140,7 @@ function buildPreviousClosingBalance({
   prevMonthEnd,
   allowanceByMonth,
   ruleData,
+  staffById,
 }) {
   const closingByStaff = {};
   const monthBuckets = {};
@@ -166,16 +180,19 @@ function buildPreviousClosingBalance({
 
   sortedBuckets.forEach((bucket) => {
     const allowance = allowanceByMonth[bucket.monthKey] ?? 0;
-    const allowed = isAllowanceEligibleWithRule(
-      {
-        record_count: bucket.recordCount,
-        absent_count: bucket.absentCount,
-        half_count: bucket.halfCount,
-      },
-      ruleData
-    )
-      ? allowance
-      : 0;
+    const allowed = resolveAllowanceAmount({
+      staff: staffById?.[bucket.staffKey],
+      month: bucket.monthKey,
+      allowance,
+      isEligible: isAllowanceEligibleWithRule(
+        {
+          record_count: bucket.recordCount,
+          absent_count: bucket.absentCount,
+          half_count: bucket.halfCount,
+        },
+        ruleData
+      ),
+    });
     closingByStaff[bucket.staffKey] += bucket.finalAmount + allowed;
   });
 
@@ -263,6 +280,13 @@ function collectKnownPaymentTypes(payments) {
   return types;
 }
 
+function applyMonthAllowanceOverride(overrides, month, mode) {
+  const next = normalizeAllowanceOverrides(overrides);
+  const filtered = next.filter((item) => item.month !== month);
+  if (!mode) return filtered;
+  return normalizeAllowanceOverrides([...filtered, { month, mode }]);
+}
+
 export default function SalarySlipsPage() {
   const { showToast } = useToast();
 
@@ -272,6 +296,10 @@ export default function SalarySlipsPage() {
   const [loading, setLoading] = useState(false);
   const [loadingMonths, setLoadingMonths] = useState(false);
   const [generated, setGenerated] = useState(false);
+  const [allowanceModalOpen, setAllowanceModalOpen] = useState(false);
+  const [allowanceModalLoading, setAllowanceModalLoading] = useState(false);
+  const [allowanceModalSaving, setAllowanceModalSaving] = useState(false);
+  const [allowanceRows, setAllowanceRows] = useState([]);
 
   const monthOptions = useMemo(
     () => availableMonths.map((m) => ({ value: m, label: getMonthLabel(m) })),
@@ -304,6 +332,71 @@ export default function SalarySlipsPage() {
 
     loadMonths();
   }, [showToast]);
+
+  const openAllowanceModal = async () => {
+    if (!selectedMonth) {
+      showToast({ type: "error", message: "Select month first" });
+      return;
+    }
+
+    try {
+      setAllowanceModalOpen(true);
+      setAllowanceModalLoading(true);
+      const staffRes = await fetchStaffs({ limit: 5000, status: "active", category: "Embroidery" });
+      const rows = (staffRes?.data || [])
+        .filter((row) => String(row?.category || "Embroidery").toLowerCase() === "embroidery")
+        .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")))
+        .map((row) => ({
+          id: String(row?._id || ""),
+          name: row?.name || "Unknown",
+          allowance_overrides: normalizeAllowanceOverrides(row?.allowance_overrides),
+          mode: getAllowanceOverrideMode(row, selectedMonth),
+        }));
+      setAllowanceRows(rows);
+    } catch (err) {
+      console.error(err);
+      setAllowanceModalOpen(false);
+      showToast({ type: "error", message: "Failed to load allowance settings" });
+    } finally {
+      setAllowanceModalLoading(false);
+    }
+  };
+
+  const handleAllowanceModeChange = (staffId, mode) => {
+    setAllowanceRows((prev) =>
+      prev.map((row) => (row.id === staffId ? { ...row, mode } : row))
+    );
+  };
+
+  const handleSaveAllowanceSettings = async () => {
+    try {
+      setAllowanceModalSaving(true);
+      await Promise.all(
+        allowanceRows.map((row) =>
+          updateStaff(row.id, {
+            allowance_overrides: applyMonthAllowanceOverride(
+              row.allowance_overrides,
+              selectedMonth,
+              row.mode
+            ),
+          })
+        )
+      );
+      setAllowanceModalOpen(false);
+      showToast({ type: "success", message: "Allowance settings saved" });
+      if (generated) {
+        await handleGenerate();
+      }
+    } catch (err) {
+      console.error(err);
+      showToast({
+        type: "error",
+        message: err?.response?.data?.message || "Failed to save allowance settings",
+      });
+    } finally {
+      setAllowanceModalSaving(false);
+    }
+  };
 
   const handleGenerate = async () => {
     if (!selectedMonth) {
@@ -348,6 +441,9 @@ export default function SalarySlipsPage() {
       const ruleData = ruleRes?.rule_data || {};
 
       const staffList = staffRes?.data || [];
+      const staffById = Object.fromEntries(
+        staffList.map((row) => [String(row?._id || ""), row])
+      );
       const embroideryStaffIds = new Set(
         staffList
           .filter(
@@ -388,9 +484,15 @@ export default function SalarySlipsPage() {
         .map((r) => getMonthKeyFromDate(r.date))
         .filter(Boolean)
         .filter((m) => m <= prevMonthKey);
+      const overrideMonths = staffList.flatMap((staff) =>
+        Array.isArray(staff?.allowance_overrides)
+          ? staff.allowance_overrides.map((item) => item?.month).filter(Boolean)
+          : []
+      );
 
       const allowanceByMonth = await buildAllowanceByMonth([
         ...historyMonths,
+        ...overrideMonths,
         selectedMonth,
       ]);
       const monthlyAllowance = allowanceByMonth[selectedMonth] ?? 0;
@@ -438,6 +540,7 @@ export default function SalarySlipsPage() {
         prevMonthEnd: prevMonthMeta.to,
         allowanceByMonth,
         ruleData,
+        staffById,
       });
 
       Object.values(grouped).forEach((g) => {
@@ -447,16 +550,19 @@ export default function SalarySlipsPage() {
           : g.openingBalance;
 
         g.arrears = previousBalance;
-        g.allowance = isAllowanceEligibleWithRule(
-          {
-            record_count: g.recordCount,
-            absent_count: g.absentCount,
-            half_count: g.halfCount,
-          },
-          ruleData
-        )
-          ? monthlyAllowance
-          : 0;
+        g.allowance = resolveAllowanceAmount({
+          staff: staffById[staffKey],
+          month: selectedMonth,
+          allowance: monthlyAllowance,
+          isEligible: isAllowanceEligibleWithRule(
+            {
+              record_count: g.recordCount,
+              absent_count: g.absentCount,
+              half_count: g.halfCount,
+            },
+            ruleData
+          ),
+        });
         g.total =
           g.amount +
           g.bonusAmt +
@@ -536,6 +642,15 @@ export default function SalarySlipsPage() {
             disabled={loadingMonths || monthOptions.length === 0}
           />
         </div>
+
+        <button
+          onClick={openAllowanceModal}
+          disabled={loadingMonths || !selectedMonth}
+          className="flex items-center gap-2 px-6 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50 transition-colors disabled:opacity-60 shadow-sm"
+        >
+          <Settings2 className="w-4 h-4" />
+          Allowance Settings
+        </button>
 
         <button
           onClick={handleGenerate}
@@ -665,6 +780,69 @@ export default function SalarySlipsPage() {
           </div>
         </>
       )}
+
+      <Modal
+        isOpen={allowanceModalOpen}
+        onClose={() => (allowanceModalSaving ? null : setAllowanceModalOpen(false))}
+        title="Allowance Settings"
+        subtitle={selectedMonth ? `Selected month: ${getMonthLabel(selectedMonth)}` : "Select a month first"}
+        maxWidth="max-w-3xl"
+        footer={
+          <div className="flex gap-3">
+            <Button
+              outline
+              variant="secondary"
+              className="w-1/3"
+              disabled={allowanceModalSaving}
+              onClick={() => setAllowanceModalOpen(false)}
+            >
+              Close
+            </Button>
+            <Button
+              className="grow"
+              loading={allowanceModalSaving}
+              onClick={handleSaveAllowanceSettings}
+            >
+              Save Settings
+            </Button>
+          </div>
+        }
+      >
+        {allowanceModalLoading ? (
+          <div className="py-14 text-center text-sm text-gray-500">
+            Loading staff allowance settings...
+          </div>
+        ) : allowanceRows.length === 0 ? (
+          <div className="py-14 text-center text-sm text-gray-500">
+            No embroidery staff found.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-gray-200 bg-amber-50/70 px-4 py-3 text-sm text-gray-700">
+              Auto se allowance rules/settings ke mutabiq chalega. `Force Add` selected month mein allowance zaroor lagayega, aur `Force Remove` selected month mein allowance hata dega.
+            </div>
+            <div className="space-y-2">
+              {allowanceRows.map((row) => (
+                <div
+                  key={row.id}
+                  className="grid grid-cols-1 gap-3 rounded-2xl border border-gray-300 bg-gray-50/70 px-4 py-3 md:grid-cols-[minmax(0,1fr)_220px] md:items-center"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">{row.name}</p>
+                    <p className="text-xs text-gray-500">Month: {selectedMonth}</p>
+                  </div>
+                  <Select
+                    value={row.mode}
+                    onChange={(value) => handleAllowanceModeChange(row.id, value)}
+                    options={ALLOWANCE_MODE_OPTIONS}
+                    placeholder="Select mode..."
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

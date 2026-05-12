@@ -11,6 +11,7 @@ import {
 } from "./idb";
 import { logDataSource } from "./logger";
 import { applyPaymentEffect, getStaffPaymentTypeRule } from "../utils/businessRuleData";
+import { normalizeAllowanceOverrides } from "../utils/allowanceOverride";
 
 const STAFF_URL = "/staffs";
 const ALL_KEY = "staffs:all";
@@ -28,6 +29,7 @@ const normalizeStaff = (value = {}) => ({
     value?.opening_balance === "" || value?.opening_balance == null
       ? 0
       : Number(value.opening_balance),
+  allowance_overrides: normalizeAllowanceOverrides(value?.allowance_overrides),
 });
 
 const normalizeId = (row) => String(row?._id || row?.id || "");
