@@ -6,6 +6,7 @@ import {
   getPendingSyncActions,
   offlineAccess,
   queueSyncAction,
+  remapPendingSyncEntityId,
   upsertEntitySnapshot,
 } from "./idb";
 import { logDataSource } from "./logger";
@@ -30,6 +31,10 @@ const objectIdToMillis = (id) => {
   const raw = String(id || "");
   if (!/^[a-fA-F0-9]{24}$/.test(raw)) return 0;
   return parseInt(raw.slice(0, 8), 16) * 1000;
+};
+const extractOrderIdFromUrl = (url = "") => {
+  const match = String(url || "").match(/\/orders\/([^/?#]+)/i);
+  return match?.[1] ? String(match[1]) : "";
 };
 const sortLatestFirst = (rows = []) =>
   [...rows].sort((a, b) => {
@@ -326,6 +331,7 @@ const syncCreateSuccess = async (action, serverOrder) => {
     if (realId) overlay[realId] = { ...serverOrder, _id: realId };
     return overlay;
   });
+  await remapPendingSyncEntityId("orders", localId, realId);
 };
 
 const syncUpdateSuccess = async (action, serverOrder) => {
@@ -357,9 +363,25 @@ const processOrderQueue = async () => {
           const serverOrder = res?.data?.data || res?.data;
           await syncCreateSuccess(action, serverOrder);
         } else if (action.method === "PUT") {
-          const res = await apiClient.put(action.url, action.payload);
-          const serverOrder = res?.data?.data || res?.data;
-          await syncUpdateSuccess(action, serverOrder);
+          const queuedId = extractOrderIdFromUrl(action.url);
+          if (queuedId.startsWith("local-order-")) {
+            const res = await apiClient.post(ORDERS_URL, action.payload);
+            const serverOrder = res?.data?.data || res?.data;
+            await syncCreateSuccess(
+              {
+                ...action,
+                meta: {
+                  ...(action?.meta || {}),
+                  localId: queuedId,
+                },
+              },
+              serverOrder
+            );
+          } else {
+            const res = await apiClient.put(action.url, action.payload);
+            const serverOrder = res?.data?.data || res?.data;
+            await syncUpdateSuccess(action, serverOrder);
+          }
         }
 
         await completeSyncAction(action.id);

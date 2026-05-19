@@ -1,4 +1,6 @@
 const listeners = new Set();
+let syncController = null;
+let cancelRequested = false;
 
 let state = {
   phase: "idle", // idle | syncing | done
@@ -38,6 +40,15 @@ export const subscribeBootstrapSyncState = (listener) => {
 };
 
 export const startBootstrapSync = (totalSteps = 0) => {
+  if (syncController) {
+    try {
+      syncController.abort();
+    } catch {
+      // ignore abort failures
+    }
+  }
+  syncController = typeof AbortController !== "undefined" ? new AbortController() : null;
+  cancelRequested = false;
   patchState({
     phase: "syncing",
     totalSteps: Math.max(0, Number(totalSteps) || 0),
@@ -69,6 +80,8 @@ export const failBootstrapSyncStep = (stepId = "", stepLabel = "", message = "")
 };
 
 export const completeBootstrapSync = () => {
+  syncController = null;
+  cancelRequested = false;
   patchState({
     phase: "done",
     currentStepId: "",
@@ -77,7 +90,29 @@ export const completeBootstrapSync = () => {
   });
 };
 
+export const getBootstrapSyncSignal = () => syncController?.signal || null;
+
+export const isBootstrapSyncCancelled = () => {
+  if (cancelRequested) return true;
+  return Boolean(syncController?.signal?.aborted);
+};
+
+export const cancelBootstrapSync = () => {
+  cancelRequested = true;
+  if (syncController) {
+    try {
+      syncController.abort();
+    } catch {
+      // ignore abort failures
+    }
+  }
+  syncController = null;
+  resetBootstrapSync();
+};
+
 export const resetBootstrapSync = () => {
+  cancelRequested = false;
+  syncController = null;
   state = {
     phase: "idle",
     totalSteps: 0,

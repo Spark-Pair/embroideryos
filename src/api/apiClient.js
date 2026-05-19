@@ -2,6 +2,7 @@
 import axios from "axios";
 import { logDataSource } from "../offline/logger";
 import { clearOfflineData, offlineAccess } from "../offline/idb";
+import { getBootstrapSyncSignal } from "../offline/bootstrapSyncState";
 
 const API = import.meta.env.VITE_API_URL;
 const READ_ONLY_BYPASS_PATHS = new Set(["/auth/logout", "/auth/logout-all", "/auth/refresh"]);
@@ -180,6 +181,14 @@ apiClient.interceptors.request.use(
     
     if (sessionId) {
       config.headers['x-session-id'] = sessionId;
+    }
+
+    if (!config.signal) {
+      const method = String(config?.method || "get").toUpperCase();
+      const bootstrapSignal = getBootstrapSyncSignal();
+      if (method === "GET" && bootstrapSignal) {
+        config.signal = bootstrapSignal;
+      }
     }
 
     logDataSource("CLOUD", "request.start", {

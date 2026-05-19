@@ -17,12 +17,15 @@ export const loginUser = async (data) => {
 };
 
 export const logoutUser = async () => {
-  const { accessToken, sessionId } = storage.getAuth();
+  const { accessToken, refreshToken, sessionId } = storage.getAuth();
 
   try {
     await apiClient.post(
       "/auth/logout",
-      {},
+      {
+        sessionId,
+        refreshToken,
+      },
       {
         headers: {
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),

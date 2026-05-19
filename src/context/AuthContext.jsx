@@ -3,7 +3,8 @@ import { createContext, useEffect, useState, useCallback, useRef } from 'react';
 import { getMe, logoutUser } from '../api/auth.api';
 import { storage } from '../api/apiClient';
 import { useToast } from "./ToastContext";
-import { clearOfflineData, getOfflineSessionMeta, initOfflineForUser, offlineAccess } from "../offline/idb";
+import { clearOfflineData, getOfflineSessionMeta, getSyncQueueSnapshot, initOfflineForUser, offlineAccess } from "../offline/idb";
+import { getBootstrapSyncState } from "../offline/bootstrapSyncState";
 import { logDataSource } from "../offline/logger";
 import {
   runFullBootstrapSeed,
@@ -22,6 +23,7 @@ export default function AuthProvider({ children }) {
   const authSyncInFlightRef = useRef(false);
   const sessionValidationInFlightRef = useRef(false);
   const accessRevokedRef = useRef(false);
+  const logoutInFlightRef = useRef(false);
 
   const isSubscriptionExpired = useCallback((subscription) => {
     const expiresAt = subscription?.expiresAt;
@@ -259,6 +261,18 @@ export default function AuthProvider({ children }) {
         return;
       }
 
+      if (hasOfflineSession) {
+        const guardedCached = applySubscriptionGuard(cachedUser);
+        setUser(guardedCached);
+        localStorage.setItem("cachedUser", JSON.stringify(guardedCached));
+        logDataSource("IDB", "auth.init.cached_fast_path");
+        setLoading(false);
+        if (accessToken && sessionId && !isOffline) {
+          validateActiveSession({ silent: true }).catch(() => null);
+        }
+        return;
+      }
+
       if (!accessToken || !sessionId) {
         if (!isOffline) {
           localStorage.removeItem("cachedUser");
@@ -296,7 +310,7 @@ export default function AuthProvider({ children }) {
     };
 
     initAuth();
-  }, [applySubscriptionGuard, finalizeAuthenticatedUser, forceAccessRevoked, showToast]);
+  }, [applySubscriptionGuard, finalizeAuthenticatedUser, forceAccessRevoked, showToast, validateActiveSession]);
 
   useEffect(() => {
     const handleStorage = async (event) => {
@@ -396,7 +410,9 @@ export default function AuthProvider({ children }) {
   }, [finalizeAuthenticatedUser, showToast]);
 
   // Logout function
-  const logout = useCallback(async () => {
+  const performLogout = useCallback(async () => {
+    if (logoutInFlightRef.current) return;
+    logoutInFlightRef.current = true;
     localStorage.setItem("auth:logout_in_progress", "1");
     const logoutPromise = logoutUser().catch((error) => {
       console.error('Logout error:', error);
@@ -416,9 +432,30 @@ export default function AuthProvider({ children }) {
         message: "Logged out successfully",
       });
     } finally {
+      logoutInFlightRef.current = false;
       localStorage.removeItem("auth:logout_in_progress");
     }
   }, [showToast]);
+
+  const logout = useCallback(async () => {
+    const bootstrapState = getBootstrapSyncState();
+    const queueSnapshot = await getSyncQueueSnapshot().catch(() => null);
+    const pushInProgress =
+      Number(queueSnapshot?.pendingCount || 0) > 0 ||
+      Number(queueSnapshot?.delayedCount || 0) > 0;
+    const pullInProgress = bootstrapState.phase === "syncing";
+
+    if (pushInProgress || pullInProgress) {
+      showToast({
+        type: "warning",
+        message: "Sync is currently in progress. Please wait for it to finish before logging out.",
+      });
+      return { success: false, blocked: true };
+    }
+
+    await performLogout();
+    return { success: true };
+  }, [performLogout, showToast]);
 
   // Refresh user data
   const refreshUser = useCallback(async () => {

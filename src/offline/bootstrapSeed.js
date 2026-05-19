@@ -3,6 +3,7 @@ import { getEntitySnapshot, getOfflineMetaValue, setOfflineMetaValue, upsertEnti
 import { logDataSource } from "./logger";
 import {
   completeBootstrapSync,
+  isBootstrapSyncCancelled,
   failBootstrapSyncStep,
   markBootstrapSyncStepDone,
   startBootstrapSync,
@@ -53,6 +54,11 @@ const SUBSCRIPTION_PAYMENTS_ALL_KEY = "subscriptionPayments:all";
 const SUBSCRIPTION_PAYMENTS_STATS_ALL_KEY = "subscriptionPayments:stats:all";
 const BOOTSTRAP_MIN_INTERVAL_MS = 2 * 60 * 1000;
 const BOOTSTRAP_PARALLELISM = 4;
+
+const isAbortError = (error) =>
+  error?.name === "AbortError" ||
+  error?.code === "ERR_CANCELED" ||
+  error?.message === "canceled";
 
 const getCachedUserRole = () => {
   try {
@@ -909,13 +915,19 @@ export const runFullBootstrapSeed = async ({ forceRefresh = false } = {}) => {
 
   startBootstrapSync(steps.length);
   for (let i = 0; i < steps.length; i += BOOTSTRAP_PARALLELISM) {
+    if (isBootstrapSyncCancelled()) {
+      return;
+    }
     const batch = steps.slice(i, i + BOOTSTRAP_PARALLELISM);
     await Promise.allSettled(
       batch.map(async (step) => {
+        if (isBootstrapSyncCancelled()) return;
         try {
           await step.run();
+          if (isBootstrapSyncCancelled()) return;
           markBootstrapSyncStepDone(step.id, step.label);
         } catch (error) {
+          if (isBootstrapSyncCancelled() || isAbortError(error)) return;
           failBootstrapSyncStep(
             step.id,
             step.label,
@@ -925,6 +937,9 @@ export const runFullBootstrapSeed = async ({ forceRefresh = false } = {}) => {
         }
       })
     );
+    if (isBootstrapSyncCancelled()) {
+      return;
+    }
   }
   await setOfflineMetaValue("last_bootstrap_completed_at", Date.now()).catch(() => null);
   completeBootstrapSync();

@@ -10,6 +10,23 @@ const RETRY_MAX_DELAY_MS = 120000;
 let dbPromise = null;
 let sessionMetaCache = null;
 
+const extractQueuedEntityId = (item = {}) => {
+  const metaId = String(item?.meta?.id || item?.meta?.localId || "").trim();
+  if (metaId) return metaId;
+  const url = String(item?.url || "").trim();
+  if (!url) return "";
+  const parts = url.split("?")[0].split("/").filter(Boolean);
+  return parts.length > 1 ? String(parts[parts.length - 1] || "").trim() : "";
+};
+
+const isLocalEntityId = (value) => String(value || "").trim().startsWith("local-");
+const toCollectionUrl = (url = "", id = "") => {
+  const trimmedUrl = String(url || "").trim();
+  const trimmedId = String(id || "").trim();
+  if (!trimmedUrl || !trimmedId) return trimmedUrl;
+  return trimmedUrl.replace(new RegExp(`/${trimmedId}(?=$|\\?)`), "");
+};
+
 const isQueueRowInActiveBusiness = (row, activeBusinessId) => {
   if (!activeBusinessId) return true;
   const rowBusinessId = String(row?.businessId || "").trim();
@@ -137,11 +154,12 @@ export const queueSyncAction = async (action) => {
   const method = String(action?.method || "").toUpperCase();
   const url = String(action?.url || "").trim();
   const metaId = String(action?.meta?.id || action?.meta?.localId || "").trim();
+  const entityName = String(action?.entity || "").trim();
   const dedupeKey = String(
     action?.dedupeKey ||
       (method === "POST" && metaId
-        ? `${action?.entity || ""}:${method}:${url}:id:${metaId}`
-        : `${action?.entity || ""}:${method}:${url}`)
+        ? `${entityName}:${method}:${url}:id:${metaId}`
+        : `${entityName}:${method}:${url}`)
   ).trim();
   const item = {
     ...action,
@@ -163,6 +181,92 @@ export const queueSyncAction = async (action) => {
 
     req.onsuccess = () => {
       const all = Array.isArray(req.result) ? req.result : [];
+
+      // Collapse "create locally -> edit locally before first sync" into a single POST.
+      // This prevents duplicate cloud records when a PUT is queued against a local-only id.
+      if ((method === "PUT" || method === "DELETE") && entityName && metaId && isLocalEntityId(metaId)) {
+        const pendingCreate = all.find((row) => {
+          if (row?.status !== "pending") return false;
+          if (String(row?.entity || "") !== entityName) return false;
+          if (String(row?.method || "").toUpperCase() !== "POST") return false;
+          if (String(row?.businessId || "") !== String(item?.businessId || "")) return false;
+          return extractQueuedEntityId(row) === metaId;
+        });
+
+        if (pendingCreate?.id) {
+          if (method === "PUT") {
+            store.put({
+              ...pendingCreate,
+              payload: {
+                ...(pendingCreate?.payload || {}),
+                ...(action?.payload || {}),
+              },
+              updatedAt: Date.now(),
+              status: "pending",
+              nextRetryAt: 0,
+            });
+            return;
+          }
+
+          if (method === "DELETE") {
+            store.delete(pendingCreate.id);
+            all.forEach((row) => {
+              if (!row?.id || row.id === pendingCreate.id) return;
+              if (row?.status !== "pending") return;
+              if (String(row?.entity || "") !== entityName) return;
+              if (String(row?.businessId || "") !== String(item?.businessId || "")) return;
+              if (extractQueuedEntityId(row) !== metaId) return;
+              store.delete(row.id);
+            });
+            return;
+          }
+        }
+
+        if (method === "PUT") {
+          const createUrl = toCollectionUrl(url, metaId);
+          const fallbackDedupeKey = `${entityName}:POST:${createUrl}:id:${metaId}`;
+          const existingFallback = all.find((row) => {
+            if (row?.status !== "pending") return false;
+            if (String(row?.dedupeKey || "") !== fallbackDedupeKey) return false;
+            if (String(row?.businessId || "") !== String(item?.businessId || "")) return false;
+            return true;
+          });
+          const fallbackRow = {
+            ...item,
+            method: "POST",
+            url: createUrl,
+            dedupeKey: fallbackDedupeKey,
+            meta: {
+              ...(item?.meta || {}),
+              localId: metaId,
+            },
+            updatedAt: Date.now(),
+            status: "pending",
+            nextRetryAt: 0,
+          };
+
+          if (existingFallback?.id) {
+            store.put({
+              ...existingFallback,
+              ...fallbackRow,
+              id: existingFallback.id,
+              payload: {
+                ...(existingFallback?.payload || {}),
+                ...(item?.payload || {}),
+              },
+              createdAt: existingFallback.createdAt || item.createdAt,
+            });
+          } else {
+            store.add(fallbackRow);
+          }
+          return;
+        }
+
+        if (method === "DELETE") {
+          return;
+        }
+      }
+
       const existing = all.find((row) => {
         if (!dedupeKey || !row?.dedupeKey) return false;
         if (String(row.dedupeKey) !== dedupeKey) return false;
