@@ -21,6 +21,7 @@ let syncLoopAttached = false;
 const normalizeCategory = (category) => (String(category || "").trim() === "Packing" ? "Cropping" : category);
 
 const normalizeId = (row) => String(row?._id || row?.id || "");
+const isLocalId = (value) => String(value || "").startsWith("local-");
 const toMillis = (value) => {
   if (!value) return 0;
   const d = new Date(value).getTime();
@@ -88,6 +89,14 @@ const patchOverlay = async (patchFn) => {
   const existing = await getOverlay();
   const next = patchFn({ ...existing }) || {};
   await setOverlay(next);
+};
+
+const findRecordByIdLocal = async (id) => {
+  const targetId = String(id || "");
+  if (!targetId) return null;
+  const overlay = await getOverlay();
+  const base = await getAllBase();
+  return withOverlayList(base, overlay).find((row) => normalizeId(row) === targetId) || null;
 };
 
 const refreshAllSnapshotFromCloud = async () => {
@@ -346,6 +355,7 @@ export const createCrpStaffRecordLocalFirst = async (payload) => {
 };
 
 export const updateCrpStaffRecordLocalFirst = async (id, payload) => {
+  const targetId = String(id || "");
   const normalizedPayload = {
     ...(payload || {}),
     category: normalizeCategory(payload?.category),
@@ -355,17 +365,32 @@ export const updateCrpStaffRecordLocalFirst = async (id, payload) => {
   }
 
   if (!offlineAccess.isUnlocked()) {
-    const res = await apiClient.put(`${CRP_STAFF_RECORDS_URL}/${id}`, normalizedPayload);
+    const res = await apiClient.put(`${CRP_STAFF_RECORDS_URL}/${targetId}`, normalizedPayload);
     return res.data;
   }
 
+  if (typeof navigator !== "undefined" && navigator.onLine && !isLocalId(targetId)) {
+    try {
+      const res = await apiClient.put(`${CRP_STAFF_RECORDS_URL}/${targetId}`, normalizedPayload);
+      const serverRow = res?.data?.data || res?.data;
+      await syncUpdateSuccess({ meta: { id: targetId } }, serverRow);
+      refreshAllSnapshotFromCloud().catch(() => null);
+      return res.data;
+    } catch (error) {
+      if (error?.response) throw error;
+      // Network-style failures fall through to the offline queue.
+    }
+  }
+
+  const existing = await findRecordByIdLocal(targetId);
   const staff = await getStaffSnapshot();
   const staffRow = staff.find((row) => String(row?._id || "") === String(normalizedPayload?.staff_id || ""));
   const quantity_dzn = Number(normalizedPayload?.quantity_dzn || 0);
   const rate = Number(normalizedPayload?.rate || 0);
   const localRow = {
+    ...(existing || {}),
     ...(normalizedPayload || {}),
-    _id: String(id),
+    _id: targetId,
     staff_id: normalizedPayload?.staff_id || null,
     staff_name: staffRow?.name || "",
     quantity_dzn,
@@ -377,16 +402,16 @@ export const updateCrpStaffRecordLocalFirst = async (id, payload) => {
   };
 
   await patchOverlay((overlay) => {
-    overlay[String(id)] = { ...(overlay[String(id)] || {}), ...localRow };
+    overlay[targetId] = { ...(overlay[targetId] || {}), ...localRow };
     return overlay;
   });
 
   await queueSyncAction({
     entity: "crpStaffRecords",
     method: "PUT",
-    url: `${CRP_STAFF_RECORDS_URL}/${id}`,
+    url: `${CRP_STAFF_RECORDS_URL}/${targetId}`,
     payload: normalizedPayload,
-    meta: { id: String(id) },
+    meta: { id: targetId },
   });
 
   processQueue().catch(() => null);

@@ -388,19 +388,18 @@ const buildCustomerMonthlySummaryLocal = ({ customers, invoices, customerPayment
   };
 
   byCustomer.forEach((row) => {
-    const historyBalance = row.arrears_amount;
-    const effectiveArrears = historyBalance === 0 ? row.opening_amount : historyBalance;
-    const balanceAmount = effectiveArrears + row.billed_amount - row.received_amount;
+    const arrearsAmount = Number(row.arrears_amount || 0);
+    const balanceAmount = arrearsAmount + row.billed_amount - row.received_amount;
     if (row.billed_amount > 0 || row.received_amount > 0) total.customer_with_activity += 1;
     total.billed_amount += row.billed_amount;
     total.received_amount += row.received_amount;
-    total.arrears_amount += effectiveArrears;
+    total.arrears_amount += arrearsAmount;
     total.balance_amount += balanceAmount;
     total.by_customer.push({
       customer_id: row.customer_id,
       customer_name: row.customer_name,
       is_active: row.is_active,
-      arrears_amount: effectiveArrears,
+      arrears_amount: arrearsAmount,
       billed_amount: row.billed_amount,
       received_amount: row.received_amount,
       balance_amount: balanceAmount,
@@ -483,19 +482,18 @@ const buildSupplierMonthlySummaryLocal = ({ suppliers, expenses, supplierPayment
   };
 
   bySupplier.forEach((row) => {
-    const historyBalance = row.arrears_amount;
-    const effectiveArrears = historyBalance === 0 ? row.opening_amount : historyBalance;
-    const balanceAmount = effectiveArrears + row.expense_amount - row.paid_amount;
+    const arrearsAmount = Number(row.arrears_amount || 0);
+    const balanceAmount = arrearsAmount + row.expense_amount - row.paid_amount;
     if (row.expense_amount > 0 || row.paid_amount > 0) total.supplier_with_activity += 1;
     total.expense_amount += row.expense_amount;
     total.paid_amount += row.paid_amount;
-    total.arrears_amount += effectiveArrears;
+    total.arrears_amount += arrearsAmount;
     total.balance_amount += balanceAmount;
     total.by_supplier.push({
       supplier_id: row.supplier_id,
       supplier_name: row.supplier_name,
       is_active: row.is_active,
-      arrears_amount: effectiveArrears,
+      arrears_amount: arrearsAmount,
       expense_amount: row.expense_amount,
       paid_amount: row.paid_amount,
       balance_amount: balanceAmount,
@@ -504,6 +502,64 @@ const buildSupplierMonthlySummaryLocal = ({ suppliers, expenses, supplierPayment
 
   total.by_supplier.sort((a, b) => String(a?.supplier_name || "").localeCompare(String(b?.supplier_name || "")));
   return total;
+};
+
+const buildExpenseMonthlySummaryLocal = ({ expenses, monthFrom, monthTo }) => {
+  const rows = (expenses || []).filter((row) => inDateRange(row?.date, monthFrom, monthTo));
+  const byType = new Map();
+  const byItem = new Map();
+  const summary = {
+    expense_count: rows.length,
+    total_amount: 0,
+    direct_expense_count: 0,
+    direct_expense_amount: 0,
+    by_type: [],
+    by_item: [],
+  };
+
+  rows.forEach((row) => {
+    const amount = Number(row?.amount || 0);
+    const type = String(row?.expense_type || "other").trim() || "other";
+    const itemName = String(row?.item_name || "Other").trim() || "Other";
+    const supplierName = String(row?.supplier_name || "").trim();
+    const hasSupplier = Boolean(row?.supplier_id?._id || row?.supplier_id);
+    summary.total_amount += amount;
+    if (!hasSupplier) {
+      summary.direct_expense_count += 1;
+      summary.direct_expense_amount += amount;
+    }
+
+    const typeRow = byType.get(type) || {
+      expense_type: type,
+      expense_count: 0,
+      total_amount: 0,
+    };
+    typeRow.expense_count += 1;
+    typeRow.total_amount += amount;
+    byType.set(type, typeRow);
+
+    const itemKey = `${type}::${itemName}::${supplierName}`;
+    const itemRow = byItem.get(itemKey) || {
+      expense_type: type,
+      item_name: itemName,
+      supplier_name: supplierName,
+      expense_count: 0,
+      total_amount: 0,
+    };
+    itemRow.expense_count += 1;
+    itemRow.total_amount += amount;
+    byItem.set(itemKey, itemRow);
+  });
+
+  const sortByAmountThenName = (nameKey) => (a, b) => {
+    const amountDiff = Number(b.total_amount || 0) - Number(a.total_amount || 0);
+    if (amountDiff !== 0) return amountDiff;
+    return String(a?.[nameKey] || "").localeCompare(String(b?.[nameKey] || ""));
+  };
+
+  summary.by_type = [...byType.values()].sort(sortByAmountThenName("expense_type"));
+  summary.by_item = [...byItem.values()].sort(sortByAmountThenName("item_name"));
+  return summary;
 };
 
 const buildCrpStaffMonthlySummaryLocal = ({ staff, crpRecords, staffPayments, selectedMonth }) => {
@@ -933,6 +989,11 @@ export const fetchDashboardSummaryLocalFirst = async (params = {}) => {
         expenses,
         supplierPayments,
         selectedMonth,
+        monthFrom: monthRange.from,
+        monthTo: monthRange.to,
+      }),
+      expense_summary: buildExpenseMonthlySummaryLocal({
+        expenses,
         monthFrom: monthRange.from,
         monthTo: monthRange.to,
       }),

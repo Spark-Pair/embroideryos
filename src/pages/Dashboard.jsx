@@ -274,6 +274,14 @@ export default function Dashboard() {
       balance_amount: 0,
       by_supplier: [],
     },
+    monthExpenseSummary: {
+      expense_count: 0,
+      total_amount: 0,
+      direct_expense_count: 0,
+      direct_expense_amount: 0,
+      by_type: [],
+      by_item: [],
+    },
     monthCrpStaffSummary: {
       staff_count: 0,
       active_staff_count: 0,
@@ -483,6 +491,28 @@ export default function Dashboard() {
               }))
               : [],
           },
+          monthExpenseSummary: {
+            expense_count: Number(data?.month?.expense_summary?.expense_count || 0),
+            total_amount: Number(data?.month?.expense_summary?.total_amount || 0),
+            direct_expense_count: Number(data?.month?.expense_summary?.direct_expense_count || 0),
+            direct_expense_amount: Number(data?.month?.expense_summary?.direct_expense_amount || 0),
+            by_type: Array.isArray(data?.month?.expense_summary?.by_type)
+              ? data.month.expense_summary.by_type.map((row) => ({
+                expense_type: row?.expense_type || "-",
+                expense_count: Number(row?.expense_count || 0),
+                total_amount: Number(row?.total_amount || 0),
+              }))
+              : [],
+            by_item: Array.isArray(data?.month?.expense_summary?.by_item)
+              ? data.month.expense_summary.by_item.map((row) => ({
+                expense_type: row?.expense_type || "-",
+                item_name: row?.item_name || "-",
+                supplier_name: row?.supplier_name || "",
+                expense_count: Number(row?.expense_count || 0),
+                total_amount: Number(row?.total_amount || 0),
+              }))
+              : [],
+          },
           monthCrpStaffSummary: {
             staff_count: Number(data?.month?.crp_staff_summary?.staff_count || 0),
             active_staff_count: Number(data?.month?.crp_staff_summary?.active_staff_count || 0),
@@ -573,6 +603,10 @@ export default function Dashboard() {
   const filteredCrpSummaryRows = (ops.monthCrpStaffSummary.by_staff || []).filter((row) =>
     String(row?.staff_name || "").toLowerCase().includes(summarySearch)
   );
+  const filteredExpenseSummaryRows = (ops.monthExpenseSummary.by_item || []).filter((row) => {
+    const haystack = `${row?.item_name || ""} ${row?.expense_type || ""} ${row?.supplier_name || ""}`.toLowerCase();
+    return haystack.includes(summarySearch);
+  });
   const displayPrefs = getDisplayPreferences(ruleData || {});
   const visibleDashboardColumns = new Set(displayPrefs.dashboard_staff_columns || []);
   const dashboardLabel = (key, fallback) => getLabelOverride(ruleData || {}, key) || fallback;
@@ -604,6 +638,15 @@ export default function Dashboard() {
         inflow_amount: 0,
         outflow_amount: Number(ops.monthSupplierSummary.paid_amount || 0),
         balance_amount: Number(ops.monthSupplierSummary.balance_amount || 0),
+      },
+      {
+        entity: "Expense",
+        total_count: Number(ops.monthExpenseSummary.direct_expense_count || 0),
+        work_amount: Number(ops.monthExpenseSummary.direct_expense_amount || 0),
+        arrears_amount: 0,
+        inflow_amount: 0,
+        outflow_amount: Number(ops.monthExpenseSummary.direct_expense_amount || 0),
+        balance_amount: -Number(ops.monthExpenseSummary.direct_expense_amount || 0),
       },
       {
         entity: "CRP Staff",
@@ -898,10 +941,11 @@ export default function Dashboard() {
                   <div>
                     <p className="text-sm font-medium text-gray-800">Month Summary ({selectedMonth})</p>
                     <p className="text-xs text-gray-500">
-                      {monthSummaryType === "summary" && "Combined summary of Staff, Customer, Supplier and CRP"}
+                      {monthSummaryType === "summary" && "Combined summary of Staff, Customer, Supplier, direct Expense and CRP"}
                       {monthSummaryType === "staff" && `Employees: ${ops.monthStaffSummary.staff_count} · Active: ${ops.monthStaffSummary.active_staff_count}`}
-                      {monthSummaryType === "customer" && `Customers: ${ops.monthCustomerSummary.customer_count} · Active: ${ops.monthCustomerSummary.active_customer_count} · Arrears = last month balance (0 => opening)`}
-                      {monthSummaryType === "supplier" && `Suppliers: ${ops.monthSupplierSummary.supplier_count} · Active: ${ops.monthSupplierSummary.active_supplier_count} · Arrears = last month balance (0 => opening)`}
+                      {monthSummaryType === "customer" && `Customers: ${ops.monthCustomerSummary.customer_count} · Active: ${ops.monthCustomerSummary.active_customer_count} · Arrears = opening + previous bills - previous receipts`}
+                      {monthSummaryType === "supplier" && `Suppliers: ${ops.monthSupplierSummary.supplier_count} · Active: ${ops.monthSupplierSummary.active_supplier_count} · Arrears = opening + previous expenses - previous payments`}
+                      {monthSummaryType === "expense" && `Expenses: ${ops.monthExpenseSummary.expense_count} · Total: ${formatNumbers(ops.monthExpenseSummary.total_amount, 2)} · Direct: ${formatNumbers(ops.monthExpenseSummary.direct_expense_amount, 2)}`}
                       {monthSummaryType === "crp" && `CRP Staff: ${ops.monthCrpStaffSummary.staff_count} · Active: ${ops.monthCrpStaffSummary.active_staff_count}`}
                     </p>
                   </div>
@@ -912,7 +956,7 @@ export default function Dashboard() {
                         required={false}
                         value={monthSummarySearch}
                         onChange={(e) => setMonthSummarySearch(e.target.value)}
-                        placeholder="Search by name"
+                        placeholder={monthSummaryType === "expense" ? "Search expense, type, supplier" : "Search by name"}
                         showClear
                         className="py-2"
                       />
@@ -926,6 +970,7 @@ export default function Dashboard() {
                           { label: "Staff", value: "staff" },
                           { label: "Customer", value: "customer" },
                           { label: "Supplier", value: "supplier" },
+                          { label: "Expense", value: "expense" },
                           { label: "CRP Staff", value: "crp" },
                         ]}
                         placeholder="Select Summary"
@@ -1109,6 +1154,49 @@ export default function Dashboard() {
                           <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-rose-600">{formatNumbers(ops.monthSupplierSummary.expense_amount, 2)}</td>
                           <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-emerald-700">{formatNumbers(ops.monthSupplierSummary.paid_amount, 2)}</td>
                           <td className={`px-4 py-3 text-sm text-right font-semibold tabular-nums ${ops.monthSupplierSummary.balance_amount < 0 ? "text-rose-600" : "text-teal-700"}`}>{formatNumbers(ops.monthSupplierSummary.balance_amount, 2)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  )}
+
+                  {monthSummaryType === "expense" && (
+                    <table className="w-full text-left border-collapse font-medium">
+                      <thead className="sticky top-0 z-10 bg-gray-200/95 boder-t border-b border-gray-300">
+                        <tr className="text-xs uppercase tracking-wide text-gray-500">
+                          <th className="px-4 py-2.5 font-semibold">Expense / Item</th>
+                          <th className="px-4 py-2.5 font-semibold">Type</th>
+                          <th className="px-4 py-2.5 font-semibold">Supplier</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Count</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-300">
+                        {filteredExpenseSummaryRows.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400">
+                              {ops.monthExpenseSummary.by_item.length === 0 ? "No expense summary available for selected month." : "No matching records found."}
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredExpenseSummaryRows.map((row) => (
+                            <tr key={`${row.expense_type}-${row.item_name}-${row.supplier_name || "direct"}`} className="hover:bg-gray-50/70">
+                              <td className="px-4 py-2.5">{row.item_name}</td>
+                              <td className="px-4 py-2.5 text-sm text-gray-700 capitalize">{row.expense_type}</td>
+                              <td className="px-4 py-2.5 text-sm text-gray-700">{row.supplier_name || "-"}</td>
+                              <td className="px-4 py-2.5 text-sm text-right tabular-nums text-gray-700">{formatNumbers(row.expense_count, 0)}</td>
+                              <td className="px-4 py-2.5 text-sm text-right tabular-nums text-rose-600">{formatNumbers(row.total_amount, 2)}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                      <tfoot className="sticky bottom-0 z-10">
+                        <tr className="bg-gray-200/95 border-t border-gray-300">
+                          <td className="px-4 py-3 text-sm font-semibold text-gray-900">Total</td>
+                          <td className="px-4 py-3 text-sm text-gray-600" colSpan={2}>
+                            Direct: {formatNumbers(ops.monthExpenseSummary.direct_expense_amount, 2)}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums">{formatNumbers(ops.monthExpenseSummary.expense_count, 0)}</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold tabular-nums text-rose-600">{formatNumbers(ops.monthExpenseSummary.total_amount, 2)}</td>
                         </tr>
                       </tfoot>
                     </table>

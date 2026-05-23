@@ -432,6 +432,7 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
                         <th className="px-3 py-2.5">Date</th>
                         <th className="px-3 py-2.5">Description</th>
                         <th className="px-3 py-2.5 text-right">Qty (Dzn)</th>
+                        <th className="px-3 py-2.5 text-right">Qty (PC)</th>
                         <th className="px-3 py-2.5">Category</th>
                         <th className="px-3 py-2.5">Type</th>
                         <th className="px-3 py-2.5 text-right">Rate</th>
@@ -445,9 +446,10 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
                           className={idx % 2 === 0 ? "bg-white text-gray-800" : "bg-gray-200/85 text-black"}
                         >
                           <td className="px-2 py-2.5 text-gray-600 text-xs">{idx + 1}</td>
-                          <td className="px-3 py-2.5 whitespace-nowrap font-medium">{formatDate(row.order_date, "DD MMM yyyy")}</td>
+                          <td className="px-3 py-2.5 whitespace-nowrap font-medium">{formatDate(row.order_date, "DD MMM yyyy, DDD")}</td>
                           <td className="px-3 py-2.5">{row.order_description || "-"}</td>
                           <td className="px-3 py-2.5 text-right tabular-nums">{formatNumbers(row.quantity_dzn, 2)}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums">{formatNumbers(row.quantity_dzn * 12, 2)}</td>
                           <td className="px-3 py-2.5">{row.category || "-"}</td>
                           <td className="px-3 py-2.5">{row.type_name || "-"}</td>
                           <td className="px-3 py-2.5 text-right tabular-nums">{formatNumbers(row.rate, 2)}</td>
@@ -459,6 +461,7 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
                       <tr className="bg-slate-800">
                         <td colSpan={3} className="px-3 py-2.5 text-right font-bold tracking-wider text-slate-300 uppercase text-xs">Total</td>
                         <td className="px-3 py-2.5 text-right font-bold text-white tabular-nums">{formatNumbers(summary.total_quantity_dzn, 2)}</td>
+                        <td className="px-3 py-2.5 text-right font-bold text-white tabular-nums">{formatNumbers(summary.total_quantity_dzn * 12, 2)}</td>
                         <td colSpan={3} />
                         <td className="px-3 py-2.5 text-right font-extrabold text-white tabular-nums">{formatNumbers(summary.total_amount, 2)}</td>
                       </tr>

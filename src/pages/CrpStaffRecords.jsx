@@ -100,6 +100,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData, categoryOp
       const crpList = crpRes?.data || [];
       const usedOrderIds = new Set(
         crpList
+          .filter((record) => !isEdit || String(record?._id || "") !== String(initialData?._id || ""))
           .map((record) => String(record?.order_id?._id || record?.order_id || ""))
           .filter(Boolean)
       );
@@ -154,11 +155,11 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData, categoryOp
       setLoadingData(true);
       try {
         const [staffRes, configRes, recordsRes] = await Promise.all([
-          fetchStaffNames({ status: "active" }),
+          fetchStaffNames({ status: "active", category: "Cropping" }),
           fetchCrpRateConfigs({ status: "active" }),
           fetchCrpStaffRecords({ page: 1, limit: 300 }),
         ]);
-        setStaffs(staffRes?.data || []);
+        setStaffs((staffRes?.data || []).filter((staff) => String(staff?.category || "").toLowerCase() === "cropping"));
         setRateConfigs(configRes?.data || []);
         setPreviousRecords(recordsRes?.data || []);
       } catch {

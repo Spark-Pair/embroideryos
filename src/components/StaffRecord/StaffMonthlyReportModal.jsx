@@ -156,7 +156,7 @@ function openPrintWindow({ staffName, monthLabel, summary, reportRows, totalDedu
 
   td {
     padding: 6pt 5pt;
-    border-bottom: 0.5pt solid #fff; /* divide-y divide-white */
+    border-bottom: 0.75pt solid #111; /* divide-y divide-gray-300 */
     vertical-align: middle;
     color: #111;
   }
@@ -622,7 +622,7 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
                         <th className="px-3 py-2.5 text-right">Payment</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white">
+                    <tbody className="divide-y divide-gray-300">
                       {reportRows.map((row, idx) => (
                         <tr
                           key={`r-${idx}`}
