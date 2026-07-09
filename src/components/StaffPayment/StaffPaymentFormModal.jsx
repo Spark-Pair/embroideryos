@@ -38,7 +38,7 @@ export default function StaffPaymentFormModal({ isOpen, onClose, onAction, initi
   const mode = formData.id ? "edit" : "add";
 
   const staffOptions = useMemo(
-    () => staffList.map((s) => ({ label: s.name, value: s._id })),
+    () => staffList.map((s) => ({ label: s.name + ` (${s.category})`, value: s._id })),
     [staffList]
   );
   const typeOptions = useMemo(
