@@ -195,6 +195,7 @@ const applyFilters = (rows = [], params = {}) => {
   const staffId = String(params?.staff_id || "").trim();
   const category = String(normalizeCategory(params?.category) || "").trim();
   const typeName = String(params?.type_name || "").trim().toLowerCase();
+  const description = String(params?.description || "").trim().toLowerCase();
   const dateFrom = params?.date_from;
   const dateTo = params?.date_to;
 
@@ -204,6 +205,7 @@ const applyFilters = (rows = [], params = {}) => {
     data = data.filter((row) => String(normalizeCategory(row?.category) || "") === category);
   }
   if (typeName) data = data.filter((row) => String(row?.type_name || "").toLowerCase().includes(typeName));
+  if (description) data = data.filter((row) => String(row?.order_description || "").toLowerCase().includes(description));
 
   if (dateFrom || dateTo) {
     data = data.filter((row) => {
@@ -253,7 +255,9 @@ export const fetchCrpStaffRecordsLocalFirst = async (params = {}) => {
       overlay = await getOverlay();
       base = await getAllBase();
       merged = withOverlayList(base, overlay);
-    } catch {}
+    } catch {
+      // Keep serving the local snapshot when refresh fails.
+    }
   }
   const filtered = applyFilters(merged, params);
   return toPaginatedResponse(filtered, params);

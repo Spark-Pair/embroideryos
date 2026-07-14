@@ -614,7 +614,7 @@ export default function CrpStaffRecords() {
   const [activeMenu, setActiveMenu] = useState(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [reportModal, setReportModal] = useState(false);
-  const [filters, setFilters] = useState({ month: "", staff_id: "", category: "", type_name: "", date_from: "", date_to: "" });
+  const [filters, setFilters] = useState({ month: "", staff_id: "", category: "", type_name: "", description: "", date_from: "", date_to: "" });
   const [staffFilterOptions, setStaffFilterOptions] = useState([]);
   const categoryOptions = useMemo(
     () => (referenceData.crp_categories || []).map((item) => ({ label: item, value: item })),
@@ -845,6 +845,7 @@ export default function CrpStaffRecords() {
             onChange: (v) => setFilters((prev) => ({ ...prev, category: v })),
           },
           { label: "Type", type: "text", value: filters.type_name, onChange: (e) => setFilters((prev) => ({ ...prev, type_name: e.target.value })) },
+          { label: "Description", type: "text", value: filters.description, onChange: (e) => setFilters((prev) => ({ ...prev, description: e.target.value })) },
           { label: "Date From", type: "date", value: filters.date_from, onChange: (e) => setFilters((prev) => ({ ...prev, date_from: e.target.value })) },
           { label: "Date To", type: "date", value: filters.date_to, onChange: (e) => setFilters((prev) => ({ ...prev, date_to: e.target.value })) },
         ]}
@@ -853,7 +854,7 @@ export default function CrpStaffRecords() {
           setIsFilterOpen(false);
         }}
         onReset={() => {
-          const reset = { month: "", staff_id: "", category: "", type_name: "", date_from: "", date_to: "" };
+          const reset = { month: "", staff_id: "", category: "", type_name: "", description: "", date_from: "", date_to: "" };
           setFilters(reset);
           loadRecords(1, reset);
           setIsFilterOpen(false);
