@@ -60,6 +60,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData, categoryOp
   const monthRef = useRef(null);
   const repeatRef = useRef(null);
   const orderDateRef = useRef(null);
+  const countMonthRef = useRef(null);
   const descriptionRef = useRef(null);
   const quantityRef = useRef(null);
   const staffRef = useRef(null);
@@ -73,6 +74,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData, categoryOp
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [orderSearch, setOrderSearch] = useState("");
+  const [orderFilterMonth, setOrderFilterMonth] = useState(new Date().toISOString().slice(0, 7));
 
   const [formData, setFormData] = useState({
     month: new Date().toISOString().slice(0, 7),
@@ -124,6 +126,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData, categoryOp
   useEffect(() => {
     if (!isOpen) return;
     if (isEdit && initialData) {
+      const initialOrderMonth = String(initialData?.order_date || new Date().toISOString()).slice(0, 7);
       setFormData({
         month: String(initialData?.month || initialData?.order_date || new Date().toISOString()).slice(0, 7),
         order_id: String(initialData?.order_id?._id || initialData?.order_id || ""),
@@ -135,9 +138,11 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData, categoryOp
         type_name: initialData?.type_name || "",
         repeat_record_id: "",
       });
+      setOrderFilterMonth(initialOrderMonth);
     } else {
+      const currentMonth = new Date().toISOString().slice(0, 7);
       setFormData({
-        month: new Date().toISOString().slice(0, 7),
+        month: currentMonth,
         order_id: "",
         order_date: new Date().toISOString().slice(0, 10),
         order_description: "",
@@ -147,6 +152,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData, categoryOp
         type_name: "",
         repeat_record_id: "",
       });
+      setOrderFilterMonth(currentMonth);
     }
     setError("");
     setOrderSearch("");
@@ -175,10 +181,10 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData, categoryOp
   }, [isOpen, isEdit, initialData, categoryOptions]);
 
   useEffect(() => {
-    if (!isOpen || !formData.month) return;
-    loadOrdersForMonth(formData.month);
+    if (!isOpen || !orderFilterMonth) return;
+    loadOrdersForMonth(orderFilterMonth);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, formData.month]);
+  }, [isOpen, orderFilterMonth]);
 
   const selectedType = useMemo(
     () => rateConfigs.find((c) => c.category === formData.category && c.type_name === formData.type_name),
@@ -225,6 +231,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData, categoryOp
 
   const isValid =
     !!formData.order_date &&
+    !!formData.month &&
     !!formData.staff_id &&
     !!formData.category &&
     !!formData.type_name &&
@@ -243,6 +250,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData, categoryOp
         id: initialData?._id,
         order_id: formData.order_id || null,
         order_date: formData.order_date,
+        month: formData.month,
         order_description: formData.order_description,
         staff_id: formData.staff_id,
         category: formData.category,
@@ -285,7 +293,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData, categoryOp
       ...prev,
       repeat_record_id: recordId,
       order_id: "",
-      month: String(rec?.order_date || "").slice(0, 7) || prev.month,
+      month: String(rec?.month || rec?.order_date || "").slice(0, 7) || prev.month,
       order_date: String(rec?.order_date || "").slice(0, 10),
       order_description: rec?.order_description || "",
       quantity_dzn: String(Number(rec?.quantity_dzn || 0)),
@@ -358,17 +366,18 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData, categoryOp
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <Input
                 ref={monthRef}
-                label="Select Month"
+                label="Order Month"
                 type="month"
-                value={formData.month}
+                value={orderFilterMonth}
                 onKeyDown={(e) => {
                   if (e.key !== "Enter") return;
                   e.preventDefault();
                   focusRef(repeatRef);
                 }}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, month: e.target.value, order_id: "" }))
-                }
+                onChange={(e) => {
+                  setOrderFilterMonth(e.target.value);
+                  setFormData((prev) => ({ ...prev, order_id: "" }));
+                }}
               />
               <Input
                 label="Search Order"
@@ -482,9 +491,33 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData, categoryOp
               onKeyDown={(e) => {
                 if (e.key !== "Enter") return;
                 e.preventDefault();
+                focusRef(countMonthRef);
+              }}
+              onChange={(e) => {
+                const nextOrderDate = e.target.value;
+                setFormData((prev) => {
+                  const prevOrderMonth = String(prev.order_date || "").slice(0, 7);
+                  const nextOrderMonth = String(nextOrderDate || "").slice(0, 7);
+                  const shouldSyncMonth = !prev.month || prev.month === prevOrderMonth;
+                  return {
+                    ...prev,
+                    order_date: nextOrderDate,
+                    month: shouldSyncMonth ? nextOrderMonth : prev.month,
+                  };
+                });
+              }}
+            />
+            <Input
+              ref={countMonthRef}
+              label="Count Month"
+              type="month"
+              value={formData.month}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
                 focusRef(descriptionRef);
               }}
-              onChange={(e) => setFormData((prev) => ({ ...prev, order_date: e.target.value }))}
+              onChange={(e) => setFormData((prev) => ({ ...prev, month: e.target.value }))}
             />
             <Input
               ref={descriptionRef}
@@ -683,6 +716,7 @@ export default function CrpStaffRecords() {
                 <tr className="text-sm tracking-wider text-gray-500">
                   <th className="px-5 py-3.5 font-medium">#</th>
                   <th className="px-5 py-3.5 font-medium">Date</th>
+                  <th className="px-5 py-3.5 font-medium">Count Month</th>
                   <th className="px-5 py-3.5 font-medium">Description</th>
                   <th className="px-5 py-3.5 font-medium">Qty (Dzn)</th>
                   <th className="px-5 py-3.5 font-medium">Staff</th>
@@ -695,12 +729,12 @@ export default function CrpStaffRecords() {
               </thead>
 
               {loading ? (
-                <TableSkeleton rows={30} columns={10} />
+                <TableSkeleton rows={30} columns={11} />
               ) : (
                 <tbody className="divide-y divide-gray-200">
                   {records.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="px-7 py-16 text-center text-sm text-gray-400">
+                      <td colSpan={11} className="px-7 py-16 text-center text-sm text-gray-400">
                         No CRP records found.
                       </td>
                     </tr>
@@ -709,6 +743,7 @@ export default function CrpStaffRecords() {
                       <tr key={item._id} className="hover:bg-gray-50/80 transition-colors">
                         <td className="px-5 py-4 text-sm text-gray-500">{(pagination.currentPage - 1) * pagination.itemsPerPage + index + 1}</td>
                         <td className="px-5 py-4 text-sm text-gray-600">{formatDate(item.order_date, "DD MMM yyyy")}</td>
+                        <td className="px-5 py-4 text-sm text-gray-600">{item.month || "-"}</td>
                         <td className="px-5 py-4 text-sm text-gray-800">{item.order_description || "-"}</td>
                         <td className="px-5 py-4 text-sm text-gray-600">{formatNumbers(item.quantity_dzn, 2)}</td>
                         <td className="px-5 py-4 text-sm text-gray-700">{item.staff_name || item.staff_id?.name || "-"}</td>

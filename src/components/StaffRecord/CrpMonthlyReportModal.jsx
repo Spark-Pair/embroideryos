@@ -281,7 +281,7 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
       const [staffRes, currentRes, historyRes, currentPaymentsRes, historyPaymentsRes] = await Promise.all([
         fetchStaff(selectedStaff),
         fetchCrpStaffRecords({ page: 1, limit: 5000, month: selectedMonth }),
-        fetchCrpStaffRecords({ page: 1, limit: 20000, staff_id: selectedStaff, date_to: prevMonthMeta.to }),
+        fetchCrpStaffRecords({ page: 1, limit: 20000, staff_id: selectedStaff }),
         fetchStaffPayments({ staff_id: selectedStaff, month: selectedMonth, limit: 5000 }),
         fetchStaffPayments({ staff_id: selectedStaff, limit: 20000 }),
       ]);
