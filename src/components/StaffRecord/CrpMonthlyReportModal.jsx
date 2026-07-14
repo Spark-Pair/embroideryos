@@ -49,6 +49,7 @@ function openPrintWindow({ staffName, monthLabel, summary, rows }) {
       <td class="td-num">${idx + 1}</td>
       <td class="td-date">${formatDate(row.order_date, "DD MMM yyyy")}</td>
       <td>${row.order_description || "-"}</td>
+      <td>${row.is_two_side ? "Yes" : "-"}</td>
       <td class="r">${formatNumbers(row.quantity_dzn, 2)}</td>
       <td>${row.category || "-"}</td>
       <td>${row.type_name || "-"}</td>
@@ -177,6 +178,7 @@ function openPrintWindow({ staffName, monthLabel, summary, rows }) {
           <th>#</th>
           <th>Date</th>
           <th>Description</th>
+          <th>2-Side</th>
           <th class="r">Qty (Dzn)</th>
           <th>Category</th>
           <th>Type</th>
@@ -187,7 +189,7 @@ function openPrintWindow({ staffName, monthLabel, summary, rows }) {
       <tbody>${rowsHtml}</tbody>
       <tfoot>
         <tr>
-          <td colspan="3" class="r">Total</td>
+          <td colspan="4" class="r">Total</td>
           <td class="r">${formatNumbers(summary.total_quantity_dzn, 2)}</td>
           <td colspan="3"></td>
           <td class="r">${formatNumbers(summary.total_amount, 2)}</td>
@@ -431,6 +433,7 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
                         <th className="px-3 py-2.5">#</th>
                         <th className="px-3 py-2.5">Date</th>
                         <th className="px-3 py-2.5">Description</th>
+                        <th className="px-3 py-2.5">2-Side</th>
                         <th className="px-3 py-2.5 text-right">Qty (Dzn)</th>
                         <th className="px-3 py-2.5 text-right">Qty (PC)</th>
                         <th className="px-3 py-2.5">Category</th>
@@ -448,6 +451,7 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
                           <td className="px-2 py-2.5 text-gray-600 text-xs">{idx + 1}</td>
                           <td className="px-3 py-2.5 whitespace-nowrap font-medium">{formatDate(row.order_date, "DD MMM yyyy, DDD")}</td>
                           <td className="px-3 py-2.5">{row.order_description || "-"}</td>
+                          <td className="px-3 py-2.5">{row.is_two_side ? "Yes" : "-"}</td>
                           <td className="px-3 py-2.5 text-right tabular-nums">{formatNumbers(row.quantity_dzn, 2)}</td>
                           <td className="px-3 py-2.5 text-right tabular-nums">{formatNumbers(row.quantity_dzn * 12, 2)}</td>
                           <td className="px-3 py-2.5">{row.category || "-"}</td>
@@ -459,7 +463,7 @@ export default function CrpMonthlyReportModal({ isOpen, onClose }) {
                     </tbody>
                     <tfoot>
                       <tr className="bg-slate-800">
-                        <td colSpan={3} className="px-3 py-2.5 text-right font-bold tracking-wider text-slate-300 uppercase text-xs">Total</td>
+                        <td colSpan={4} className="px-3 py-2.5 text-right font-bold tracking-wider text-slate-300 uppercase text-xs">Total</td>
                         <td className="px-3 py-2.5 text-right font-bold text-white tabular-nums">{formatNumbers(summary.total_quantity_dzn, 2)}</td>
                         <td className="px-3 py-2.5 text-right font-bold text-white tabular-nums">{formatNumbers(summary.total_quantity_dzn * 12, 2)}</td>
                         <td colSpan={3} />

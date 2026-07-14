@@ -81,6 +81,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData, categoryOp
     order_id: "",
     order_date: new Date().toISOString().slice(0, 10),
     order_description: "",
+    is_two_side: false,
     quantity_dzn: "",
     staff_id: "",
     category: "",
@@ -132,7 +133,8 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData, categoryOp
         order_id: String(initialData?.order_id?._id || initialData?.order_id || ""),
         order_date: String(initialData?.order_date || "").slice(0, 10),
         order_description: initialData?.order_description || "",
-        quantity_dzn: String(Number(initialData?.quantity_dzn || 0)),
+        is_two_side: Boolean(initialData?.is_two_side),
+        quantity_dzn: String(Number(initialData?.is_two_side ? Number(initialData?.quantity_dzn || 0) / 2 : initialData?.quantity_dzn || 0)),
         staff_id: String(initialData?.staff_id?._id || initialData?.staff_id || ""),
         category: initialData?.category || categoryOptions[0]?.value || "",
         type_name: initialData?.type_name || "",
@@ -146,6 +148,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData, categoryOp
         order_id: "",
         order_date: new Date().toISOString().slice(0, 10),
         order_description: "",
+        is_two_side: false,
         quantity_dzn: "",
         staff_id: "",
         category: categoryOptions[0]?.value || "",
@@ -192,8 +195,9 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData, categoryOp
   );
 
   const qtyDzn = Number(formData.quantity_dzn || 0);
+  const countedQtyDzn = formData.is_two_side ? qtyDzn * 2 : qtyDzn;
   const rate = Number(selectedType?.rate || 0);
-  const totalAmount = qtyDzn * rate;
+  const totalAmount = countedQtyDzn * rate;
 
   const staffOptions = staffs.map((staff) => ({ label: staff.name, value: staff._id }));
   const repeatOptions = [
@@ -252,6 +256,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData, categoryOp
         order_date: formData.order_date,
         month: formData.month,
         order_description: formData.order_description,
+        is_two_side: Boolean(formData.is_two_side),
         staff_id: formData.staff_id,
         category: formData.category,
         type_name: formData.type_name,
@@ -296,7 +301,8 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData, categoryOp
       month: String(rec?.month || rec?.order_date || "").slice(0, 7) || prev.month,
       order_date: String(rec?.order_date || "").slice(0, 10),
       order_description: rec?.order_description || "",
-      quantity_dzn: String(Number(rec?.quantity_dzn || 0)),
+      is_two_side: Boolean(rec?.is_two_side),
+      quantity_dzn: String(Number(rec?.is_two_side ? Number(rec?.quantity_dzn || 0) / 2 : rec?.quantity_dzn || 0)),
       staff_id: String(rec?.staff_id?._id || rec?.staff_id || prev.staff_id || ""),
       category: rec?.category || prev.category,
       type_name: rec?.type_name || prev.type_name,
@@ -545,6 +551,15 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData, categoryOp
               }}
               onChange={(e) => setFormData((prev) => ({ ...prev, quantity_dzn: e.target.value }))}
             />
+            <label className="flex items-center justify-between gap-3 rounded-xl border border-gray-300 bg-gray-50 px-4 py-2.5 text-sm text-gray-700">
+              <span className="font-medium">2-Side</span>
+              <input
+                type="checkbox"
+                checked={Boolean(formData.is_two_side)}
+                onChange={(e) => setFormData((prev) => ({ ...prev, is_two_side: e.target.checked }))}
+                className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-300"
+              />
+            </label>
 
             <Select
               ref={staffRef}
@@ -589,7 +604,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData, categoryOp
               required={false}
             />
             <Input
-              label="Total Amount"
+              label={`Total Amount${formData.is_two_side ? ` (${formatNumbers(countedQtyDzn, 2)} Dzn)` : ""}`}
               value={totalAmount ? formatNumbers(totalAmount, 2) : ""}
               readOnly
               required={false}
@@ -718,6 +733,7 @@ export default function CrpStaffRecords() {
                   <th className="px-5 py-3.5 font-medium">Date</th>
                   <th className="px-5 py-3.5 font-medium">Count Month</th>
                   <th className="px-5 py-3.5 font-medium">Description</th>
+                  <th className="px-5 py-3.5 font-medium">2-Side</th>
                   <th className="px-5 py-3.5 font-medium">Qty (Dzn)</th>
                   <th className="px-5 py-3.5 font-medium">Staff</th>
                   <th className="px-5 py-3.5 font-medium">Category</th>
@@ -729,12 +745,12 @@ export default function CrpStaffRecords() {
               </thead>
 
               {loading ? (
-                <TableSkeleton rows={30} columns={11} />
+                <TableSkeleton rows={30} columns={12} />
               ) : (
                 <tbody className="divide-y divide-gray-200">
                   {records.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="px-7 py-16 text-center text-sm text-gray-400">
+                      <td colSpan={12} className="px-7 py-16 text-center text-sm text-gray-400">
                         No CRP records found.
                       </td>
                     </tr>
@@ -745,6 +761,7 @@ export default function CrpStaffRecords() {
                         <td className="px-5 py-4 text-sm text-gray-600">{formatDate(item.order_date, "DD MMM yyyy")}</td>
                         <td className="px-5 py-4 text-sm text-gray-600">{item.month || "-"}</td>
                         <td className="px-5 py-4 text-sm text-gray-800">{item.order_description || "-"}</td>
+                        <td className="px-5 py-4 text-sm text-gray-600">{item.is_two_side ? "Yes" : "-"}</td>
                         <td className="px-5 py-4 text-sm text-gray-600">{formatNumbers(item.quantity_dzn, 2)}</td>
                         <td className="px-5 py-4 text-sm text-gray-700">{item.staff_name || item.staff_id?.name || "-"}</td>
                         <td className="px-5 py-4 text-sm text-gray-600">{item.category}</td>

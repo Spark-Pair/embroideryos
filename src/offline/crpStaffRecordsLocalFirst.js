@@ -19,6 +19,7 @@ let onlineHandlerAttached = false;
 let syncLoopAttached = false;
 
 const normalizeCategory = (category) => (String(category || "").trim() === "Packing" ? "Cropping" : category);
+const normalizeBool = (value) => value === true || value === "true" || value === "1" || value === 1;
 
 const normalizeId = (row) => String(row?._id || row?.id || "");
 const isLocalId = (value) => String(value || "").startsWith("local-");
@@ -320,7 +321,9 @@ export const createCrpStaffRecordLocalFirst = async (payload) => {
     (row) => normalizeCategory(row?.category) === normalizedPayload?.category && row?.type_name === normalizedPayload?.type_name
   );
 
-  const quantity_dzn = Number(normalizedPayload?.quantity_dzn || (order?.unit === "Pcs" ? Number(order?.quantity || 0) / 12 : Number(order?.quantity || 0)) || 0);
+  const baseQuantityDzn = Number(normalizedPayload?.quantity_dzn || (order?.unit === "Pcs" ? Number(order?.quantity || 0) / 12 : Number(order?.quantity || 0)) || 0);
+  const isTwoSide = normalizeBool(normalizedPayload?.is_two_side);
+  const quantity_dzn = isTwoSide ? baseQuantityDzn * 2 : baseQuantityDzn;
   const rate = Number(normalizedPayload?.rate || rateCfg?.rate || 0);
 
   const localRow = {
@@ -328,6 +331,7 @@ export const createCrpStaffRecordLocalFirst = async (payload) => {
     order_id: normalizedPayload?.order_id || null,
     order_date: normalizedPayload?.order_date || order?.date || new Date().toISOString(),
     order_description: normalizedPayload?.order_description || order?.description || "",
+    is_two_side: isTwoSide,
     quantity_dzn,
     staff_id: normalizedPayload?.staff_id || null,
     staff_name: staff?.name || "",
@@ -389,7 +393,12 @@ export const updateCrpStaffRecordLocalFirst = async (id, payload) => {
   const existing = await findRecordByIdLocal(targetId);
   const staff = await getStaffSnapshot();
   const staffRow = staff.find((row) => String(row?._id || "") === String(normalizedPayload?.staff_id || ""));
-  const quantity_dzn = Number(normalizedPayload?.quantity_dzn || 0);
+  const existingBaseQtyDzn = existing?.is_two_side ? Number(existing?.quantity_dzn || 0) / 2 : Number(existing?.quantity_dzn || 0);
+  const baseQuantityDzn = normalizedPayload?.quantity_dzn === undefined || normalizedPayload?.quantity_dzn === null || normalizedPayload?.quantity_dzn === ""
+    ? existingBaseQtyDzn
+    : Number(normalizedPayload?.quantity_dzn || 0);
+  const isTwoSide = normalizedPayload?.is_two_side === undefined ? Boolean(existing?.is_two_side) : normalizeBool(normalizedPayload?.is_two_side);
+  const quantity_dzn = isTwoSide ? baseQuantityDzn * 2 : baseQuantityDzn;
   const rate = Number(normalizedPayload?.rate || 0);
   const localRow = {
     ...(existing || {}),
@@ -397,6 +406,7 @@ export const updateCrpStaffRecordLocalFirst = async (id, payload) => {
     _id: targetId,
     staff_id: normalizedPayload?.staff_id || null,
     staff_name: staffRow?.name || "",
+    is_two_side: isTwoSide,
     quantity_dzn,
     rate,
     total_amount: quantity_dzn * rate,
