@@ -56,6 +56,11 @@ function toQtyDzn(order) {
   return order.unit === "Pcs" ? Number(order.quantity || 0) / 12 : Number(order.quantity || 0);
 }
 
+function formatCrpQty(row) {
+  const qty = Number(row?.is_two_side ? Number(row?.quantity_dzn || 0) / 2 : row?.quantity_dzn || 0);
+  return `${formatNumbers(qty, 2)}${row?.is_two_side ? " 2x" : ""}`;
+}
+
 function CrpRecordFormModal({ isOpen, onClose, onAction, initialData, categoryOptions = [] }) {
   const monthRef = useRef(null);
   const repeatRef = useRef(null);
@@ -203,7 +208,7 @@ function CrpRecordFormModal({ isOpen, onClose, onAction, initialData, categoryOp
   const repeatOptions = [
     { label: "None (No prefill)", value: "" },
     ...previousRecords.map((record) => ({
-      label: `${formatDate(record.order_date, "DD MMM yyyy")} · ${record.order_description || "No description"} · ${formatNumbers(record.quantity_dzn, 2)} Dzn`,
+      label: `${formatDate(record.order_date, "DD MMM yyyy")} · ${record.order_description || "No description"} · ${formatCrpQty(record)} Dzn`,
       value: record._id,
     })),
   ];
@@ -733,7 +738,6 @@ export default function CrpStaffRecords() {
                   <th className="px-5 py-3.5 font-medium">Date</th>
                   <th className="px-5 py-3.5 font-medium">Count Month</th>
                   <th className="px-5 py-3.5 font-medium">Description</th>
-                  <th className="px-5 py-3.5 font-medium">2-Side</th>
                   <th className="px-5 py-3.5 font-medium">Qty (Dzn)</th>
                   <th className="px-5 py-3.5 font-medium">Staff</th>
                   <th className="px-5 py-3.5 font-medium">Category</th>
@@ -745,12 +749,12 @@ export default function CrpStaffRecords() {
               </thead>
 
               {loading ? (
-                <TableSkeleton rows={30} columns={12} />
+                <TableSkeleton rows={30} columns={11} />
               ) : (
                 <tbody className="divide-y divide-gray-200">
                   {records.length === 0 ? (
                     <tr>
-                      <td colSpan={12} className="px-7 py-16 text-center text-sm text-gray-400">
+                      <td colSpan={11} className="px-7 py-16 text-center text-sm text-gray-400">
                         No CRP records found.
                       </td>
                     </tr>
@@ -761,8 +765,7 @@ export default function CrpStaffRecords() {
                         <td className="px-5 py-4 text-sm text-gray-600">{formatDate(item.order_date, "DD MMM yyyy")}</td>
                         <td className="px-5 py-4 text-sm text-gray-600">{item.month || "-"}</td>
                         <td className="px-5 py-4 text-sm text-gray-800">{item.order_description || "-"}</td>
-                        <td className="px-5 py-4 text-sm text-gray-600">{item.is_two_side ? "Yes" : "-"}</td>
-                        <td className="px-5 py-4 text-sm text-gray-600">{formatNumbers(item.quantity_dzn, 2)}</td>
+                        <td className="px-5 py-4 text-sm text-gray-600">{formatCrpQty(item)}</td>
                         <td className="px-5 py-4 text-sm text-gray-700">{item.staff_name || item.staff_id?.name || "-"}</td>
                         <td className="px-5 py-4 text-sm text-gray-600">{item.category}</td>
                         <td className="px-5 py-4 text-sm text-gray-600">{item.type_name}</td>
