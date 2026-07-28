@@ -23,14 +23,24 @@ let syncInFlight = false;
 let onlineHandlerAttached = false;
 let syncLoopAttached = false;
 
-const normalizeStaff = (value = {}) => ({
-  ...value,
-  opening_balance:
-    value?.opening_balance === "" || value?.opening_balance == null
-      ? 0
-      : Number(value.opening_balance),
-  allowance_overrides: normalizeAllowanceOverrides(value?.allowance_overrides),
-});
+const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
+
+// Staff updates are patch-like: fields omitted by the caller must not be
+// manufactured with defaults, otherwise an unrelated update (for example an
+// allowance override) can overwrite the persisted opening balance with zero.
+const normalizeStaff = (value = {}) => {
+  const normalized = { ...value };
+  if (hasOwn(value, "opening_balance")) {
+    normalized.opening_balance =
+      value.opening_balance === "" || value.opening_balance == null
+        ? 0
+        : Number(value.opening_balance);
+  }
+  if (hasOwn(value, "allowance_overrides")) {
+    normalized.allowance_overrides = normalizeAllowanceOverrides(value.allowance_overrides);
+  }
+  return normalized;
+};
 
 const normalizeId = (row) => String(row?._id || row?.id || "");
 const resolveIdInput = (value) => {
