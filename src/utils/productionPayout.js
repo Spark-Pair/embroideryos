@@ -6,6 +6,7 @@ export const PAYOUT_MODES = {
 };
 
 export const DEFAULT_PAYOUT_MODE = PAYOUT_MODES.TARGET_DUAL_PCT;
+export const AUTO_BONUS_MODES = { NONE: "none", TARGET_MET: "target_met", PRODUCTION_AMOUNT: "production_amount" };
 
 export const EMPTY_PRODUCTION_CONFIG = {
   payout_mode: DEFAULT_PAYOUT_MODE,
@@ -19,6 +20,11 @@ export const EMPTY_PRODUCTION_CONFIG = {
   target_amount: "",
   pcs_per_round: "",
   bonus_rate: "",
+  auto_bonus_mode: AUTO_BONUS_MODES.NONE,
+  auto_bonus_threshold: "",
+  auto_bonus_qty: "",
+  auto_bonus_enabled: false,
+  auto_bonus_rules: [],
   allowance: "",
   off_amount: "",
   stitch_cap: "",
@@ -43,10 +49,49 @@ export const normalizeProductionConfig = (config = {}) => ({
   target_amount: toNumber(config?.target_amount, 0),
   pcs_per_round: toNumber(config?.pcs_per_round, 0),
   bonus_rate: toNumber(config?.bonus_rate, 0),
+  auto_bonus_mode: Object.values(AUTO_BONUS_MODES).includes(config?.auto_bonus_mode) ? config.auto_bonus_mode : AUTO_BONUS_MODES.NONE,
+  auto_bonus_threshold: toNumber(config?.auto_bonus_threshold, 0),
+  auto_bonus_qty: toNumber(config?.auto_bonus_qty, 0),
+  auto_bonus_enabled: config?.auto_bonus_enabled ?? (Array.isArray(config?.auto_bonus_rules) && config.auto_bonus_rules.length > 0),
+  auto_bonus_rules: Array.isArray(config?.auto_bonus_rules)
+    ? config.auto_bonus_rules.filter((rule) => ["target_met", "production_amount", "target_multiple"].includes(rule?.condition)).map((rule) => ({
+        condition: rule.condition,
+        threshold: toNumber(rule.threshold, 0),
+        bonus_qty: toNumber(rule.bonus_qty, 0),
+      }))
+    : [],
   allowance: toNumber(config?.allowance, 0),
   off_amount: toNumber(config?.off_amount, 0),
   stitch_cap: toNumber(config?.stitch_cap, 0),
 });
+
+export const calculateAutoBonusQty = (totals, rawConfig = {}) => {
+  const config = normalizeProductionConfig(rawConfig);
+  if (config.auto_bonus_enabled && config.auto_bonus_rules.length) {
+    const target = getTargetProgress(totals, config);
+    const afterTargetAmount = toNumber(totals?.after_target_amt, 0);
+    const onTargetAmount = toNumber(totals?.on_target_amt, 0);
+    return config.auto_bonus_rules.reduce((best, rule) => {
+      const matches = rule.condition === AUTO_BONUS_MODES.TARGET_MET
+        ? target.targetMet
+        : rule.condition === AUTO_BONUS_MODES.PRODUCTION_AMOUNT
+        ? rule.threshold > 0 && afterTargetAmount >= rule.threshold
+        : rule.condition === "target_multiple"
+        ? config.target_amount > 0 && onTargetAmount >= config.target_amount * rule.threshold
+        : false;
+      return matches ? Math.max(best, rule.bonus_qty) : best;
+    }, 0);
+  }
+  if (config.auto_bonus_qty <= 0) return 0;
+  if (config.auto_bonus_mode === AUTO_BONUS_MODES.TARGET_MET) {
+    return getTargetProgress(totals, config).targetMet ? config.auto_bonus_qty : 0;
+  }
+  if (config.auto_bonus_mode === AUTO_BONUS_MODES.PRODUCTION_AMOUNT) {
+    const amount = getTargetProgress(totals, config).effectiveAmount;
+    return config.auto_bonus_threshold > 0 && amount >= config.auto_bonus_threshold ? config.auto_bonus_qty : 0;
+  }
+  return 0;
+};
 
 export const isTargetMode = (config = {}) =>
   normalizeProductionConfig(config).payout_mode === PAYOUT_MODES.TARGET_DUAL_PCT;

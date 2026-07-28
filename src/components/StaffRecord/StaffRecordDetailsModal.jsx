@@ -266,6 +266,9 @@ export default function StaffRecordDetailsModal({ isOpen, onClose, initialData, 
                   { label: "PCs / Round",         value: snapshot.pcs_per_round },
                   { label: "Off Amount",          value: formatNumbers(snapshot.off_amount, 2) },
                   { label: "Default Bonus Rate",  value: formatNumbers(snapshot.bonus_rate, 2) },
+                  { label: "Auto Bonus Rule", value: ({ target_met: "On target", production_amount: "On production amount" }[snapshot.auto_bonus_mode] || "Off") },
+                  { label: "Auto Bonus Qty", value: formatNumbers(snapshot.auto_bonus_qty, 2) },
+                  { label: "Auto Bonus Rules", value: snapshot.auto_bonus_enabled ? `${snapshot.auto_bonus_rules?.length || 0} configured` : "Off" },
                 ].map((item, i) => (
                   <div
                     key={i}

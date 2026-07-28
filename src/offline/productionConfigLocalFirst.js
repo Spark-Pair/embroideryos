@@ -260,6 +260,24 @@ export const fetchProductionConfigLocalFirst = async (date) => {
   return { success: true, data: selected || {} };
 };
 
+export const fetchAllProductionConfigsLocalFirst = async () => {
+  if (!offlineAccess.isUnlocked()) {
+    const res = await apiClient.get(CONFIG_URL, { params: { all: true } });
+    return res.data;
+  }
+  if (typeof navigator !== "undefined" && navigator.onLine) {
+    try {
+      const res = await apiClient.get(CONFIG_URL, { params: { all: true } });
+      const rows = Array.isArray(res?.data?.data) ? res.data.data.map(normalizeConfig) : [];
+      await upsertEntitySnapshot(ALL_KEY, rows);
+    } catch {
+      // Use the complete locally cached list when refresh is unavailable.
+    }
+  }
+  const rows = withOverlayList(await getAllBaseConfigs(), await getOverlay());
+  return { success: true, data: sortByEffectiveDateDesc(rows) };
+};
+
 export const createProductionConfigLocalFirst = async (payload) => {
   if (!offlineAccess.isUnlocked()) {
     const res = await apiClient.post(CONFIG_URL, payload);
@@ -310,15 +328,16 @@ export const createProductionConfigLocalFirst = async (payload) => {
 };
 
 export const updateProductionConfigLocalFirst = async (payload) => {
+  const requestedId = String(payload?._id || payload?.id || "");
   if (!offlineAccess.isUnlocked()) {
-    const res = await apiClient.put(CONFIG_URL, payload);
+    const res = await apiClient.put(requestedId ? `${CONFIG_URL}/${requestedId}` : CONFIG_URL, payload);
     return res.data;
   }
 
   const overlay = await getOverlay();
   const base = await getAllBaseConfigs();
   const merged = withOverlayList(base, overlay);
-  const latest = sortByEffectiveDateDesc(merged)[0];
+  const latest = requestedId ? merged.find((row) => normalizeId(row) === requestedId) : sortByEffectiveDateDesc(merged)[0];
 
   const localId = latest?._id || `local-production-config-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const localConfig = {
@@ -337,7 +356,7 @@ export const updateProductionConfigLocalFirst = async (payload) => {
   await queueSyncAction({
     entity: "productionConfigs",
     method: "PUT",
-    url: CONFIG_URL,
+    url: requestedId ? `${CONFIG_URL}/${requestedId}` : CONFIG_URL,
     payload: normalizeConfig(payload),
     meta: { id: String(localId) },
   });

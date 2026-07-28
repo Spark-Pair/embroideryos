@@ -15,6 +15,7 @@ import {
   PAYOUT_MODES,
   calculateProductionRow,
   calculateProductionTotals,
+  calculateAutoBonusQty,
   getTargetProgress,
   isTargetMode,
   normalizeProductionConfig,
@@ -195,7 +196,10 @@ const buildLocalRecordPayload = async (payload) => {
   const canHaveBonus = !NO_BONUS.has(resolvedAttendance);
   const effectiveBonusRate =
     payload?.bonus_rate != null ? Number(payload.bonus_rate) : Number(config?.bonus_rate ?? 0);
-  const effectiveBonusQty = canHaveBonus ? Number(payload?.bonus_qty || 0) : 0;
+  const configuredBonusQty = calculateAutoBonusQty(totals, config);
+  const effectiveBonusQty = canHaveBonus
+    ? (payload?.bonus_qty == null ? configuredBonusQty : Number(payload.bonus_qty) || 0)
+    : 0;
   const bonus_amount = effectiveBonusQty * effectiveBonusRate;
 
   const fixAmount = payload?.fix_amount != null ? Number(payload.fix_amount) : null;
@@ -228,6 +232,11 @@ const buildLocalRecordPayload = async (payload) => {
       target_amount: config.target_amount,
       off_amount: config.off_amount,
       bonus_rate: config.bonus_rate,
+      auto_bonus_mode: config.auto_bonus_mode,
+      auto_bonus_threshold: config.auto_bonus_threshold,
+      auto_bonus_qty: config.auto_bonus_qty,
+      auto_bonus_enabled: config.auto_bonus_enabled,
+      auto_bonus_rules: config.auto_bonus_rules,
       allowance: config.allowance,
       stitch_cap: config.stitch_cap,
     },

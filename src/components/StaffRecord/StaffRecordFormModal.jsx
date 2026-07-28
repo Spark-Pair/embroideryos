@@ -19,6 +19,7 @@ import {
   EMPTY_PRODUCTION_CONFIG,
   calculateProductionRow,
   calculateProductionTotals,
+  calculateAutoBonusQty,
   getModeSummary,
   getProductionAmountLabels,
   getTargetProgress,
@@ -188,6 +189,7 @@ export default function StaffRecordFormModal({
   const [dateLoading,   setDateLoading]   = useState(false);
     
   const autoSelectedRef = useRef(false);
+  const bonusQtyOverriddenRef = useRef(false);
 
   // ── Global keyboard nav + Enter to submit ──
   useFormKeyboard({ onEnterSubmit: handleSubmit });
@@ -220,6 +222,7 @@ export default function StaffRecordFormModal({
       setAttendance("");
       setRows([emptyRow()]);
       setBonusQty("");
+      bonusQtyOverriddenRef.current = false;
       setBonusRate("");
       setFixAmount("");
       setForceAfterTargetForNonTarget(false);
@@ -290,6 +293,7 @@ export default function StaffRecordFormModal({
     setDate(toDateInput(initialData.date));
     handleAttendance(initialData.attendance || "");
     setBonusQty(initialData.bonus_qty   ? String(initialData.bonus_qty)   : "");
+    bonusQtyOverriddenRef.current = true;
     setBonusRate(initialData.bonus_rate  ? String(initialData.bonus_rate)  : "");
     setFixAmount(initialData.fix_amount != null ? String(initialData.fix_amount) : "");
     setForceAfterTargetForNonTarget(Boolean(initialData.force_after_target_for_non_target));
@@ -393,6 +397,12 @@ export default function StaffRecordFormModal({
   });
   const targetMode = isTargetMode(cfg);
   const productionEnabled = shouldShowProductionAmount(cfg);
+  const automaticBonusQty = showBonus ? calculateAutoBonusQty(totals, cfg) : 0;
+
+  useEffect(() => {
+    if (isEdit || bonusQtyOverriddenRef.current) return;
+    setBonusQty(automaticBonusQty > 0 ? String(automaticBonusQty) : "");
+  }, [isEdit, automaticBonusQty]);
 
   const handleRowChange = useCallback((key, updated) =>
     setRows((p) => p.map((r) => r._key === key ? updated : r)), []);
@@ -729,7 +739,10 @@ export default function StaffRecordFormModal({
                 label="Bonus Qty"
                 type="number"
                 value={bonusQty}
-                onChange={(e) => setBonusQty(e.target.value)}
+                onChange={(e) => {
+                  bonusQtyOverriddenRef.current = true;
+                  setBonusQty(e.target.value);
+                }}
                 placeholder="0"
                 data-focus-first="true"
                 step="0.001"

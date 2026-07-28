@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Save, X } from "lucide-react";
+import { Plus, Save, Trash2, X } from "lucide-react";
 import Modal from "../Modal";
 import Button from "../Button";
 import Input from "../Input";
 import Select from "../Select";
 import {
   EMPTY_PRODUCTION_CONFIG,
+  AUTO_BONUS_MODES,
   PAYOUT_MODES,
   getPayoutModeOptions,
   normalizeProductionConfig,
@@ -51,6 +52,11 @@ const EMPTY_FORM = {
   target_amount: "",
   off_amount: "",
   bonus_rate: "",
+  auto_bonus_mode: AUTO_BONUS_MODES.NONE,
+  auto_bonus_threshold: "",
+  auto_bonus_qty: "",
+  auto_bonus_enabled: false,
+  auto_bonus_rules: [],
   allowance: "",
   stitch_cap: "",
   effective_date: "",
@@ -91,6 +97,15 @@ const buildFormFromRecord = (record) => {
     target_amount: record?.target_amount ?? "",
     off_amount: record?.off_amount ?? "",
     bonus_rate: record?.bonus_rate ?? "",
+    auto_bonus_mode: normalized.auto_bonus_mode,
+    auto_bonus_threshold: record?.auto_bonus_threshold ?? "",
+    auto_bonus_qty: record?.auto_bonus_qty ?? "",
+    auto_bonus_enabled: normalized.auto_bonus_enabled,
+    auto_bonus_rules: normalized.auto_bonus_rules.map((rule) => ({
+      condition: rule.condition,
+      threshold: String(rule.threshold ?? ""),
+      bonus_qty: String(rule.bonus_qty ?? ""),
+    })),
     allowance: record?.allowance ?? "",
     stitch_cap: record?.stitch_cap ?? "",
     effective_date: record?.effective_date
@@ -147,6 +162,20 @@ export default function ProductionConfigFormModal({
     if (errors[key]) setErrors((prev) => ({ ...prev, [key]: null }));
   };
 
+  const addBonusRule = () => setForm((prev) => ({
+    ...prev,
+    auto_bonus_enabled: true,
+    auto_bonus_rules: [...prev.auto_bonus_rules, { condition: AUTO_BONUS_MODES.TARGET_MET, threshold: "1", bonus_qty: "" }],
+  }));
+  const updateBonusRule = (index, key, value) => setForm((prev) => ({
+    ...prev,
+    auto_bonus_rules: prev.auto_bonus_rules.map((rule, idx) => idx === index ? { ...rule, [key]: value } : rule),
+  }));
+  const removeBonusRule = (index) => setForm((prev) => ({
+    ...prev,
+    auto_bonus_rules: prev.auto_bonus_rules.filter((_, idx) => idx !== index),
+  }));
+
   const validate = () => {
     const errs = {};
     visibleFields.forEach(({ key, label, type }) => {
@@ -161,6 +190,14 @@ export default function ProductionConfigFormModal({
     });
 
     const effectiveDate = String(form.effective_date || "").trim();
+    if (form.auto_bonus_enabled) {
+      if (!form.auto_bonus_rules.length) errs.auto_bonus_rules = "Add at least one automatic bonus rule";
+      else if (form.auto_bonus_rules.some((rule) =>
+        evaluateMathExpression(rule.bonus_qty) == null || evaluateMathExpression(rule.bonus_qty) <= 0 ||
+        (rule.condition !== AUTO_BONUS_MODES.TARGET_MET && (evaluateMathExpression(rule.threshold) == null || evaluateMathExpression(rule.threshold) <= 0)))) {
+        errs.auto_bonus_rules = "Complete every rule with a positive threshold and bonus quantity";
+      }
+    }
     if (effectiveDate) {
       const duplicateConfig = (Array.isArray(existingConfigs) ? existingConfigs : []).find((config) => {
         const configDate = config?.effective_date
@@ -188,6 +225,15 @@ export default function ProductionConfigFormModal({
       const payload = {
         payout_mode: form.payout_mode,
         effective_date: form.effective_date,
+        auto_bonus_mode: form.auto_bonus_mode,
+        auto_bonus_qty: form.auto_bonus_mode === AUTO_BONUS_MODES.NONE ? 0 : evaluateMathExpression(form.auto_bonus_qty),
+        auto_bonus_threshold: form.auto_bonus_mode === AUTO_BONUS_MODES.PRODUCTION_AMOUNT ? evaluateMathExpression(form.auto_bonus_threshold) : 0,
+        auto_bonus_enabled: form.auto_bonus_enabled,
+        auto_bonus_rules: form.auto_bonus_enabled ? form.auto_bonus_rules.map((rule) => ({
+          condition: rule.condition,
+          threshold: rule.condition === AUTO_BONUS_MODES.TARGET_MET ? 1 : evaluateMathExpression(rule.threshold),
+          bonus_qty: evaluateMathExpression(rule.bonus_qty),
+        })) : [],
       };
 
       visibleFields.forEach((field) => {
@@ -208,7 +254,7 @@ export default function ProductionConfigFormModal({
       onClose={submitting ? undefined : onClose}
       maxWidth="max-w-4xl"
       title="Production Config"
-      subtitle={initialData ? "Prefilled from your active staff-record config. Set a new effective date to create the next config." : "Create a new production configuration record"}
+      subtitle={clearEffectiveDateOnOpen ? "Prefilled from your active staff-record config. Set a new effective date to create the next config." : initialData ? "Edit this existing production configuration." : "Create a new production configuration record"}
       footer={
         <div className="flex justify-end gap-3">
           <Button outline variant="secondary" icon={X} onClick={onClose} disabled={submitting}>
@@ -232,6 +278,28 @@ export default function ProductionConfigFormModal({
             options={getPayoutModeOptions()}
             placeholder="Select payout mode..."
           />
+        </div>
+
+        <div className="col-span-2 rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div><p className="text-sm font-semibold text-gray-800">Automatic Bonus Formula</p><p className="text-xs text-gray-600">All matching rules are checked; the highest bonus quantity is applied.</p></div>
+            <Button size="sm" variant={form.auto_bonus_enabled ? "success" : "secondary"} outline={!form.auto_bonus_enabled} onClick={() => setForm((prev) => ({ ...prev, auto_bonus_enabled: !prev.auto_bonus_enabled }))}>{form.auto_bonus_enabled ? "Enabled" : "Disabled"}</Button>
+          </div>
+          <div className="mt-3"><Button size="sm" variant="info" outline icon={Plus} onClick={addBonusRule} disabled={!form.auto_bonus_enabled || submitting}>Add Rule</Button></div>
+          {errors.auto_bonus_rules && <p className="mt-2 text-xs text-red-500">{errors.auto_bonus_rules}</p>}
+          {form.auto_bonus_enabled && <div className="mt-3 space-y-2">
+            {form.auto_bonus_rules.map((rule, idx) => <div key={`bonus-rule-${idx}`} className="grid grid-cols-12 items-end gap-2">
+              <div className="col-span-5"><Select label={idx === 0 ? "Condition" : ""} value={rule.condition} onChange={(value) => updateBonusRule(idx, "condition", value)} options={[
+                { label: "Daily target met", value: AUTO_BONUS_MODES.TARGET_MET },
+                { label: "After-target amount at least", value: AUTO_BONUS_MODES.PRODUCTION_AMOUNT },
+                { label: "On-target amount multiple", value: "target_multiple" },
+              ]} /></div>
+              <div className="col-span-3"><Input label={idx === 0 ? "Threshold" : ""} type="number" step="0.01" min={0} value={rule.threshold} disabled={rule.condition === AUTO_BONUS_MODES.TARGET_MET} placeholder={rule.condition === "target_multiple" ? "e.g. 2" : "e.g. 2000"} onChange={(e) => updateBonusRule(idx, "threshold", e.target.value)} required={false} /></div>
+              <div className="col-span-3"><Input label={idx === 0 ? "Bonus Qty" : ""} type="number" step="0.01" min={0} value={rule.bonus_qty} onChange={(e) => updateBonusRule(idx, "bonus_qty", e.target.value)} required={false} /></div>
+              <div className="col-span-1 pb-1"><button type="button" onClick={() => removeBonusRule(idx)} className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-gray-300 text-gray-500 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button></div>
+            </div>)}
+          </div>}
+          <p className="mt-3 text-xs text-gray-600">Example: target met = 1, after-target amount 2000 = 1.5, on-target amount at 2x daily target = 2. Highest matching bonus applies; Staff Record remains editable.</p>
         </div>
 
         {visibleFields.map((field) => (

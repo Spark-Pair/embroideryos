@@ -12,7 +12,7 @@ import {
   Scissors,
   Hash,
 } from "lucide-react";
-import { fetchProductionConfig, createProductionConfig } from "../api/productionConfig";
+import { fetchAllProductionConfigs, createProductionConfig, updateProductionConfig } from "../api/productionConfig";
 import { fetchOrderConfig, createOrderConfig } from "../api/orderConfig";
 import {
   fetchMyInvoiceBanner,
@@ -130,6 +130,14 @@ const PRODUCTION_DISPLAY_FIELDS = [
   { key: "pcs_per_round", label: "PCs Per Round" },
   { key: "off_amount", label: "Off Day Amount" },
   { key: "bonus_rate", label: "Bonus Rate" },
+  { key: "auto_bonus_enabled", label: "Auto Bonus Formula" },
+  { key: "auto_bonus_rules", label: "Auto Bonus Rules", format: (rules, record) => {
+    if (!record?.auto_bonus_enabled || !Array.isArray(rules) || !rules.length) return "Off";
+    return rules.map((rule) => {
+      const condition = rule.condition === "target_met" ? "Target met" : rule.condition === "target_multiple" ? `${rule.threshold}x target` : `Amount ≥ ${rule.threshold}`;
+      return `${condition} → ${rule.bonus_qty}`;
+    }).join(" · ");
+  } },
   { key: "allowance", label: "Monthly Allowance" },
   { key: "stitch_cap", label: "Minimum Stitch Cap" },
 ];
@@ -152,7 +160,7 @@ const normalizeConfigRows = (value) => {
 
 // ── ConfigCard ──────────────────────────────────────────────────────────────
 // Active card uses a teal accent to stay consistent with app's primary color.
-function ProductionConfigCard({ record, isActive }) {
+function ProductionConfigCard({ record, isActive, onEdit }) {
   return (
     <div
       className={`rounded-2xl border overflow-hidden transition-shadow hover:shadow-sm bg-white ${
@@ -207,6 +215,7 @@ function ProductionConfigCard({ record, isActive }) {
       <div className="border-t border-gray-200 bg-white px-4 py-3">
         <p className="text-xs text-gray-400 mb-2">Mode Summary</p>
         <p className="text-sm text-gray-700">{getModeSummary(record)}</p>
+        <Button size="sm" variant="secondary" outline icon={Edit3} onClick={() => onEdit(record)} className="mt-3 w-full">Edit Config</Button>
       </div>
     </div>
   );
@@ -675,6 +684,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(false);
   const [orderLoading, setOrderLoading] = useState(false);
   const [formModal, setFormModal] = useState(false);
+  const [editingProductionConfig, setEditingProductionConfig] = useState(null);
   const [orderFormModal, setOrderFormModal] = useState(false);
   const [invoiceBanner, setInvoiceBanner] = useState("");
   const [machineOptions, setMachineOptions] = useState([]);
@@ -710,7 +720,7 @@ export default function SettingsPage() {
   const loadConfigs = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetchProductionConfig();
+      const res = await fetchAllProductionConfigs();
       const data = normalizeConfigRows(res.data);
       data.sort((a, b) => new Date(b.effective_date) - new Date(a.effective_date));
       setRecords(data);
@@ -859,13 +869,18 @@ export default function SettingsPage() {
 
   const handleSave = async (payload) => {
     try {
-      await createProductionConfig(payload);
-      showToast({ type: "success", message: "Config added successfully" });
+      if (editingProductionConfig?._id) {
+        await updateProductionConfig({ ...payload, _id: editingProductionConfig._id });
+        showToast({ type: "success", message: "Config updated successfully" });
+      } else {
+        await createProductionConfig(payload);
+        showToast({ type: "success", message: "Config added successfully" });
+      }
       loadConfigs();
     } catch (err) {
       showToast({
         type: "error",
-        message: err.response?.data?.message || "Failed to add config",
+        message: err.response?.data?.message || "Failed to save config",
       });
       throw err;
     }
@@ -1185,7 +1200,7 @@ export default function SettingsPage() {
             description="Business-wise rates and targets applied to your staff records."
             icon={SlidersHorizontal}
             action={
-              <AddButton onClick={() => setFormModal(true)}>Add Config</AddButton>
+              <AddButton onClick={() => { setEditingProductionConfig(null); setFormModal(true); }}>Add Config</AddButton>
             }
           >
             {loading ? (
@@ -1211,6 +1226,7 @@ export default function SettingsPage() {
                     key={record._id || record.id || `${record.effective_date || "production"}-${index}`}
                     record={record}
                     isActive={activeRecord?._id === record._id}
+                    onEdit={(config) => { setEditingProductionConfig(config); setFormModal(true); }}
                   />
                 ))}
               </div>
@@ -2145,11 +2161,11 @@ export default function SettingsPage() {
       {/* ── Modals ── */}
       <ProductionConfigFormModal
         isOpen={formModal}
-        onClose={() => setFormModal(false)}
+        onClose={() => { setFormModal(false); setEditingProductionConfig(null); }}
         onSave={handleSave}
-        initialData={activeRecord || null}
-        clearEffectiveDateOnOpen
-        existingConfigs={records}
+        initialData={editingProductionConfig || activeRecord || null}
+        clearEffectiveDateOnOpen={!editingProductionConfig}
+        existingConfigs={editingProductionConfig ? records.filter((record) => String(record._id) !== String(editingProductionConfig._id)) : records}
       />
 
       <OrderConfigFormModal
