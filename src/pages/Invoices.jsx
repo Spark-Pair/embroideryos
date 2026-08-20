@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Eye, MoreVertical, Plus, Receipt, Wallet, Hash, Sigma } from "lucide-react";
+import { Eye, MoreVertical, Pencil, Plus, Receipt, Wallet, Hash, Sigma } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import TableToolbar from "../components/table/TableToolbar";
 import TableSkeleton from "../components/table/TableLoader";
@@ -7,7 +7,7 @@ import FilterDrawer from "../components/FilterDrawer";
 import ContextMenu from "../components/ContextMenu";
 import { useToast } from "../context/ToastContext";
 import { formatDate, formatNumbers } from "../utils";
-import { createInvoice, fetchInvoice, fetchInvoices } from "../api/invoice";
+import { createInvoice, fetchInvoice, fetchInvoices, updateInvoice } from "../api/invoice";
 import { fetchMyInvoiceBanner } from "../api/business";
 import { fetchMySubscription } from "../api/subscription";
 import InvoiceFormModal from "../components/Invoice/InvoiceFormModal";
@@ -51,7 +51,8 @@ export default function Invoices() {
 
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [formModal, setFormModal] = useState({ isOpen: false });
+  const [formModal, setFormModal] = useState({ isOpen: false, mode: "create", data: null });
+  const [formModalLoading, setFormModalLoading] = useState(false);
   const [previewModal, setPreviewModal] = useState({ isOpen: false, data: null });
   const [previewLoading, setPreviewLoading] = useState(false);
   const [invoiceBanner, setInvoiceBanner] = useState("");
@@ -119,11 +120,22 @@ export default function Invoices() {
 
   const handleInvoiceFormAction = async (payload) => {
     try {
-      await createInvoice(payload);
-      showToast({ type: "success", message: "Invoice saved successfully" });
+      if (formModal.mode === "edit" && formModal.data?._id) {
+        await updateInvoice(formModal.data._id, payload);
+        showToast({ type: "success", message: "Invoice updated successfully" });
+      } else {
+        await createInvoice(payload);
+        showToast({ type: "success", message: "Invoice saved successfully" });
+      }
       await loadInvoices(pagination.currentPage, filters);
+      if (previewModal.isOpen && previewModal.data?._id === formModal.data?._id) {
+        setPreviewModal({ isOpen: false, data: null });
+      }
     } catch (err) {
-      showToast({ type: "error", message: err.response?.data?.message || "Failed to save invoice" });
+      showToast({
+        type: "error",
+        message: err.response?.data?.message || `Failed to ${formModal.mode === "edit" ? "update" : "save"} invoice`,
+      });
       throw err;
     }
   };
@@ -176,6 +188,23 @@ export default function Invoices() {
     }
   };
 
+  const handleOpenEdit = async (invoiceId) => {
+    setFormModalLoading(true);
+    try {
+      const res = await fetchInvoice(invoiceId);
+      if (!res?.data) throw new Error("Invoice not found");
+      setFormModal({ isOpen: true, mode: "edit", data: res.data });
+    } catch (err) {
+      showToast({ type: "error", message: err.response?.data?.message || "Failed to load invoice for editing" });
+    } finally {
+      setFormModalLoading(false);
+    }
+  };
+
+  const handleCloseFormModal = () => {
+    setFormModal({ isOpen: false, mode: "create", data: null });
+  };
+
   const stats = useMemo(() => {
     const totalAmountCurrentPage = invoices.reduce((sum, item) => sum + Number(item?.total_amount || 0), 0);
     const avgInvoiceAmount = invoices.length > 0 ? totalAmountCurrentPage / invoices.length : 0;
@@ -196,7 +225,7 @@ export default function Invoices() {
           subtitle="Generate and manage customer invoices from grouped orders."
           actionLabel="Generate Invoice"
           actionIcon={Plus}
-          onAction={() => setFormModal({ isOpen: true })}
+          onAction={() => setFormModal({ isOpen: true, mode: "create", data: null })}
         />
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
@@ -278,6 +307,18 @@ export default function Invoices() {
                               <Eye size={16} strokeWidth={2.5} />
                               Preview Invoice
                             </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenEdit(invoice._id);
+                                setActiveMenu(null);
+                              }}
+                              disabled={formModalLoading}
+                              className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl text-gray-600 hover:bg-gray-200 cursor-pointer disabled:opacity-50"
+                            >
+                              <Pencil size={16} strokeWidth={2.5} />
+                              Edit Invoice
+                            </button>
                           </ContextMenu>
                         </td>
                       </tr>
@@ -292,9 +333,11 @@ export default function Invoices() {
 
       <InvoiceFormModal
         isOpen={formModal.isOpen}
-        onClose={() => setFormModal({ isOpen: false })}
+        onClose={handleCloseFormModal}
         onAction={handleInvoiceFormAction}
         canUploadInvoiceImage={Boolean(subscription?.plan_details?.features?.invoice_image_upload)}
+        mode={formModal.mode}
+        editInvoice={formModal.data}
       />
 
       <InvoicePreviewModal

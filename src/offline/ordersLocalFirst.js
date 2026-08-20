@@ -610,3 +610,21 @@ export const refreshOrdersFromCloud = async () => {
   if (!navigator.onLine) return;
   await refreshAllSnapshotFromCloud();
 };
+
+export const releaseInvoiceLinkFromOrders = async (orderIds = []) => {
+  if (!Array.isArray(orderIds) || orderIds.length === 0) return;
+  await patchOverlay((overlay) => {
+    orderIds.forEach((orderId) => {
+      const key = String(orderId);
+      const prev = overlay[key] || {};
+      overlay[key] = {
+        ...prev,
+        _id: key,
+        invoice_id: null,
+        invoiced_at: null,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+    return overlay;
+  });
+};

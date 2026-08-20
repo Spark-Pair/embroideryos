@@ -9,8 +9,9 @@ import {
   upsertEntitySnapshot,
 } from "./idb";
 import { logDataSource } from "./logger";
-import { applyInvoiceLinkToOrders, replaceInvoiceLinkForOrders } from "./ordersLocalFirst";
+import { applyInvoiceLinkToOrders, releaseInvoiceLinkFromOrders, replaceInvoiceLinkForOrders } from "./ordersLocalFirst";
 
+const MAX_INVOICE_ORDERS = 7;
 const INVOICES_URL = "/invoices";
 const ALL_KEY = "invoices:all";
 const OVERLAY_KEY = "invoices:overlay";
@@ -18,6 +19,11 @@ const OVERLAY_KEY = "invoices:overlay";
 let syncInFlight = false;
 let onlineHandlerAttached = false;
 let syncLoopAttached = false;
+
+const extractInvoiceIdFromUrl = (url = "") => {
+  const match = String(url || "").match(/\/invoices\/([^/?#]+)/i);
+  return match?.[1] ? String(match[1]) : "";
+};
 
 const normalizeId = (row) => String(row?._id || row?.id || "");
 const toMillis = (value) => {
@@ -219,6 +225,15 @@ const syncCreateSuccess = async (action, serverInvoice) => {
   }
 };
 
+const syncUpdateSuccess = async (action, serverInvoice) => {
+  const id = normalizeId(serverInvoice) || String(action?.meta?.id || "");
+  if (!id) return;
+  await patchOverlay((overlay) => {
+    overlay[id] = { ...serverInvoice, _id: id };
+    return overlay;
+  });
+};
+
 const processInvoiceQueue = async () => {
   if (syncInFlight) return;
   if (!offlineAccess.isUnlocked()) return;
@@ -238,6 +253,20 @@ const processInvoiceQueue = async () => {
           const res = await apiClient.post(action.url, action.payload);
           const serverInvoice = res?.data?.data || res?.data;
           await syncCreateSuccess(action, serverInvoice);
+        } else if (action.method === "PUT") {
+          const queuedId = extractInvoiceIdFromUrl(action.url);
+          if (queuedId.startsWith("local-invoice-")) {
+            const res = await apiClient.post(INVOICES_URL, action.payload);
+            const serverInvoice = res?.data?.data || res?.data;
+            await syncCreateSuccess(
+              { ...action, meta: { ...(action?.meta || {}), localId: queuedId } },
+              serverInvoice
+            );
+          } else {
+            const res = await apiClient.put(action.url, action.payload);
+            const serverInvoice = res?.data?.data || res?.data;
+            await syncUpdateSuccess(action, serverInvoice);
+          }
         }
 
         await completeSyncAction(action.id);
@@ -313,7 +342,7 @@ export const fetchInvoicesLocalFirst = async (params = {}) => {
   return toPaginatedResponse(filtered, params);
 };
 
-export const fetchInvoiceOrderGroupsLocalFirst = async (params = {}) => {
+export const fetchInvoiceOrderGroupsLocalFirst = async (params = {}, _retried = false) => {
   if (!offlineAccess.isUnlocked()) {
     const res = await apiClient.get(`${INVOICES_URL}/order-groups`, { params });
     return res.data;
@@ -363,14 +392,18 @@ export const fetchInvoiceOrderGroupsLocalFirst = async (params = {}) => {
     if (!ts) return latest;
     return ts > latest ? ts : latest;
   }, 0);
-  if (!data.length && typeof navigator !== "undefined" && navigator.onLine) {
+
+  // Only retry ONCE — an empty result can legitimately mean "no unbilled
+  // orders exist right now" (not "snapshot hasn't synced yet").
+  if (!data.length && !ordersBase.length && !_retried && typeof navigator !== "undefined" && navigator.onLine) {
     try {
       await refreshAllSnapshotFromCloud();
-      return fetchInvoiceOrderGroupsLocalFirst(params);
+      return fetchInvoiceOrderGroupsLocalFirst(params, true);
     } catch {
       // fall back to empty local result
     }
   }
+
   logDataSource("IDB", "invoices.order_groups.local", { count: data.length });
   return {
     success: true,
@@ -554,6 +587,93 @@ export const createInvoiceLocalFirst = async (payload) => {
 
   processInvoiceQueue().catch(() => null);
   return { success: true, data: localInvoice };
+};
+
+export const updateInvoiceLocalFirst = async (id, payload) => {
+  if (!offlineAccess.isUnlocked()) {
+    const res = await apiClient.put(`${INVOICES_URL}/${id}`, payload);
+    return res.data;
+  }
+
+  const overlay = await getOverlay();
+  const base = await getAllBaseInvoices();
+  const merged = withOverlayList(base, overlay);
+  const existing = merged.find((row) => normalizeId(row) === String(id));
+  if (!existing) throwLocalError("Invoice not available locally");
+
+  const customers = await getCustomersSnapshot();
+  const customer = customers.find((row) => String(row?._id || "") === String(existing.customer_id || ""));
+
+  const orders = await getOrdersSnapshot();
+  const orderMap = new Map(orders.map((row) => [String(row?._id || ""), row]));
+  const orderIds = Array.isArray(payload?.order_ids) ? payload.order_ids.map(String) : [];
+  if (!orderIds.length) throwLocalError("At least one order must be selected");
+  if (orderIds.length > MAX_INVOICE_ORDERS) throwLocalError(`Maximum ${MAX_INVOICE_ORDERS} orders allowed in one invoice`);
+
+  const previousOrderIds = (existing.order_ids || []).map(String);
+  const selectedOrders = orderIds.map((oid) => orderMap.get(oid)).filter(Boolean);
+  const invalidOrder = selectedOrders.find((row) => {
+    if (String(row?.customer_id || "") !== String(existing.customer_id || "")) return true;
+    const alreadyOnThisInvoice = previousOrderIds.includes(String(row?._id || ""));
+    if (row?.invoice_id && String(row.invoice_id) !== String(id) && !alreadyOnThisInvoice) return true;
+    return false;
+  });
+  if (selectedOrders.length !== orderIds.length || invalidOrder) {
+    throwLocalError("Some selected orders are missing, from another customer, or already invoiced");
+  }
+
+  const totalAmount = selectedOrders.reduce((sum, row) => sum + Number(row?.total_amount || 0), 0);
+  const invoiceDate = payload?.invoice_date || existing.invoice_date;
+  const invoiceDateObj = new Date(invoiceDate);
+  if (Number.isNaN(invoiceDateObj.getTime())) throwLocalError("Invalid invoice date");
+  const invoiceDay = startOfDay(invoiceDateObj);
+  const todayDay = startOfDay(new Date());
+  if (invoiceDay > todayDay) throwLocalError("Invoice date cannot be after today");
+
+  const latestOrderDateMs = selectedOrders.reduce((latest, row) => {
+    const ts = toMillis(row?.date);
+    if (!ts) return latest;
+    return ts > latest ? ts : latest;
+  }, 0);
+  if (latestOrderDateMs && invoiceDay < startOfDay(new Date(latestOrderDateMs))) {
+    throwLocalError(`Invoice date cannot be before selected order date (${toDateInput(new Date(latestOrderDateMs))})`);
+  }
+
+  const nextInvoice = {
+    ...existing,
+    _id: String(id),
+    customer_name: customer?.name || existing.customer_name,
+    customer_person: customer?.person || existing.customer_person || "",
+    order_ids: orderIds,
+    order_count: orderIds.length,
+    total_amount: totalAmount,
+    invoice_date: invoiceDate,
+    image_data: payload?.image_data ?? existing.image_data ?? "",
+    note: payload?.note ?? existing.note ?? "",
+    __syncStatus: "pending",
+    updatedAt: new Date().toISOString(),
+  };
+
+  await patchOverlay((overlay) => {
+    overlay[String(id)] = nextInvoice;
+    return overlay;
+  });
+
+  const removedOrderIds = previousOrderIds.filter((oid) => !orderIds.includes(oid));
+  const addedOrderIds = orderIds.filter((oid) => !previousOrderIds.includes(oid));
+  if (removedOrderIds.length) await releaseInvoiceLinkFromOrders(removedOrderIds);
+  if (addedOrderIds.length) await applyInvoiceLinkToOrders(addedOrderIds, id, invoiceDate);
+
+  await queueSyncAction({
+    entity: "invoices",
+    method: "PUT",
+    url: `${INVOICES_URL}/${id}`,
+    payload,
+    meta: { id: String(id), orderIds },
+  });
+
+  processInvoiceQueue().catch(() => null);
+  return { success: true, data: nextInvoice };
 };
 
 export const refreshInvoicesFromCloud = async () => {

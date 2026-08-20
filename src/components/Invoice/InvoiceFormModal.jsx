@@ -40,8 +40,17 @@ function formatInvoiceNumber(year, nextInvoiceNo) {
   return `${y}-${String(Math.max(1, seq)).padStart(4, "0")}`;
 }
 
-export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadInvoiceImage = false }) {
+export default function InvoiceFormModal({
+  isOpen,
+  onClose,
+  onAction,
+  canUploadInvoiceImage = false,
+  mode = "create",
+  editInvoice = null,
+}) {
   const { showToast } = useToast();
+  const isEdit = mode === "edit";
+
   const [orderGroups, setOrderGroups] = useState([]);
   const [loadingGroups, setLoadingGroups] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -57,11 +66,48 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
   const [invoiceImageData, setInvoiceImageData] = useState("");
   const [error, setError] = useState("");
 
+  // Merge this invoice's own (already-invoiced) orders into the free-order
+  // groups so they stay selectable/deselectable while editing.
+  const mergeEditOwnOrdersIntoGroups = (groups = []) => {
+    if (!isEdit || !editInvoice) return groups;
+    const ownOrders = Array.isArray(editInvoice.orders) ? editInvoice.orders : [];
+    if (!ownOrders.length) return groups;
+
+    const next = groups.map((g) => ({ ...g, orders: [...(g.orders || [])] }));
+    let group = next.find((g) => String(g.customer_id) === String(editInvoice.customer_id));
+    if (!group) {
+      group = {
+        customer_id: editInvoice.customer_id,
+        customer_name: editInvoice.customer_name,
+        oldest_order_date: ownOrders[0]?.date,
+        total_orders: 0,
+        total_amount: 0,
+        orders: [],
+      };
+      next.unshift(group);
+    }
+
+    const existingIds = new Set(group.orders.map((o) => String(o._id)));
+    ownOrders.forEach((order) => {
+      if (existingIds.has(String(order._id))) return;
+      group.orders.push(order);
+      group.total_orders += 1;
+      group.total_amount += Number(order.total_amount || 0);
+    });
+
+    group.orders.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    return next;
+  };
+
   const loadGroups = async () => {
     setLoadingGroups(true);
     try {
       const res = await fetchInvoiceOrderGroups();
-      setOrderGroups(res?.data || []);
+      const merged = mergeEditOwnOrdersIntoGroups(res?.data || []);
+      const scoped = isEdit
+        ? merged.filter((g) => String(g.customer_id) === String(editInvoice?.customer_id))
+        : merged;
+      setOrderGroups(scoped);
       setLastInvoiceDate(String(res?.meta?.last_invoice_date || ""));
     } catch (err) {
       const message = err.response?.data?.message || "Failed to load grouped orders";
@@ -86,6 +132,16 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
   };
 
   const resetForm = () => {
+    if (isEdit && editInvoice) {
+      setSelectedCustomerId(editInvoice.customer_id || "");
+      setSelectedOrderIds((editInvoice.order_ids || []).map(String));
+      setInvoiceDate(toDateInput(editInvoice.invoice_date));
+      setInvoiceDateTouched(true);
+      setNote(editInvoice.note || "");
+      setInvoiceImageData(editInvoice.image_data || "");
+      setError("");
+      return;
+    }
     setSelectedCustomerId("");
     setSelectedOrderIds([]);
     setInvoiceDate("");
@@ -134,16 +190,18 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
     if (!isOpen) return;
     resetForm();
     loadGroups();
-  }, [isOpen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, mode, editInvoice?._id]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || isEdit) return;
     const selectedYear = new Date(invoiceDate || new Date()).getFullYear();
     loadInvoiceCounter(selectedYear);
-  }, [isOpen, invoiceDate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, invoiceDate, isEdit]);
 
   useEffect(() => {
-    if (!canUploadInvoiceImage && invoiceImageData) {
+    if (!canUploadInvoiceImage && invoiceImageData && invoiceImageData.startsWith("data:image/")) {
       setInvoiceImageData("");
     }
   }, [canUploadInvoiceImage, invoiceImageData]);
@@ -153,12 +211,12 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
       return { customerName: "", orderCount: 0, totalAmount: 0 };
     }
 
-    const group = orderGroups.find((g) => g.customer_id === selectedCustomerId);
+    const group = orderGroups.find((g) => String(g.customer_id) === String(selectedCustomerId));
     if (!group) return { customerName: "", orderCount: 0, totalAmount: 0 };
 
-    const selectedSet = new Set(selectedOrderIds);
+    const selectedSet = new Set(selectedOrderIds.map(String));
     const totalAmount = (group.orders || []).reduce((sum, order) => {
-      if (!selectedSet.has(order._id)) return sum;
+      if (!selectedSet.has(String(order._id))) return sum;
       return sum + Number(order.total_amount || 0);
     }, 0);
 
@@ -171,11 +229,11 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
 
   const selectedLatestOrderDate = useMemo(() => {
     if (!selectedCustomerId || selectedOrderIds.length === 0) return "";
-    const group = orderGroups.find((g) => g.customer_id === selectedCustomerId);
+    const group = orderGroups.find((g) => String(g.customer_id) === String(selectedCustomerId));
     if (!group) return "";
-    const selectedSet = new Set(selectedOrderIds);
+    const selectedSet = new Set(selectedOrderIds.map(String));
     const latestTs = (group.orders || []).reduce((latest, order) => {
-      if (!selectedSet.has(order?._id)) return latest;
+      if (!selectedSet.has(String(order?._id))) return latest;
       const ts = new Date(order?.date || "").getTime();
       if (!Number.isFinite(ts)) return latest;
       return ts > latest ? ts : latest;
@@ -184,10 +242,23 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
   }, [orderGroups, selectedCustomerId, selectedOrderIds]);
 
   const todayDate = toDateInput();
-  const minInvoiceDate = maxDateStr(lastInvoiceDate, selectedLatestOrderDate);
+  // In edit mode we don't hard-floor on lastInvoiceDate client-side, since that
+  // date may belong to this very invoice (backend re-validates excluding self).
+  const minInvoiceDate = isEdit ? selectedLatestOrderDate : maxDateStr(lastInvoiceDate, selectedLatestOrderDate);
   const maxInvoiceDate = todayDate;
 
   useEffect(() => {
+    if (isEdit) {
+      if (!invoiceDate) return;
+      if (minInvoiceDate && invoiceDate < minInvoiceDate) {
+        setInvoiceDate(minInvoiceDate);
+        return;
+      }
+      if (maxInvoiceDate && invoiceDate > maxInvoiceDate) {
+        setInvoiceDate(maxInvoiceDate);
+      }
+      return;
+    }
     if (!invoiceDateTouched) {
       if (minInvoiceDate) {
         if (invoiceDate !== minInvoiceDate) setInvoiceDate(minInvoiceDate);
@@ -206,38 +277,40 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
     if (maxInvoiceDate && invoiceDate > maxInvoiceDate) {
       setInvoiceDate(maxInvoiceDate);
     }
-  }, [invoiceDate, invoiceDateTouched, maxInvoiceDate, minInvoiceDate]);
+  }, [invoiceDate, invoiceDateTouched, maxInvoiceDate, minInvoiceDate, isEdit]);
 
   const toggleOrder = (group, orderId) => {
     if (!selectedCustomerId) setSelectedCustomerId(group.customer_id);
-    if (selectedCustomerId && selectedCustomerId !== group.customer_id) {
+    if (selectedCustomerId && String(selectedCustomerId) !== String(group.customer_id)) {
       setError("You can select orders from one customer at a time.");
       return;
     }
 
     setError("");
     setSelectedOrderIds((prev) => {
-      if (prev.includes(orderId)) {
-        const next = prev.filter((id) => id !== orderId);
-        if (next.length === 0) setSelectedCustomerId("");
+      const prevStr = prev.map(String);
+      const idStr = String(orderId);
+      if (prevStr.includes(idStr)) {
+        const next = prevStr.filter((id) => id !== idStr);
+        if (next.length === 0 && !isEdit) setSelectedCustomerId("");
         return next;
       }
-      if (prev.length >= MAX_INVOICE_ORDERS) {
+      if (prevStr.length >= MAX_INVOICE_ORDERS) {
         setError(`Maximum ${MAX_INVOICE_ORDERS} orders allowed in one invoice.`);
         return prev;
       }
-      return [...prev, orderId];
+      return [...prevStr, idStr];
     });
   };
 
   const selectAllForCustomer = (group) => {
-    if (selectedCustomerId && selectedCustomerId !== group.customer_id && selectedOrderIds.length > 0) {
+    if (!isEdit && selectedCustomerId && String(selectedCustomerId) !== String(group.customer_id) && selectedOrderIds.length > 0) {
       setError("Clear current selection before selecting another customer.");
       return;
     }
     setError("");
     setSelectedCustomerId(group.customer_id);
-    const allIds = (group.orders || []).map((o) => o._id);
+    const allIds = (group.orders || []).map((o) => String(o._id));
     if (allIds.length > MAX_INVOICE_ORDERS) {
       setError(`Customer has more than ${MAX_INVOICE_ORDERS} orders. First ${MAX_INVOICE_ORDERS} selected.`);
     }
@@ -257,10 +330,16 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
       showToast({ type: "warning", message });
       return;
     }
-    if (invoiceDate && minInvoiceDate && invoiceDate < minInvoiceDate) {
+    if (!isEdit && invoiceDate && minInvoiceDate && invoiceDate < minInvoiceDate) {
       const message = selectedLatestOrderDate && selectedLatestOrderDate > (lastInvoiceDate || "")
         ? `Invoice date cannot be before selected order date (${selectedLatestOrderDate}).`
         : `Invoice date cannot be before last invoice date (${lastInvoiceDate}).`;
+      setError(message);
+      showToast({ type: "warning", message });
+      return;
+    }
+    if (isEdit && invoiceDate && selectedLatestOrderDate && invoiceDate < selectedLatestOrderDate) {
+      const message = `Invoice date cannot be before selected order date (${selectedLatestOrderDate}).`;
       setError(message);
       showToast({ type: "warning", message });
       return;
@@ -280,11 +359,11 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
         order_ids: selectedOrderIds,
         invoice_date: invoiceDate || undefined,
         note,
-        image_data: canUploadInvoiceImage ? (invoiceImageData || "") : "",
+        image_data: canUploadInvoiceImage ? (invoiceImageData || "") : (invoiceImageData?.startsWith("http") ? invoiceImageData : ""),
       });
       onClose();
     } catch (err) {
-      const message = err.response?.data?.message || "Failed to save invoice";
+      const message = err.response?.data?.message || `Failed to ${isEdit ? "update" : "save"} invoice`;
       setError(message);
       showToast({ type: "error", message });
     } finally {
@@ -296,18 +375,20 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Generate Invoice"
-      subtitle="Select orders from one customer and save."
+      title={isEdit ? `Edit Invoice ${editInvoice?.invoice_number || ""}` : "Generate Invoice"}
+      subtitle={isEdit ? "Add/remove orders, change date, note, or image." : "Select orders from one customer and save."}
       maxWidth="max-w-6xl"
       footer={
         <div className="flex items-center justify-between w-full">
           <div className="text-xs text-red-600">{error}</div>
           <div className="flex gap-2.5">
-            <Button variant="secondary" outline icon={Trash2} onClick={resetForm} disabled={submitting}>
-              Clear
-            </Button>
+            {!isEdit && (
+              <Button variant="secondary" outline icon={Trash2} onClick={resetForm} disabled={submitting}>
+                Clear
+              </Button>
+            )}
             <Button icon={Save} onClick={handleSave} loading={submitting}>
-              Save Invoice
+              {isEdit ? "Update Invoice" : "Save Invoice"}
             </Button>
           </div>
         </div>
@@ -317,8 +398,12 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
         <div className="xl:col-span-2 rounded-2xl border border-gray-300 bg-white overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
             <div>
-              <h3 className="text-sm font-semibold text-gray-800">Orders Grouped by Customer</h3>
-              <p className="text-xs text-gray-500">Sorted by date (oldest first)</p>
+              <h3 className="text-sm font-semibold text-gray-800">
+                {isEdit ? "Orders for this Customer" : "Orders Grouped by Customer"}
+              </h3>
+              <p className="text-xs text-gray-500">
+                {isEdit ? "Includes orders already on this invoice, plus unbilled ones" : "Sorted by date (oldest first)"}
+              </p>
             </div>
             <Button variant="secondary" outline size="sm" icon={RefreshCcw} onClick={loadGroups} disabled={loadingGroups}>
               Refresh
@@ -333,8 +418,8 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
 
             {!loadingGroups &&
               orderGroups.map((group) => {
-                const groupSelected = selectedCustomerId === group.customer_id;
-                const selectedSet = new Set(selectedOrderIds);
+                const groupSelected = String(selectedCustomerId) === String(group.customer_id);
+                const selectedSet = new Set(selectedOrderIds.map(String));
 
                 return (
                   <div key={group.customer_id} className={`rounded-2xl border ${groupSelected ? "border-teal-400 bg-teal-50/30" : "border-gray-200"} p-4`}>
@@ -351,45 +436,53 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
                     </div>
 
                     <div className="space-y-2">
-                      {(group.orders || []).map((order) => (
-                        <label
-                          key={order._id}
-                          className={`block rounded-xl border px-3.5 py-2.5 cursor-pointer transition ${
-                            selectedSet.has(order._id) ? "border-teal-300 bg-teal-50" : "border-gray-200 bg-white"
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex items-start gap-3 min-w-0">
-                            <input
-                              type="checkbox"
-                              checked={selectedSet.has(order._id)}
-                              onChange={() => toggleOrder(group, order._id)}
-                              className="h-4 w-4 mt-0.5 shrink-0"
-                            />
-                              <div className="min-w-0">
-                                <p className="text-sm font-semibold text-gray-900 leading-tight truncate">
-                                  {order.description || "No description"}
-                                </p>
-                                <p className="text-xs text-gray-500 mt-0.5">
-                                  Date: {formatDate(order.date, "DD MMM yyyy")} • Customer: {group.customer_name || "---"}
-                                </p>
-                                <p className="text-xs text-gray-500 mt-0.5">
-                                  Lot: {order.lot_no || "---"} • Machine: {order.machine_no || "---"}
-                                </p>
-                                <p className="text-xs text-gray-500 mt-0.5">
-                                  Design Stitch: {Number(order.design_stitches || 0) > 0 ? formatNumbers(order.design_stitches, 0) : "-"}
+                      {(group.orders || []).map((order) => {
+                        const isOwnOriginalOrder = isEdit && (editInvoice?.order_ids || []).map(String).includes(String(order._id));
+                        return (
+                          <label
+                            key={order._id}
+                            className={`block rounded-xl border px-3.5 py-2.5 cursor-pointer transition ${
+                              selectedSet.has(String(order._id)) ? "border-teal-300 bg-teal-50" : "border-gray-200 bg-white"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-start gap-3 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={selectedSet.has(String(order._id))}
+                                onChange={() => toggleOrder(group, order._id)}
+                                className="h-4 w-4 mt-0.5 shrink-0"
+                              />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-gray-900 leading-tight truncate">
+                                    {order.description || "No description"}
+                                    {isOwnOriginalOrder && (
+                                      <span className="ml-2 text-[10px] font-medium text-teal-700 bg-teal-100 px-1.5 py-0.5 rounded-full align-middle">
+                                        On invoice
+                                      </span>
+                                    )}
+                                  </p>
+                                  <p className="text-xs text-gray-500 mt-0.5">
+                                    Date: {formatDate(order.date, "DD MMM yyyy")} • Customer: {group.customer_name || "---"}
+                                  </p>
+                                  <p className="text-xs text-gray-500 mt-0.5">
+                                    Lot: {order.lot_no || "---"} • Machine: {order.machine_no || "---"}
+                                  </p>
+                                  <p className="text-xs text-gray-500 mt-0.5">
+                                    Design Stitch: {Number(order.design_stitches || 0) > 0 ? formatNumbers(order.design_stitches, 0) : "-"}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <p className="text-sm font-semibold text-emerald-700">{formatNumbers(order.total_amount, 2)}</p>
+                                <p className="text-xs text-gray-500">
+                                  Qty: {formatNumbers(order.quantity, 0)} {order.unit}
                                 </p>
                               </div>
                             </div>
-                            <div className="text-right shrink-0">
-                              <p className="text-sm font-semibold text-emerald-700">{formatNumbers(order.total_amount, 2)}</p>
-                              <p className="text-xs text-gray-500">
-                                Qty: {formatNumbers(order.quantity, 0)} {order.unit}
-                              </p>
-                            </div>
-                          </div>
-                        </label>
-                      ))}
+                          </label>
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -401,8 +494,8 @@ export default function InvoiceFormModal({ isOpen, onClose, onAction, canUploadI
           <h3 className="text-sm font-semibold text-gray-800 mb-3">Invoice Details</h3>
           <div className="space-y-3">
             <Input
-              label="New Invoice No"
-              value={loadingInvoiceCounter ? "Loading..." : nextInvoiceNumber}
+              label={isEdit ? "Invoice No" : "New Invoice No"}
+              value={isEdit ? (editInvoice?.invoice_number || "") : (loadingInvoiceCounter ? "Loading..." : nextInvoiceNumber)}
               placeholder="—"
               readOnly
               required={false}
