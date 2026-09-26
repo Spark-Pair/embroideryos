@@ -9,6 +9,7 @@ const RETRY_MAX_DELAY_MS = 120000;
 
 let dbPromise = null;
 let sessionMetaCache = null;
+let clearInFlight = null;
 
 const extractQueuedEntityId = (item = {}) => {
   const metaId = String(item?.meta?.id || item?.meta?.localId || "").trim();
@@ -64,6 +65,7 @@ const openDb = () =>
   });
 
 const getDb = async () => {
+  if (clearInFlight) await clearInFlight;
   if (!dbPromise) dbPromise = openDb();
   return dbPromise;
 };
@@ -142,17 +144,26 @@ export const getOfflineMetaValue = async (key) => {
 };
 
 export const clearOfflineData = async () => {
-  sessionMetaCache = null;
-  const db = await getDb();
-  db.close();
-  dbPromise = null;
-  await new Promise((resolve, reject) => {
-    const req = indexedDB.deleteDatabase(DB_NAME);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error || new Error("Failed to delete IndexedDB"));
-    req.onblocked = () => reject(new Error("IndexedDB delete blocked"));
-  });
-  logDataSource("IDB", "offline.cleared");
+  if (clearInFlight) return clearInFlight;
+  clearInFlight = (async () => {
+    sessionMetaCache = null;
+    const existingDbPromise = dbPromise;
+    dbPromise = null;
+    const db = existingDbPromise ? await existingDbPromise.catch(() => null) : null;
+    if (db) db.close();
+    await new Promise((resolve, reject) => {
+      const req = indexedDB.deleteDatabase(DB_NAME);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error || new Error("Failed to delete IndexedDB"));
+      req.onblocked = () => reject(new Error("IndexedDB delete blocked"));
+    });
+    logDataSource("IDB", "offline.cleared");
+  })();
+  try {
+    return await clearInFlight;
+  } finally {
+    clearInFlight = null;
+  }
 };
 
 export const queueSyncAction = async (action) => {
