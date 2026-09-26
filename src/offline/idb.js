@@ -24,6 +24,7 @@ const replaceExactIdDeep = (value, sourceId, targetId) => {
   if (typeof value === "string") return value === sourceId ? targetId : value;
   if (Array.isArray(value)) return value.map((item) => replaceExactIdDeep(item, sourceId, targetId));
   if (!value || typeof value !== "object") return value;
+  if (value instanceof Date) return value;
   return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, replaceExactIdDeep(item, sourceId, targetId)]));
 };
 const toCollectionUrl = (url = "", id = "") => {
