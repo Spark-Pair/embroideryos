@@ -7,7 +7,6 @@ import {
   getPendingSyncActions,
   getSyncQueueSnapshot,
   offlineAccess,
-  resetFailedSyncActions,
   retrySyncAction,
 } from "../offline/idb";
 import { resetBootstrapSync, subscribeBootstrapSyncState } from "../offline/bootstrapSyncState";
@@ -282,7 +281,6 @@ export default function SyncStatusPortal() {
     setManualSyncing(true);
     setPollError(false);
     try {
-      await resetFailedSyncActions().catch(() => 0);
       await warmSyncWorkers();
       triggerQueueWorkers();
       const drained = await waitUntilQueueDrained(90000);
