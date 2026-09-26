@@ -4,7 +4,7 @@ import { getMe, logoutUser } from '../api/auth.api';
 import { storage } from '../api/apiClient';
 import { useToast } from "./ToastContext";
 import { clearOfflineData, getOfflineSessionMeta, getSyncQueueSnapshot, initOfflineForUser, offlineAccess } from "../offline/idb";
-import { getBootstrapSyncState } from "../offline/bootstrapSyncState";
+import { cancelBootstrapSync, getBootstrapSyncState } from "../offline/bootstrapSyncState";
 import { logDataSource } from "../offline/logger";
 import {
   runFullBootstrapSeed,
@@ -450,13 +450,17 @@ export default function AuthProvider({ children }) {
       Number(queueSnapshot?.delayedCount || 0) > 0;
     const pullInProgress = bootstrapState.phase === "syncing";
 
-    if (pushInProgress || pullInProgress) {
+    if (pushInProgress) {
       showToast({
         type: "warning",
-        message: "Sync is currently in progress. Please wait for it to finish before logging out.",
+        message: "Pending changes are still syncing. Please wait for them to finish before logging out.",
       });
       return { success: false, blocked: true };
     }
+
+    // A cloud pull only warms the cache and is safe to cancel. Do not make
+    // the user wait for every bootstrap request before local logout.
+    if (pullInProgress) cancelBootstrapSync();
 
     await performLogout();
     return { success: true };
