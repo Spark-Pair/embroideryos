@@ -9,14 +9,13 @@ import {
   upsertEntitySnapshot,
 } from "./idb";
 import { logDataSource } from "./logger";
+import { registerSyncWorker } from "./syncCoordinator";
 
 const CRP_RATE_CONFIGS_URL = "/crp-rate-configs";
 const ALL_KEY = "crpRateConfigs:all";
 const OVERLAY_KEY = "crpRateConfigs:overlay";
 
 let syncInFlight = false;
-let onlineHandlerAttached = false;
-let syncLoopAttached = false;
 
 const normalizeCategory = (category) => (String(category || "").trim() === "Packing" ? "Cropping" : category);
 
@@ -160,27 +159,10 @@ const processQueue = async () => {
 };
 
 const ensureOnlineSyncHook = () => {
-  if (onlineHandlerAttached || typeof window === "undefined") return;
-  onlineHandlerAttached = true;
-  window.addEventListener("online", () => {
-    processQueue().catch(() => null);
-  });
+  registerSyncWorker("crpRateConfigs", processQueue);
 };
 
 ensureOnlineSyncHook();
-
-const ensureSyncLoop = () => {
-  if (syncLoopAttached || typeof window === "undefined") return;
-  syncLoopAttached = true;
-  setInterval(() => {
-    processQueue().catch(() => null);
-  }, 15000);
-  window.addEventListener("visibilitychange", () => {
-    if (!document.hidden) processQueue().catch(() => null);
-  });
-};
-
-ensureSyncLoop();
 
 export const fetchCrpRateConfigsLocalFirst = async (params = {}) => {
   if (!offlineAccess.isUnlocked()) {

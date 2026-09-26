@@ -1,5 +1,6 @@
 import { apiClient } from "../api/apiClient";
 import { fetchAllPages } from "./paginatedFetch";
+import { registerSyncWorker } from "./syncCoordinator";
 import {
   completeSyncAction,
   failSyncAction,
@@ -21,8 +22,6 @@ const NAMES_KEY = "staffs:names";
 const OVERLAY_KEY = "staffs:overlay";
 
 let syncInFlight = false;
-let onlineHandlerAttached = false;
-let syncLoopAttached = false;
 
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
 
@@ -377,27 +376,10 @@ const processStaffQueue = async () => {
 };
 
 const ensureOnlineSyncHook = () => {
-  if (onlineHandlerAttached || typeof window === "undefined") return;
-  onlineHandlerAttached = true;
-  window.addEventListener("online", () => {
-    processStaffQueue().catch(() => null);
-  });
+  registerSyncWorker("staff", processStaffQueue);
 };
 
 ensureOnlineSyncHook();
-
-const ensureSyncLoop = () => {
-  if (syncLoopAttached || typeof window === "undefined") return;
-  syncLoopAttached = true;
-  setInterval(() => {
-    processStaffQueue().catch(() => null);
-  }, 15000);
-  window.addEventListener("visibilitychange", () => {
-    if (!document.hidden) processStaffQueue().catch(() => null);
-  });
-};
-
-ensureSyncLoop();
 
 export const fetchStaffsLocalFirst = async (params = {}) => {
   if (!offlineAccess.isUnlocked()) {

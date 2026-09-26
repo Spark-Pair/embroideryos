@@ -1,5 +1,6 @@
 import { apiClient } from "../api/apiClient";
 import { fetchAllPages } from "./paginatedFetch";
+import { registerSyncWorker } from "./syncCoordinator";
 import {
   completeSyncAction,
   failSyncAction,
@@ -19,8 +20,6 @@ const MONTHS_KEY = "staffPayments:months";
 const OVERLAY_KEY = "staffPayments:overlay";
 
 let syncInFlight = false;
-let onlineHandlerAttached = false;
-let syncLoopAttached = false;
 
 const normalizeId = (row) => String(row?._id || row?.id || "");
 const toMillis = (value) => {
@@ -270,27 +269,10 @@ const processStaffPaymentQueue = async () => {
 };
 
 const ensureOnlineSyncHook = () => {
-  if (onlineHandlerAttached || typeof window === "undefined") return;
-  onlineHandlerAttached = true;
-  window.addEventListener("online", () => {
-    processStaffPaymentQueue().catch(() => null);
-  });
+  registerSyncWorker("staffPayments", processStaffPaymentQueue);
 };
 
 ensureOnlineSyncHook();
-
-const ensureSyncLoop = () => {
-  if (syncLoopAttached || typeof window === "undefined") return;
-  syncLoopAttached = true;
-  setInterval(() => {
-    processStaffPaymentQueue().catch(() => null);
-  }, 15000);
-  window.addEventListener("visibilitychange", () => {
-    if (!document.hidden) processStaffPaymentQueue().catch(() => null);
-  });
-};
-
-ensureSyncLoop();
 
 export const fetchStaffPaymentsLocalFirst = async (params = {}) => {
   if (!offlineAccess.isUnlocked()) {

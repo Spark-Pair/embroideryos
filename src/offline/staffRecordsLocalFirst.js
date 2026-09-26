@@ -1,5 +1,6 @@
 import { apiClient } from "../api/apiClient";
 import { fetchAllPages } from "./paginatedFetch";
+import { registerSyncWorker } from "./syncCoordinator";
 import {
   completeSyncAction,
   failSyncAction,
@@ -30,8 +31,6 @@ const MONTHS_KEY = "staffRecords:months";
 const OVERLAY_KEY = "staffRecords:overlay";
 
 let syncInFlight = false;
-let onlineHandlerAttached = false;
-let syncLoopAttached = false;
 
 const NO_PRODUCTION = new Set(["Absent", "Off", "Close", "Sunday"]);
 const NO_AMOUNT = new Set(["Absent", "Close"]);
@@ -517,27 +516,10 @@ const processStaffRecordQueue = async () => {
 };
 
 const ensureOnlineSyncHook = () => {
-  if (onlineHandlerAttached || typeof window === "undefined") return;
-  onlineHandlerAttached = true;
-  window.addEventListener("online", () => {
-    processStaffRecordQueue().catch(() => null);
-  });
+  registerSyncWorker("staffRecords", processStaffRecordQueue);
 };
 
 ensureOnlineSyncHook();
-
-const ensureSyncLoop = () => {
-  if (syncLoopAttached || typeof window === "undefined") return;
-  syncLoopAttached = true;
-  setInterval(() => {
-    processStaffRecordQueue().catch(() => null);
-  }, 15000);
-  window.addEventListener("visibilitychange", () => {
-    if (!document.hidden) processStaffRecordQueue().catch(() => null);
-  });
-};
-
-ensureSyncLoop();
 
 export const fetchStaffRecordsLocalFirst = async (params = {}) => {
   if (!offlineAccess.isUnlocked()) {

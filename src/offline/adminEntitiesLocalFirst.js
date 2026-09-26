@@ -1,5 +1,6 @@
 import { apiClient } from "../api/apiClient";
 import { fetchAllPages } from "./paginatedFetch";
+import { registerSyncWorker } from "./syncCoordinator";
 import {
   completeSyncAction,
   failSyncAction,
@@ -25,8 +26,6 @@ const BUSINESS_USERS_STATS_KEY = "users:business:stats";
 const BUSINESS_USERS_OVERLAY_KEY = "users:business:overlay";
 
 let syncInFlight = false;
-let onlineHandlerAttached = false;
-let syncLoopAttached = false;
 
 const toList = (value) => (Array.isArray(value) ? value : []);
 const normalizeId = (row) => String(row?._id || row?.id || "");
@@ -243,17 +242,7 @@ const processQueue = async () => {
 };
 
 const ensureSyncHooks = () => {
-  if (!onlineHandlerAttached && typeof window !== "undefined") {
-    onlineHandlerAttached = true;
-    window.addEventListener("online", () => processQueue().catch(() => null));
-  }
-  if (!syncLoopAttached && typeof window !== "undefined") {
-    syncLoopAttached = true;
-    setInterval(() => processQueue().catch(() => null), 15000);
-    window.addEventListener("visibilitychange", () => {
-      if (!document.hidden) processQueue().catch(() => null);
-    });
-  }
+  registerSyncWorker("admin", processQueue);
 };
 
 ensureSyncHooks();

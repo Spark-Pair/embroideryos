@@ -1,5 +1,6 @@
 import { apiClient } from "../api/apiClient";
 import { fetchAllPages } from "./paginatedFetch";
+import { registerSyncWorker } from "./syncCoordinator";
 import {
   completeSyncAction,
   failSyncAction,
@@ -16,8 +17,6 @@ const STATS_KEY = "crpStaffRecords:stats";
 const OVERLAY_KEY = "crpStaffRecords:overlay";
 
 let syncInFlight = false;
-let onlineHandlerAttached = false;
-let syncLoopAttached = false;
 
 const normalizeCategory = (category) => (String(category || "").trim() === "Packing" ? "Cropping" : category);
 const normalizeBool = (value) => value === true || value === "true" || value === "1" || value === 1;
@@ -169,27 +168,10 @@ const processQueue = async () => {
 };
 
 const ensureOnlineSyncHook = () => {
-  if (onlineHandlerAttached || typeof window === "undefined") return;
-  onlineHandlerAttached = true;
-  window.addEventListener("online", () => {
-    processQueue().catch(() => null);
-  });
+  registerSyncWorker("crpStaffRecords", processQueue);
 };
 
 ensureOnlineSyncHook();
-
-const ensureSyncLoop = () => {
-  if (syncLoopAttached || typeof window === "undefined") return;
-  syncLoopAttached = true;
-  setInterval(() => {
-    processQueue().catch(() => null);
-  }, 15000);
-  window.addEventListener("visibilitychange", () => {
-    if (!document.hidden) processQueue().catch(() => null);
-  });
-};
-
-ensureSyncLoop();
 
 const applyFilters = (rows = [], params = {}) => {
   let data = [...rows];

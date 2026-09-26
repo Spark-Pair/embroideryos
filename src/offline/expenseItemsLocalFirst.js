@@ -1,4 +1,5 @@
 import { apiClient } from "../api/apiClient";
+import { registerSyncWorker } from "./syncCoordinator";
 import {
   completeSyncAction,
   failSyncAction,
@@ -16,8 +17,6 @@ const ALL_KEY = "expenseItems:all";
 const OVERLAY_KEY = "expenseItems:overlay";
 
 let syncInFlight = false;
-let onlineHandlerAttached = false;
-let syncLoopAttached = false;
 
 const normalizeId = (row) => String(row?._id || row?.id || "");
 const resolveIdInput = (value) => {
@@ -182,27 +181,10 @@ const processExpenseItemQueue = async () => {
 };
 
 const ensureOnlineSyncHook = () => {
-  if (onlineHandlerAttached || typeof window === "undefined") return;
-  onlineHandlerAttached = true;
-  window.addEventListener("online", () => {
-    processExpenseItemQueue().catch(() => null);
-  });
+  registerSyncWorker("expenseItems", processExpenseItemQueue);
 };
 
 ensureOnlineSyncHook();
-
-const ensureSyncLoop = () => {
-  if (syncLoopAttached || typeof window === "undefined") return;
-  syncLoopAttached = true;
-  setInterval(() => {
-    processExpenseItemQueue().catch(() => null);
-  }, 15000);
-  window.addEventListener("visibilitychange", () => {
-    if (!document.hidden) processExpenseItemQueue().catch(() => null);
-  });
-};
-
-ensureSyncLoop();
 
 export const fetchExpenseItemsLocalFirst = async (params = {}) => {
   if (!offlineAccess.isUnlocked()) {

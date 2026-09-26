@@ -1,5 +1,6 @@
 import { apiClient } from "../api/apiClient";
 import { fetchAllPages } from "./paginatedFetch";
+import { registerSyncWorker } from "./syncCoordinator";
 import {
   completeSyncAction,
   failSyncAction,
@@ -23,8 +24,6 @@ const SUBSCRIPTION_PAYMENTS_OVERLAY_KEY = "subscriptionPayments:overlay";
 const SUBSCRIPTION_PAYMENTS_STATS_PREFIX = "subscriptionPayments:stats:";
 
 let syncInFlight = false;
-let onlineHandlerAttached = false;
-let syncLoopAttached = false;
 
 const toList = (value) => (Array.isArray(value) ? value : []);
 const normalizeId = (row) => String(row?._id || row?.id || "");
@@ -199,17 +198,7 @@ const processQueue = async () => {
 };
 
 const ensureSyncHooks = () => {
-  if (!onlineHandlerAttached && typeof window !== "undefined") {
-    onlineHandlerAttached = true;
-    window.addEventListener("online", () => processQueue().catch(() => null));
-  }
-  if (!syncLoopAttached && typeof window !== "undefined") {
-    syncLoopAttached = true;
-    setInterval(() => processQueue().catch(() => null), 15000);
-    window.addEventListener("visibilitychange", () => {
-      if (!document.hidden) processQueue().catch(() => null);
-    });
-  }
+  registerSyncWorker("billing", processQueue);
 };
 ensureSyncHooks();
 

@@ -1,6 +1,7 @@
 import { apiClient } from "../api/apiClient";
 import { completeSyncAction, failSyncAction, getEntitySnapshot, getPendingSyncActions, offlineAccess, queueSyncAction, upsertEntitySnapshot } from "./idb";
 import { logDataSource } from "./logger";
+import { registerSyncWorker } from "./syncCoordinator";
 
 const BANNER_KEY = "business:invoice_banner";
 const MACHINE_OPTIONS_KEY = "business:machine_options";
@@ -11,8 +12,6 @@ const BUSINESSES_ALL_KEY = "businesses:all";
 const BUSINESSES_OVERLAY_KEY = "businesses:overlay";
 
 let syncInFlight = false;
-let onlineHandlerAttached = false;
-let syncLoopAttached = false;
 
 const processBannerQueue = async () => {
   if (syncInFlight) return;
@@ -292,27 +291,10 @@ const refreshInvoiceCounterFromCloud = async (year) => {
 };
 
 const ensureOnlineSyncHook = () => {
-  if (onlineHandlerAttached || typeof window === "undefined") return;
-  onlineHandlerAttached = true;
-  window.addEventListener("online", () => {
-    processBannerQueue().catch(() => null);
-  });
+  registerSyncWorker("business", processBannerQueue);
 };
 
 ensureOnlineSyncHook();
-
-const ensureSyncLoop = () => {
-  if (syncLoopAttached || typeof window === "undefined") return;
-  syncLoopAttached = true;
-  setInterval(() => {
-    processBannerQueue().catch(() => null);
-  }, 15000);
-  window.addEventListener("visibilitychange", () => {
-    if (!document.hidden) processBannerQueue().catch(() => null);
-  });
-};
-
-ensureSyncLoop();
 
 export const fetchMyInvoiceBannerLocalFirst = async () => {
   if (!offlineAccess.isUnlocked()) {

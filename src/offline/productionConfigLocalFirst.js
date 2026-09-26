@@ -10,14 +10,13 @@ import {
 } from "./idb";
 import { logDataSource } from "./logger";
 import { normalizeProductionConfig } from "../utils/productionPayout";
+import { registerSyncWorker } from "./syncCoordinator";
 
 const CONFIG_URL = "/production-configs";
 const ALL_KEY = "productionConfigs:all";
 const OVERLAY_KEY = "productionConfigs:overlay";
 
 let syncInFlight = false;
-let onlineHandlerAttached = false;
-let syncLoopAttached = false;
 
 const normalizeConfig = (value = {}) => ({
   ...normalizeProductionConfig(value),
@@ -197,27 +196,10 @@ const processConfigQueue = async () => {
 };
 
 const ensureOnlineSyncHook = () => {
-  if (onlineHandlerAttached || typeof window === "undefined") return;
-  onlineHandlerAttached = true;
-  window.addEventListener("online", () => {
-    processConfigQueue().catch(() => null);
-  });
+  registerSyncWorker("productionConfigs", processConfigQueue);
 };
 
 ensureOnlineSyncHook();
-
-const ensureSyncLoop = () => {
-  if (syncLoopAttached || typeof window === "undefined") return;
-  syncLoopAttached = true;
-  setInterval(() => {
-    processConfigQueue().catch(() => null);
-  }, 15000);
-  window.addEventListener("visibilitychange", () => {
-    if (!document.hidden) processConfigQueue().catch(() => null);
-  });
-};
-
-ensureSyncLoop();
 
 export const fetchProductionConfigLocalFirst = async (date) => {
   if (!offlineAccess.isUnlocked()) {

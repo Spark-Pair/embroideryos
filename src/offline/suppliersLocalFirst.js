@@ -1,5 +1,6 @@
 import { apiClient } from "../api/apiClient";
 import { fetchAllPages } from "./paginatedFetch";
+import { registerSyncWorker } from "./syncCoordinator";
 import {
   completeSyncAction,
   failSyncAction,
@@ -18,8 +19,6 @@ const STATS_KEY = "suppliers:stats";
 const OVERLAY_KEY = "suppliers:overlay";
 
 let syncInFlight = false;
-let onlineHandlerAttached = false;
-let syncLoopAttached = false;
 
 const normalizeSupplier = (value = {}) => ({
   ...value,
@@ -321,27 +320,10 @@ const processSupplierQueue = async () => {
 };
 
 const ensureOnlineSyncHook = () => {
-  if (onlineHandlerAttached || typeof window === "undefined") return;
-  onlineHandlerAttached = true;
-  window.addEventListener("online", () => {
-    processSupplierQueue().catch(() => null);
-  });
+  registerSyncWorker("suppliers", processSupplierQueue);
 };
 
 ensureOnlineSyncHook();
-
-const ensureSyncLoop = () => {
-  if (syncLoopAttached || typeof window === "undefined") return;
-  syncLoopAttached = true;
-  setInterval(() => {
-    processSupplierQueue().catch(() => null);
-  }, 15000);
-  window.addEventListener("visibilitychange", () => {
-    if (!document.hidden) processSupplierQueue().catch(() => null);
-  });
-};
-
-ensureSyncLoop();
 
 export const fetchSuppliersLocalFirst = async (params = {}) => {
   if (!offlineAccess.isUnlocked()) {

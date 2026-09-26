@@ -1,5 +1,6 @@
 import { apiClient } from "../api/apiClient";
 import { fetchAllPages } from "./paginatedFetch";
+import { registerSyncWorker } from "./syncCoordinator";
 import {
   completeSyncAction,
   failSyncAction,
@@ -18,8 +19,6 @@ const STATS_KEY = "expenses:stats";
 const OVERLAY_KEY = "expenses:overlay";
 
 let syncInFlight = false;
-let onlineHandlerAttached = false;
-let syncLoopAttached = false;
 
 const normalizeId = (row) => String(row?._id || row?.id || "");
 const toMillis = (value) => {
@@ -293,27 +292,10 @@ const processExpenseQueue = async () => {
 };
 
 const ensureOnlineSyncHook = () => {
-  if (onlineHandlerAttached || typeof window === "undefined") return;
-  onlineHandlerAttached = true;
-  window.addEventListener("online", () => {
-    processExpenseQueue().catch(() => null);
-  });
+  registerSyncWorker("expenses", processExpenseQueue);
 };
 
 ensureOnlineSyncHook();
-
-const ensureSyncLoop = () => {
-  if (syncLoopAttached || typeof window === "undefined") return;
-  syncLoopAttached = true;
-  setInterval(() => {
-    processExpenseQueue().catch(() => null);
-  }, 15000);
-  window.addEventListener("visibilitychange", () => {
-    if (!document.hidden) processExpenseQueue().catch(() => null);
-  });
-};
-
-ensureSyncLoop();
 
 export const fetchExpensesLocalFirst = async (params = {}) => {
   if (!offlineAccess.isUnlocked()) {

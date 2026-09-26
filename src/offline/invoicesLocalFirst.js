@@ -1,5 +1,6 @@
 import { apiClient } from "../api/apiClient";
 import { fetchAllPages } from "./paginatedFetch";
+import { registerSyncWorker } from "./syncCoordinator";
 import {
   completeSyncAction,
   failSyncAction,
@@ -18,8 +19,6 @@ const ALL_KEY = "invoices:all";
 const OVERLAY_KEY = "invoices:overlay";
 
 let syncInFlight = false;
-let onlineHandlerAttached = false;
-let syncLoopAttached = false;
 
 const extractInvoiceIdFromUrl = (url = "") => {
   const match = String(url || "").match(/\/invoices\/([^/?#]+)/i);
@@ -293,27 +292,10 @@ const processInvoiceQueue = async () => {
 };
 
 const ensureOnlineSyncHook = () => {
-  if (onlineHandlerAttached || typeof window === "undefined") return;
-  onlineHandlerAttached = true;
-  window.addEventListener("online", () => {
-    processInvoiceQueue().catch(() => null);
-  });
+  registerSyncWorker("invoices", processInvoiceQueue);
 };
 
 ensureOnlineSyncHook();
-
-const ensureSyncLoop = () => {
-  if (syncLoopAttached || typeof window === "undefined") return;
-  syncLoopAttached = true;
-  setInterval(() => {
-    processInvoiceQueue().catch(() => null);
-  }, 15000);
-  window.addEventListener("visibilitychange", () => {
-    if (!document.hidden) processInvoiceQueue().catch(() => null);
-  });
-};
-
-ensureSyncLoop();
 
 export const fetchInvoicesLocalFirst = async (params = {}) => {
   if (!offlineAccess.isUnlocked()) {

@@ -1,5 +1,6 @@
 import { apiClient } from "../api/apiClient";
 import { fetchAllPages } from "./paginatedFetch";
+import { registerSyncWorker } from "./syncCoordinator";
 import {
   completeSyncAction,
   failSyncAction,
@@ -19,8 +20,6 @@ const STATS_KEY = "orders:stats";
 const OVERLAY_KEY = "orders:overlay";
 
 let syncInFlight = false;
-let onlineHandlerAttached = false;
-let syncLoopAttached = false;
 
 const normalizeId = (row) => String(row?._id || row?.id || "");
 const toMillis = (value) => {
@@ -408,27 +407,10 @@ const processOrderQueue = async () => {
 };
 
 const ensureOnlineSyncHook = () => {
-  if (onlineHandlerAttached || typeof window === "undefined") return;
-  onlineHandlerAttached = true;
-  window.addEventListener("online", () => {
-    processOrderQueue().catch(() => null);
-  });
+  registerSyncWorker("orders", processOrderQueue);
 };
 
 ensureOnlineSyncHook();
-
-const ensureSyncLoop = () => {
-  if (syncLoopAttached || typeof window === "undefined") return;
-  syncLoopAttached = true;
-  setInterval(() => {
-    processOrderQueue().catch(() => null);
-  }, 15000);
-  window.addEventListener("visibilitychange", () => {
-    if (!document.hidden) processOrderQueue().catch(() => null);
-  });
-};
-
-ensureSyncLoop();
 
 export const fetchOrdersLocalFirst = async (params = {}) => {
   if (!offlineAccess.isUnlocked()) {

@@ -1,10 +1,9 @@
 import { apiClient } from "../api/apiClient";
+import { registerSyncWorker } from "./syncCoordinator";
 import { completeSyncAction, failSyncAction, getPendingSyncActions, offlineAccess, queueSyncAction } from "./idb";
 import { logDataSource } from "./logger";
 
 let syncInFlight = false;
-let onlineHandlerAttached = false;
-let syncLoopAttached = false;
 
 const getCachedUser = () => {
   try {
@@ -62,27 +61,10 @@ const processShortcutQueue = async () => {
 };
 
 const ensureOnlineSyncHook = () => {
-  if (onlineHandlerAttached || typeof window === "undefined") return;
-  onlineHandlerAttached = true;
-  window.addEventListener("online", () => {
-    processShortcutQueue().catch(() => null);
-  });
+  registerSyncWorker("shortcuts", processShortcutQueue);
 };
 
 ensureOnlineSyncHook();
-
-const ensureSyncLoop = () => {
-  if (syncLoopAttached || typeof window === "undefined") return;
-  syncLoopAttached = true;
-  setInterval(() => {
-    processShortcutQueue().catch(() => null);
-  }, 15000);
-  window.addEventListener("visibilitychange", () => {
-    if (!document.hidden) processShortcutQueue().catch(() => null);
-  });
-};
-
-ensureSyncLoop();
 
 export const updateShortcutsLocalFirst = async (shortcuts) => {
   if (!offlineAccess.isUnlocked()) {

@@ -9,14 +9,13 @@ import {
   upsertEntitySnapshot,
 } from "./idb";
 import { logDataSource } from "./logger";
+import { registerSyncWorker } from "./syncCoordinator";
 
 const CONFIG_URL = "/order-configs";
 const ALL_KEY = "orderConfigs:all";
 const OVERLAY_KEY = "orderConfigs:overlay";
 
 let syncInFlight = false;
-let onlineHandlerAttached = false;
-let syncLoopAttached = false;
 
 const normalizeConfig = (value = {}) => ({
   ...value,
@@ -165,25 +164,9 @@ const processConfigQueue = async () => {
 };
 
 const ensureOnlineSyncHook = () => {
-  if (onlineHandlerAttached || typeof window === "undefined") return;
-  onlineHandlerAttached = true;
-  window.addEventListener("online", () => {
-    processConfigQueue().catch(() => null);
-  });
+  registerSyncWorker("orderConfigs", processConfigQueue);
 };
 ensureOnlineSyncHook();
-
-const ensureSyncLoop = () => {
-  if (syncLoopAttached || typeof window === "undefined") return;
-  syncLoopAttached = true;
-  setInterval(() => {
-    processConfigQueue().catch(() => null);
-  }, 15000);
-  window.addEventListener("visibilitychange", () => {
-    if (!document.hidden) processConfigQueue().catch(() => null);
-  });
-};
-ensureSyncLoop();
 
 export const fetchOrderConfigLocalFirst = async (date) => {
   if (!offlineAccess.isUnlocked()) {
