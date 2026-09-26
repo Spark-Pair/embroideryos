@@ -502,6 +502,7 @@ export const discardSyncAction = async (id) => {
   const activeBusinessId = String(session?.businessId || "").trim();
   const db = await getDb();
   let removed = false;
+  let discardedAction = null;
   await new Promise((resolve, reject) => {
     const tx = db.transaction("sync_queue", "readwrite");
     const store = tx.objectStore("sync_queue");
@@ -514,6 +515,7 @@ export const discardSyncAction = async (id) => {
       ) {
         return;
       }
+      discardedAction = row;
       store.delete(id);
       removed = true;
     };
@@ -522,6 +524,7 @@ export const discardSyncAction = async (id) => {
     tx.onerror = () => reject(tx.error || new Error("Failed to discard sync action"));
     tx.onabort = () => reject(tx.error || new Error("Discard sync action aborted"));
   });
+  if (removed && discardedAction) await markQueuedEntityStatus(discardedAction, "discarded", "Change discarded before cloud sync");
   return removed;
 };
 
