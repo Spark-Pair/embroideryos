@@ -46,8 +46,7 @@ export default function PageHeader({
           lastSnapshotUpdateAt: Number(snapshotMeta?.value || 0) || 0,
         });
       } finally {
-        if (!active) return;
-        timeoutId = window.setTimeout(poll, 5000);
+        if (active) timeoutId = window.setTimeout(poll, 5000);
       }
     };
 
