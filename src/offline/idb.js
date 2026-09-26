@@ -173,6 +173,11 @@ export const queueSyncAction = async (action) => {
   const url = String(action?.url || "").trim();
   const metaId = String(action?.meta?.id || action?.meta?.localId || "").trim();
   const entityName = String(action?.entity || "").trim();
+  const idempotencyKey =
+    action?.idempotencyKey ||
+    (method === "POST" && metaId
+      ? `offline:${scopedBusinessId || "unknown"}:${entityName}:${metaId}`
+      : "");
   const dedupeKey = String(
     action?.dedupeKey ||
       (method === "POST" && metaId
@@ -181,10 +186,15 @@ export const queueSyncAction = async (action) => {
   ).trim();
   const item = {
     ...action,
+    payload:
+      method === "POST" && idempotencyKey && action?.payload && typeof action.payload === "object"
+        ? { ...action.payload, __syncIdempotencyKey: idempotencyKey }
+        : action?.payload,
     businessId: scopedBusinessId || undefined,
     method,
     url,
     dedupeKey: dedupeKey || undefined,
+    idempotencyKey: idempotencyKey || undefined,
     status: action?.status || "pending",
     retries: Number(action?.retries || 0),
     nextRetryAt: 0,

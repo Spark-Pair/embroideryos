@@ -137,6 +137,15 @@ const redirectToLoginOnce = () => {
 // Request interceptor
 apiClient.interceptors.request.use(
   (config) => {
+    const requestBody = config?.data;
+    const syncIdempotencyKey =
+      requestBody && typeof requestBody === "object" ? requestBody.__syncIdempotencyKey : "";
+    if (syncIdempotencyKey) {
+      config.headers = config.headers || {};
+      config.headers["Idempotency-Key"] = syncIdempotencyKey;
+      delete requestBody.__syncIdempotencyKey;
+    }
+
     if (isOfflineBlockedRequest()) {
       logDataSource("IDB", "request.blocked.offline", {
         method: String(config?.method || "get").toUpperCase(),
