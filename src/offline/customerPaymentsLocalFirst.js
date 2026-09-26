@@ -311,7 +311,9 @@ export const fetchCustomerPaymentsLocalFirst = async (params = {}) => {
       overlay = await getOverlay();
       base = await getAllBasePayments();
       merged = withOverlayList(base, overlay);
-    } catch {}
+    } catch {
+      // Local cache remains the source of truth until cloud sync is available.
+    }
   }
   const withCustomer = await attachCustomerInfo(merged);
   const filtered = applyFilters(withCustomer, params);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, forwardRef } from "react";
 import { ChevronDown, Check, Search } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion as Motion, AnimatePresence } from "framer-motion";
 
 const Select = forwardRef(function Select(
   { label, options = [], value, onChange, placeholder = "Select...", disabled = false },
@@ -200,7 +200,7 @@ const Select = forwardRef(function Select(
 
       <AnimatePresence>
         {isOpen && (
-          <motion.div
+          <Motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
@@ -283,7 +283,7 @@ const Select = forwardRef(function Select(
                 <div className="px-4 py-2.5 text-sm text-gray-400">No options found</div>
               )}
             </div>
-          </motion.div>
+          </Motion.div>
         )}
       </AnimatePresence>
     </div>

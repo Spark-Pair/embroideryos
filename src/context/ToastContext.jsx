@@ -1,5 +1,5 @@
 import { createContext, useContext, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion as Motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
 
 const ToastContext = createContext();
@@ -31,7 +31,7 @@ export function ToastProvider({ children }) {
       <div className="fixed top-6 right-6 z-[100] flex flex-col gap-3 pointer-events-none items-end">
         <AnimatePresence>
           {toasts.map((toast) => (
-            <motion.div
+            <Motion.div
               key={toast.id} // Unique key helps Framer Motion track each toast
               initial={{ opacity: 0, y: 20, scale: 0.9, x: 20 }}
               animate={{ opacity: 1, y: 0, scale: 1, x: 0 }}
@@ -58,7 +58,7 @@ export function ToastProvider({ children }) {
                   <X size={16}/>
                 </button>
               </div>
-            </motion.div>
+            </Motion.div>
           ))}
         </AnimatePresence>
       </div>
@@ -66,4 +66,5 @@ export function ToastProvider({ children }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useToast = () => useContext(ToastContext);

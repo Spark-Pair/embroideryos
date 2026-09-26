@@ -1,3 +1,5 @@
+import React from "react";
+
 const VARIANTS = {
   normal: {
     bg: "bg-teal-100/60",
@@ -20,7 +22,7 @@ const VARIANTS = {
 export default function StatCard({
   label,
   value,
-  icon: Icon,
+  icon,
   variant = "normal",
 }) {
   const styles = VARIANTS[variant] || VARIANTS.normal;
@@ -30,8 +32,8 @@ export default function StatCard({
       <div
         className={`w-10 h-10 sm:w-13 sm:h-13 rounded-xl flex items-center justify-center ${styles.bg} ${styles.text} shrink-0`}
       >
-        <Icon size={22} className="sm:hidden" strokeWidth={1.5} />
-        <Icon size={26} className="hidden sm:block" strokeWidth={1.5} />
+        {React.createElement(icon, { size: 22, className: "sm:hidden", strokeWidth: 1.5 })}
+        {React.createElement(icon, { size: 26, className: "hidden sm:block", strokeWidth: 1.5 })}
       </div>
 
       <div className="min-w-0">

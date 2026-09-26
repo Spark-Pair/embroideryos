@@ -1,5 +1,5 @@
 import React from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion as Motion } from "framer-motion";
 import { X, RotateCcw } from "lucide-react";
 import Button from "./Button";
 import Input from "./Input";
@@ -11,7 +11,7 @@ export default function FilterDrawer({ isOpen, onClose, filters = [], onApply, o
       {isOpen && (
         <>
           {/* Backdrop */}
-          <motion.div
+          <Motion.div
             initial={{ opacity: 0, backdropFilter: "blur(0px)" }}
             animate={{ opacity: 1, backdropFilter: "blur(4px)" }}
             exit={{ opacity: 0, backdropFilter: "blur(0px)" }}
@@ -20,7 +20,7 @@ export default function FilterDrawer({ isOpen, onClose, filters = [], onApply, o
           />
 
           {/* Drawer */}
-          <motion.div
+          <Motion.div
             initial={{ x: "100%", opacity: 0.8 }}
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: "100%", opacity: 0.8 }}
@@ -86,7 +86,7 @@ export default function FilterDrawer({ isOpen, onClose, filters = [], onApply, o
                 </Button>
               </div>
             </div>
-          </motion.div>
+          </Motion.div>
         </>
       )}
     </AnimatePresence>

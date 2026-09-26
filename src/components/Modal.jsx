@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion as Motion } from "framer-motion";
 import { X } from "lucide-react";
 import { useEffect } from "react";
 
@@ -36,7 +36,7 @@ export default function Modal({
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           
           {/* Backdrop */}
-          <motion.div
+          <Motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -46,7 +46,7 @@ export default function Modal({
           />
 
           {/* Modal Wrapper */}
-          <motion.div
+          <Motion.div
             initial={{ scale: 0.90, opacity: 0, y: 50 }}
             animate={{ 
               scale: 1, 
@@ -109,7 +109,7 @@ export default function Modal({
               {/* Footer */}
               {footer && <div className="mt-6">{footer}</div>}
             </div>
-          </motion.div>
+          </Motion.div>
         </div>
       )}
     </AnimatePresence>

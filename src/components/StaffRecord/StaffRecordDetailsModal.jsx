@@ -119,7 +119,6 @@ export default function StaffRecordDetailsModal({ isOpen, onClose, initialData, 
   const productionRows = initialData.production?.length ?? 0;
 
   // ── Target logic ──────────────────────────────────────────────────────────
-  const targetAmount = snapshot?.target_amount ?? null;
   const targetState  = getTargetProgress(totals, snapshot, {
     force_after_target_for_non_target: initialData.force_after_target_for_non_target,
     force_full_target_for_non_target: initialData.force_full_target_for_non_target,

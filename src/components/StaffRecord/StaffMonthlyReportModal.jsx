@@ -306,7 +306,6 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
   const [records,   setRecords]   = useState([]);
   const [payments,  setPayments]  = useState([]);
   const [summary,   setSummary]   = useState(null);
-  const [staffData, setStaffData] = useState(null);
   const [generated, setGenerated] = useState(false);
   const [productionConfigs, setProductionConfigs] = useState([]);
   const [reportConfigId, setReportConfigId] = useState("");
@@ -337,10 +336,10 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
         setProductionConfigs(configs);
         setSelectedStaff(staffs[0]?.value || "");
         setSelectedMonth(months[0]?.value || "");
-      setReportConfigId("saved");
+        setReportConfigId("saved");
         setReportConfigError("");
         setReportBasis((staffs[0]?.salary || 0) > 0 ? "salary" : "production");
-        setRecords([]); setPayments([]); setSummary(null); setStaffData(null); setGenerated(false);
+        setRecords([]); setPayments([]); setSummary(null); setGenerated(false);
       } catch {
         setStaffOptions([]); setMonthOptions([]); setProductionConfigs([]);
       } finally {
@@ -577,7 +576,6 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
 
       setRecords(currentRecords);
       setPayments(currentPayments);
-      setStaffData(staffRes);
       setSummary({
         ...currentStats,
         ...paymentStats,

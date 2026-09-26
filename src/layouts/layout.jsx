@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import SidebarNav from '../components/SidebarNav';
 import useAuth from '../hooks/useAuth';
 import { Outlet, useLocation } from 'react-router-dom';
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion as Motion } from "framer-motion";
 import { AlertTriangle, Menu } from "lucide-react";
 import { formatDate } from "../utils";
 import { useToast } from "../context/ToastContext";
@@ -179,7 +179,7 @@ export default function Layout({ children }) {
           </div>
         )}
         <AnimatePresence mode="wait" initial={false}>
-          <motion.div
+          <Motion.div
             key={location.pathname}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -188,7 +188,7 @@ export default function Layout({ children }) {
             className="no-default-transition h-full"
           >
             {children || <Outlet />}
-          </motion.div>
+          </Motion.div>
         </AnimatePresence>
       </main>
       <SyncStatusPortal />

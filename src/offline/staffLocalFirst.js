@@ -421,7 +421,9 @@ export const fetchStaffsLocalFirst = async (params = {}) => {
       overlay = await getOverlay();
       base = await getAllBaseStaffs();
       merged = withOverlayList(base, overlay);
-    } catch {}
+    } catch {
+      // Local cache remains the source of truth until cloud sync is available.
+    }
   }
   const filtered = applyFilters(merged, params);
   const withBalances = await attachStaffBalances(filtered);

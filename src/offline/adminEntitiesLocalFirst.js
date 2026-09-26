@@ -10,7 +10,6 @@ import {
   remapPendingSyncEntityId,
   upsertEntitySnapshot,
 } from "./idb";
-import { logDataSource } from "./logger";
 
 const BUSINESSES_URL = "/businesses";
 const USERS_URL = "/users";
@@ -31,7 +30,6 @@ let syncLoopAttached = false;
 
 const toList = (value) => (Array.isArray(value) ? value : []);
 const normalizeId = (row) => String(row?._id || row?.id || "");
-const isLocalId = (value) => String(value || "").startsWith("local-");
 const getCachedUser = () => {
   try {
     const raw = localStorage.getItem("cachedUser");
@@ -275,13 +273,17 @@ export const fetchBusinessesLocalFirst = async (params = {}) => {
       upsertEntitySnapshot(BUSINESSES_ALL_KEY, toList(listRes?.data?.data)),
       upsertEntitySnapshot(BUSINESSES_STATS_KEY, statsRes?.data || null),
     ]);
-  } catch {}
+  } catch {
+    // Keep the cached admin data available when cloud refresh is unavailable.
+  }
   let rows = filterBusinesses(withOverlayList(await getBusinessesBase(), await getOverlay(BUSINESSES_OVERLAY_KEY)), params);
   if (!rows.length && typeof navigator !== "undefined" && navigator.onLine) {
     try {
       await refreshBusinessesFromCloud();
       rows = filterBusinesses(withOverlayList(await getBusinessesBase(), await getOverlay(BUSINESSES_OVERLAY_KEY)), params);
-    } catch {}
+    } catch {
+      // Keep the cached admin data available when cloud refresh is unavailable.
+    }
   }
   return toPaginatedResponse(rows, params);
 };
@@ -294,7 +296,9 @@ export const fetchBusinessStatsLocalFirst = async () => {
   try {
     const res = await apiClient.get(`${BUSINESSES_URL}/stats`);
     await upsertEntitySnapshot(BUSINESSES_STATS_KEY, res.data || null);
-  } catch {}
+  } catch {
+    // Keep the cached admin statistics available when cloud refresh is unavailable.
+  }
   const rows = withOverlayList(await getBusinessesBase(), await getOverlay(BUSINESSES_OVERLAY_KEY));
   return buildSimpleStats(rows);
 };
@@ -384,7 +388,9 @@ export const fetchUsersLocalFirst = async (params = {}) => {
     try {
       await refreshUsersFromCloud();
       rows = filterUsers(withOverlayList(await getUsersBase(), await getOverlay(USERS_OVERLAY_KEY)), params);
-    } catch {}
+    } catch {
+      // Keep the cached user data available when cloud refresh is unavailable.
+    }
   }
   return toPaginatedResponse(rows, params);
 };
@@ -404,7 +410,9 @@ export const fetchUserStatsLocalFirst = async () => {
   try {
     const res = await apiClient.get(`${USERS_URL}/stats`);
     await upsertEntitySnapshot(USERS_STATS_KEY, res.data || null);
-  } catch {}
+  } catch {
+    // Keep the cached user statistics available when cloud refresh is unavailable.
+  }
   return buildSimpleStats(rows);
 };
 
@@ -425,7 +433,9 @@ export const fetchBusinessUsersLocalFirst = async (params = {}) => {
     try {
       await refreshBusinessUsersFromCloud();
       rows = filterUsers(withOverlayList(await getBusinessUsersBase(), await getOverlay(BUSINESS_USERS_OVERLAY_KEY)), params);
-    } catch {}
+    } catch {
+      // Keep the cached business-user data available when cloud refresh is unavailable.
+    }
   }
   return toPaginatedResponse(rows, params);
 };
@@ -445,7 +455,9 @@ export const fetchBusinessUserStatsLocalFirst = async () => {
   try {
     const res = await apiClient.get(`${USERS_URL}/business/stats`);
     await upsertEntitySnapshot(BUSINESS_USERS_STATS_KEY, res.data || null);
-  } catch {}
+  } catch {
+    // Keep the cached business-user statistics available when cloud refresh is unavailable.
+  }
   return buildSimpleStats(rows);
 };
 

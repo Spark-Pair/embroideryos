@@ -187,7 +187,6 @@ export default function StaffRecordFormModal({
   const [submitting,    setSubmitting]    = useState(false);
   const [staffList,     setStaffList]     = useState([]);
   const [staffLoading,  setStaffLoading]  = useState(false);
-  const [dateLoading,   setDateLoading]   = useState(false);
     
   const autoSelectedRef = useRef(false);
   const bonusQtyOverriddenRef = useRef(false);
@@ -334,7 +333,6 @@ export default function StaffRecordFormModal({
 
     const staff = list.find((s) => s._id === staffId);
     setSelectedStaff(staff);
-    setDateLoading(true);
 
     setTimeout(() => attendanceRef.current?.focus(), 50);
 
@@ -345,8 +343,6 @@ export default function StaffRecordFormModal({
     } catch {
       setDate(resolveDate(staff?.joining_date, null));
       showToast({ type: "error", message: "Failed to load last staff record date" });
-    } finally {
-      setDateLoading(false);
     }
   };
 

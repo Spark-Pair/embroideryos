@@ -330,7 +330,9 @@ export const fetchInvoicesLocalFirst = async (params = {}) => {
       overlay = await getOverlay();
       base = await getAllBaseInvoices();
       merged = withOverlayList(base, overlay);
-    } catch {}
+    } catch {
+      // Local cache remains the source of truth until cloud sync is available.
+    }
   }
   const filtered = applyFilters(merged, params);
 

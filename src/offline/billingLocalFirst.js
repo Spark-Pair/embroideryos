@@ -229,7 +229,9 @@ export const fetchPlansLocalFirst = async () => {
     try {
       await refreshPlansFromCloud();
       rows = toList(await getEntitySnapshot(PLANS_KEY));
-    } catch {}
+    } catch {
+      // Local cache remains the source of truth until cloud sync is available.
+    }
   }
   return { success: true, data: rows };
 };
@@ -274,7 +276,9 @@ export const fetchSubscriptionsLocalFirst = async (params = {}) => {
     try {
       await refreshSubscriptionsFromCloud();
       rows = filterSubscriptions(withOverlayList(toList(await getEntitySnapshot(SUBSCRIPTIONS_KEY)), await getOverlay(SUBSCRIPTIONS_OVERLAY_KEY)), params);
-    } catch {}
+    } catch {
+      // Local cache remains the source of truth until cloud sync is available.
+    }
   }
   return toPaginatedResponse(rows, params);
 };
@@ -346,7 +350,9 @@ export const fetchSubscriptionPaymentsLocalFirst = async (params = {}) => {
     try {
       await refreshSubscriptionPaymentsFromCloud(params?.month || "");
       rows = filterPayments(withOverlayList(toList(await getEntitySnapshot(SUBSCRIPTION_PAYMENTS_KEY)), await getOverlay(SUBSCRIPTION_PAYMENTS_OVERLAY_KEY)), params);
-    } catch {}
+    } catch {
+      // Local cache remains the source of truth until cloud sync is available.
+    }
   }
   return toPaginatedResponse(rows, params);
 };
