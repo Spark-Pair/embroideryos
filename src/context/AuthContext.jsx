@@ -170,7 +170,11 @@ export default function AuthProvider({ children }) {
     }
 
     if (bootstrap) {
-      triggerBootstrapSync({ forceRefresh: false, notifyOnFinish: true });
+      // Let the authenticated shell render first. Bootstrap is intentionally
+      // background work so a successful login is not held behind cache warmup.
+      const startBootstrap = () => triggerBootstrapSync({ forceRefresh: false, notifyOnFinish: true });
+      if (typeof window !== "undefined") window.setTimeout(startBootstrap, 0);
+      else startBootstrap();
     }
 
     return guardedUser;
@@ -414,7 +418,7 @@ export default function AuthProvider({ children }) {
     if (logoutInFlightRef.current) return;
     logoutInFlightRef.current = true;
     localStorage.setItem("auth:logout_in_progress", "1");
-    const logoutPromise = logoutUser().catch((error) => {
+    void logoutUser().catch((error) => {
       console.error('Logout error:', error);
     });
     try {
@@ -426,7 +430,8 @@ export default function AuthProvider({ children }) {
       offlineAccess.lock();
       logDataSource("IDB", "offline.locked");
       clearOfflineData().catch(() => null);
-      await logoutPromise;
+      // Local logout should not wait for the network. The server invalidation
+      // is already in flight and failure is safely handled by logoutUser().
       showToast({
         type: "success",
         message: "Logged out successfully",

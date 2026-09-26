@@ -20,6 +20,12 @@ const extractQueuedEntityId = (item = {}) => {
 };
 
 const isLocalEntityId = (value) => String(value || "").trim().startsWith("local-");
+const replaceExactIdDeep = (value, sourceId, targetId) => {
+  if (typeof value === "string") return value === sourceId ? targetId : value;
+  if (Array.isArray(value)) return value.map((item) => replaceExactIdDeep(item, sourceId, targetId));
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, replaceExactIdDeep(item, sourceId, targetId)]));
+};
 const toCollectionUrl = (url = "", id = "") => {
   const trimmedUrl = String(url || "").trim();
   const trimmedId = String(id || "").trim();
@@ -596,7 +602,6 @@ export const remapPendingSyncEntityId = async (entity, fromId, toId) => {
     req.onsuccess = () => {
       const rows = Array.isArray(req.result) ? req.result : [];
       rows.forEach((item) => {
-        if (item?.entity !== entityName) return;
         if (
           !isQueueRowInActiveBusiness(item, activeBusinessId)
         ) {
@@ -605,10 +610,13 @@ export const remapPendingSyncEntityId = async (entity, fromId, toId) => {
 
         const metaId = String(item?.meta?.id || "");
         const url = String(item?.url || "");
+        const payload = item?.payload || null;
         const urlNeedsRemap =
           url.includes(`/${sourceId}/`) || url.endsWith(`/${sourceId}`) || url.includes(sourceId);
         const metaNeedsRemap = metaId === sourceId;
-        if (!urlNeedsRemap && !metaNeedsRemap) return;
+        const payloadRemapped = replaceExactIdDeep(payload, sourceId, targetId);
+        const payloadNeedsRemap = JSON.stringify(payloadRemapped) !== JSON.stringify(payload);
+        if (!urlNeedsRemap && !metaNeedsRemap && !payloadNeedsRemap) return;
 
         const nextMeta = { ...(item?.meta || {}) };
         if (metaNeedsRemap) nextMeta.id = targetId;
@@ -620,6 +628,7 @@ export const remapPendingSyncEntityId = async (entity, fromId, toId) => {
           url: nextUrl,
           dedupeKey: nextDedupeKey || item?.dedupeKey,
           meta: nextMeta,
+          payload: payloadRemapped,
           updatedAt: Date.now(),
         });
         updates += 1;
@@ -630,6 +639,27 @@ export const remapPendingSyncEntityId = async (entity, fromId, toId) => {
     tx.oncomplete = () => resolve(updates);
     tx.onerror = () => reject(tx.error || new Error("Failed to remap sync queue ids"));
     tx.onabort = () => reject(tx.error || new Error("Sync queue remap aborted"));
+  });
+
+  // Also update optimistic cached records that reference the temporary ID.
+  // This keeps local screens consistent while dependent queued actions sync.
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction("entities", "readwrite");
+    const store = tx.objectStore("entities");
+    const req = store.getAll();
+    req.onsuccess = () => {
+      const rows = Array.isArray(req.result) ? req.result : [];
+      rows.forEach((row) => {
+        const nextData = replaceExactIdDeep(row?.data, sourceId, targetId);
+        if (JSON.stringify(nextData) !== JSON.stringify(row?.data)) {
+          store.put({ ...row, data: nextData, updatedAt: Date.now() });
+        }
+      });
+    };
+    req.onerror = () => reject(req.error || new Error("Failed to remap cached entity IDs"));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error("Failed to remap cached entity IDs"));
+    tx.onabort = () => reject(tx.error || new Error("Cached entity ID remap aborted"));
   });
 
   if (changed > 0) {
