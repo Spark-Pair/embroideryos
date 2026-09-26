@@ -385,11 +385,15 @@ export default function AuthProvider({ children }) {
       }
 
       // Refresh richer user payload in background without blocking navigation.
-      getMe()
-        .then((userData) => {
-          finalizeAuthenticatedUser(userData).catch(() => null);
-        })
-        .catch(() => null);
+      const refreshUserInBackground = () => {
+        getMe()
+          .then((userData) => {
+            finalizeAuthenticatedUser(userData).catch(() => null);
+          })
+          .catch(() => null);
+      };
+      if (typeof window !== "undefined") window.setTimeout(refreshUserInBackground, 250);
+      else refreshUserInBackground();
 
       showToast({
         type: "success",
