@@ -197,7 +197,6 @@ export default function InvoiceFormModal({
     if (!isOpen || isEdit) return;
     const selectedYear = new Date(invoiceDate || new Date()).getFullYear();
     loadInvoiceCounter(selectedYear);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, invoiceDate, isEdit]);
 
   useEffect(() => {

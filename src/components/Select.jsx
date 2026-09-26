@@ -78,7 +78,7 @@ const Select = forwardRef(function Select(
     if (ref) {
       ref.current = triggerRef.current;
     }
-  }, [ref, triggerRef.current]);
+  }, [ref]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {

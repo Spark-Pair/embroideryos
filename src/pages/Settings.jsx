@@ -398,7 +398,6 @@ function ExpenseItemFormModal({
     if (!raw) return null;
     if (!/^[\d+\-*/().\s]+$/.test(raw)) return null;
     try {
-      // eslint-disable-next-line no-new-func
       const result = Function(`"use strict"; return (${raw})`)();
       if (!Number.isFinite(result)) return null;
       return Number(result);

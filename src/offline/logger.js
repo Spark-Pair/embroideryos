@@ -13,6 +13,5 @@ export const logDataSource = (source, event, payload = {}) => {
   const time = nowIso();
   const body = Object.keys(payload).length ? ` ${safeJson(payload)}` : "";
   // Requested by user: clear source logging for every action.
-  // eslint-disable-next-line no-console
   console.info(`[DATA][${tag}] ${time} ${event}${body}`);
 };
