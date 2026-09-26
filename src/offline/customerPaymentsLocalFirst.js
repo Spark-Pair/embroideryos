@@ -1,4 +1,5 @@
 import { apiClient } from "../api/apiClient";
+import { fetchAllPages } from "./paginatedFetch";
 import {
   completeSyncAction,
   failSyncAction,
@@ -194,7 +195,7 @@ const attachCustomerInfo = async (payments = []) => {
 const refreshAllSnapshotFromCloud = async () => {
   if (!navigator.onLine) return;
   const [listRes, statsRes, monthsRes] = await Promise.all([
-    apiClient.get(`${CUSTOMER_PAYMENTS_URL}?page=1&limit=5000`),
+    fetchAllPages(CUSTOMER_PAYMENTS_URL),
     apiClient.get(`${CUSTOMER_PAYMENTS_URL}/stats`),
     apiClient.get(`${CUSTOMER_PAYMENTS_URL}/months`),
   ]);

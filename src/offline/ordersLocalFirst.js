@@ -1,4 +1,5 @@
 import { apiClient } from "../api/apiClient";
+import { fetchAllPages } from "./paginatedFetch";
 import {
   completeSyncAction,
   failSyncAction,
@@ -313,7 +314,7 @@ const buildOrderPayload = async (body) => {
 const refreshAllSnapshotFromCloud = async () => {
   if (!navigator.onLine) return;
   const [listRes, statsRes] = await Promise.all([
-    apiClient.get(`${ORDERS_URL}?page=1&limit=5000`),
+    fetchAllPages(ORDERS_URL),
     apiClient.get(`${ORDERS_URL}/stats`),
   ]);
   const rows = uniqueById(Array.isArray(listRes?.data?.data) ? listRes.data.data : []);

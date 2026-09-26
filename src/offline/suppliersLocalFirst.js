@@ -1,4 +1,5 @@
 import { apiClient } from "../api/apiClient";
+import { fetchAllPages } from "./paginatedFetch";
 import {
   completeSyncAction,
   failSyncAction,
@@ -220,7 +221,7 @@ const findSupplierByIdLocal = async (id) => {
 
 const refreshAllSnapshotFromCloud = async () => {
   if (!navigator.onLine) return;
-  const res = await apiClient.get(`${SUPPLIERS_URL}?page=1&limit=5000`);
+  const res = await fetchAllPages(SUPPLIERS_URL);
   const rows = uniqueById(Array.isArray(res?.data?.data) ? res.data.data : []);
   await upsertEntitySnapshot(ALL_KEY, rows);
   await upsertEntitySnapshot(STATS_KEY, {

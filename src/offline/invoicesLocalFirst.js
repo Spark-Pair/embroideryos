@@ -1,4 +1,5 @@
 import { apiClient } from "../api/apiClient";
+import { fetchAllPages } from "./paginatedFetch";
 import {
   completeSyncAction,
   failSyncAction,
@@ -204,7 +205,7 @@ const patchOverlay = async (patchFn) => {
 
 const refreshAllSnapshotFromCloud = async () => {
   if (!navigator.onLine) return;
-  const res = await apiClient.get(`${INVOICES_URL}?page=1&limit=5000`);
+  const res = await fetchAllPages(INVOICES_URL);
   const rows = uniqueById(Array.isArray(res?.data?.data) ? res.data.data : []);
   await upsertEntitySnapshot(ALL_KEY, rows);
   logDataSource("IDB", "invoices.snapshot.refreshed", { count: rows.length });

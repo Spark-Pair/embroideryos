@@ -1,4 +1,5 @@
 import { apiClient } from "../api/apiClient";
+import { fetchAllPages } from "./paginatedFetch";
 import {
   completeSyncAction,
   failSyncAction,
@@ -128,7 +129,7 @@ const filterUsers = (rows = [], params = {}) => {
 
 const refreshBusinessesFromCloud = async () => {
   const [listRes, statsRes] = await Promise.all([
-    apiClient.get(`${BUSINESSES_URL}?page=1&limit=5000`),
+    fetchAllPages(BUSINESSES_URL),
     apiClient.get(`${BUSINESSES_URL}/stats`),
   ]);
   await Promise.all([
@@ -139,7 +140,7 @@ const refreshBusinessesFromCloud = async () => {
 
 const refreshUsersFromCloud = async () => {
   const [listRes, statsRes] = await Promise.all([
-    apiClient.get(`${USERS_URL}?page=1&limit=5000`),
+    fetchAllPages(USERS_URL),
     apiClient.get(`${USERS_URL}/stats`),
   ]);
   await Promise.all([
@@ -150,7 +151,7 @@ const refreshUsersFromCloud = async () => {
 
 const refreshBusinessUsersFromCloud = async () => {
   const [listRes, statsRes] = await Promise.all([
-    apiClient.get(`${USERS_URL}/business?page=1&limit=5000`),
+    fetchAllPages(`${USERS_URL}/business`),
     apiClient.get(`${USERS_URL}/business/stats`),
   ]);
   await Promise.all([
@@ -267,7 +268,7 @@ export const fetchBusinessesLocalFirst = async (params = {}) => {
   }
   try {
     const [listRes, statsRes] = await Promise.all([
-      apiClient.get(`${BUSINESSES_URL}?page=1&limit=5000`),
+      fetchAllPages(BUSINESSES_URL),
       apiClient.get(`${BUSINESSES_URL}/stats`),
     ]);
     await Promise.all([

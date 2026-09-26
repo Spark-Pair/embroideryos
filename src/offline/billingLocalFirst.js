@@ -1,4 +1,5 @@
 import { apiClient } from "../api/apiClient";
+import { fetchAllPages } from "./paginatedFetch";
 import {
   completeSyncAction,
   failSyncAction,
@@ -86,12 +87,12 @@ const refreshPlansFromCloud = async () => {
   await upsertEntitySnapshot(PLANS_KEY, toList(res?.data?.data));
 };
 const refreshSubscriptionsFromCloud = async () => {
-  const res = await apiClient.get(`${SUBSCRIPTIONS_URL}?page=1&limit=5000`);
+  const res = await fetchAllPages(SUBSCRIPTIONS_URL);
   await upsertEntitySnapshot(SUBSCRIPTIONS_KEY, toList(res?.data?.data));
 };
 const refreshSubscriptionPaymentsFromCloud = async (month = "") => {
   const [listRes, statsRes] = await Promise.all([
-    apiClient.get(`${SUBSCRIPTION_PAYMENTS_URL}?page=1&limit=5000${month ? `&month=${month}` : ""}`),
+    fetchAllPages(SUBSCRIPTION_PAYMENTS_URL, month ? { month } : {}),
     apiClient.get(`${SUBSCRIPTION_PAYMENTS_URL}/stats${month ? `?month=${month}` : ""}`),
   ]);
   await Promise.all([

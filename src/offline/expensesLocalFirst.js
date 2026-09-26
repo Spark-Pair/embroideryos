@@ -1,4 +1,5 @@
 import { apiClient } from "../api/apiClient";
+import { fetchAllPages } from "./paginatedFetch";
 import {
   completeSyncAction,
   failSyncAction,
@@ -159,7 +160,7 @@ const patchOverlay = async (patchFn) => {
 const refreshAllSnapshotFromCloud = async () => {
   if (!navigator.onLine) return;
   const [listRes, statsRes] = await Promise.all([
-    apiClient.get(`${EXPENSES_URL}?page=1&limit=5000`),
+    fetchAllPages(EXPENSES_URL),
     apiClient.get(`${EXPENSES_URL}/stats`),
   ]);
   const rows = uniqueById(Array.isArray(listRes?.data?.data) ? listRes.data.data : []);

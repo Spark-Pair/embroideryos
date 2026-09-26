@@ -1,4 +1,5 @@
 import { apiClient } from "../api/apiClient";
+import { fetchAllPages } from "./paginatedFetch";
 import {
   completeSyncAction,
   failSyncAction,
@@ -274,7 +275,7 @@ const findStaffByIdLocal = async (id) => {
 const refreshAllSnapshotFromCloud = async () => {
   if (!navigator.onLine) return;
   const [listRes, statsRes] = await Promise.all([
-    apiClient.get(`${STAFF_URL}?page=1&limit=5000`),
+    fetchAllPages(STAFF_URL),
     apiClient.get(`${STAFF_URL}/stats`),
   ]);
   const rows = uniqueById(Array.isArray(listRes?.data?.data) ? listRes.data.data : []);
