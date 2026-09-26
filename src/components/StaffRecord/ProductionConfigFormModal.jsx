@@ -7,6 +7,7 @@ import Select from "../Select";
 import {
   EMPTY_PRODUCTION_CONFIG,
   AUTO_BONUS_MODES,
+  AUTO_BONUS_CONDITIONS,
   PAYOUT_MODES,
   getPayoutModeOptions,
   normalizeProductionConfig,
@@ -293,13 +294,14 @@ export default function ProductionConfigFormModal({
                 { label: "Daily target met", value: AUTO_BONUS_MODES.TARGET_MET },
                 { label: "After-target amount at least", value: AUTO_BONUS_MODES.PRODUCTION_AMOUNT },
                 { label: "On-target amount multiple", value: "target_multiple" },
+                { label: "Total stitches per block", value: AUTO_BONUS_CONDITIONS.STITCH_TOTAL },
               ]} /></div>
-              <div className="col-span-3"><Input label={idx === 0 ? "Threshold" : ""} type="number" step="0.01" min={0} value={rule.threshold} disabled={rule.condition === AUTO_BONUS_MODES.TARGET_MET} placeholder={rule.condition === "target_multiple" ? "e.g. 2" : "e.g. 2000"} onChange={(e) => updateBonusRule(idx, "threshold", e.target.value)} required={false} /></div>
+              <div className="col-span-3"><Input label={idx === 0 ? "Threshold" : ""} type="number" step="0.01" min={0} value={rule.threshold} disabled={rule.condition === AUTO_BONUS_MODES.TARGET_MET} placeholder={rule.condition === "target_multiple" ? "e.g. 2" : rule.condition === AUTO_BONUS_CONDITIONS.STITCH_TOTAL ? "e.g. 250000" : "e.g. 2000"} onChange={(e) => updateBonusRule(idx, "threshold", e.target.value)} required={false} /></div>
               <div className="col-span-3"><Input label={idx === 0 ? "Bonus Qty" : ""} type="number" step="0.01" min={0} value={rule.bonus_qty} onChange={(e) => updateBonusRule(idx, "bonus_qty", e.target.value)} required={false} /></div>
               <div className="col-span-1 pb-1"><button type="button" onClick={() => removeBonusRule(idx)} className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-gray-300 text-gray-500 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button></div>
             </div>)}
           </div>}
-          <p className="mt-3 text-xs text-gray-600">Example: target met = 1, after-target amount 2000 = 1.5, on-target amount at 2x daily target = 2. Highest matching bonus applies; Staff Record remains editable.</p>
+          <p className="mt-3 text-xs text-gray-600">Example: 250,000 total stitches = 1 bonus; 500,000 stitches = 2 bonuses. Other matching rules use the highest quantity; Staff Record remains editable.</p>
         </div>
 
         {visibleFields.map((field) => (

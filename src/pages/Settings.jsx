@@ -134,7 +134,7 @@ const PRODUCTION_DISPLAY_FIELDS = [
   { key: "auto_bonus_rules", label: "Auto Bonus Rules", format: (rules, record) => {
     if (!record?.auto_bonus_enabled || !Array.isArray(rules) || !rules.length) return "Off";
     return rules.map((rule) => {
-      const condition = rule.condition === "target_met" ? "Target met" : rule.condition === "target_multiple" ? `${rule.threshold}x target` : `Amount ≥ ${rule.threshold}`;
+      const condition = rule.condition === "target_met" ? "Target met" : rule.condition === "target_multiple" ? `${rule.threshold}x target` : rule.condition === "stitch_total" ? `${rule.threshold} stitches` : `Amount ≥ ${rule.threshold}`;
       return `${condition} → ${rule.bonus_qty}`;
     }).join(" · ");
   } },
