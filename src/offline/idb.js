@@ -366,6 +366,7 @@ export const failSyncAction = async (id, errorMessage = "", options = {}) => {
   const errorStatusCode =
     Number(typeof options === "number" ? options : options?.statusCode || 0) || 0;
   const db = await getDb();
+  let queuedAction = null;
   await new Promise((resolve, reject) => {
     const tx = db.transaction("sync_queue", "readwrite");
     const store = tx.objectStore("sync_queue");
@@ -385,7 +386,7 @@ export const failSyncAction = async (id, errorMessage = "", options = {}) => {
         ![408, 409, 429].includes(errorStatusCode);
       const shouldStopRetry = isClientFatal || retries >= MAX_SYNC_RETRIES;
       const backoffMs = Math.min(RETRY_BASE_DELAY_MS * Math.pow(2, Math.max(0, retries - 1)), RETRY_MAX_DELAY_MS);
-      store.put({
+      queuedAction = {
         ...existing,
         status: shouldStopRetry ? "failed" : "pending",
         lastError: errorMessage || existing.lastError || "",
@@ -393,13 +394,21 @@ export const failSyncAction = async (id, errorMessage = "", options = {}) => {
         nextRetryAt: shouldStopRetry ? 0 : Date.now() + backoffMs,
         lastErrorStatusCode: errorStatusCode || existing.lastErrorStatusCode || 0,
         updatedAt: Date.now(),
-      });
+      };
+      store.put(queuedAction);
     };
     getReq.onerror = () => reject(getReq.error || new Error("Failed to update sync action"));
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error || new Error("Failed to update sync action"));
     tx.onabort = () => reject(tx.error || new Error("Sync action update aborted"));
   });
+  if (queuedAction) {
+    await markQueuedEntityStatus(
+      queuedAction,
+      queuedAction.status === "failed" ? "failed" : "pending",
+      errorMessage
+    );
+  }
   logDataSource("IDB", "sync_queue.retry", { id, errorMessage });
 };
 
@@ -444,6 +453,7 @@ export const retrySyncAction = async (id) => {
   const activeBusinessId = String(session?.businessId || "").trim();
   const db = await getDb();
   let updated = false;
+  let queuedAction = null;
   await new Promise((resolve, reject) => {
     const tx = db.transaction("sync_queue", "readwrite");
     const store = tx.objectStore("sync_queue");
@@ -456,12 +466,13 @@ export const retrySyncAction = async (id) => {
       ) {
         return;
       }
-      store.put({
+      queuedAction = {
         ...row,
         status: "pending",
         nextRetryAt: 0,
         updatedAt: Date.now(),
-      });
+      };
+      store.put(queuedAction);
       updated = true;
     };
     getReq.onerror = () => reject(getReq.error || new Error("Failed to retry sync action"));
@@ -469,6 +480,7 @@ export const retrySyncAction = async (id) => {
     tx.onerror = () => reject(tx.error || new Error("Failed to retry sync action"));
     tx.onabort = () => reject(tx.error || new Error("Retry sync action aborted"));
   });
+  if (updated && queuedAction) await markQueuedEntityStatus(queuedAction, "pending");
   return updated;
 };
 
@@ -712,6 +724,22 @@ export const getEntitySnapshot = async (key) => {
       resolve(req.result?.data ?? null);
     };
     req.onerror = () => reject(req.error || new Error("Failed to read entity snapshot"));
+  });
+};
+
+const markQueuedEntityStatus = async (action, status, errorMessage = "") => {
+  const entity = String(action?.entity || "").trim();
+  const id = String(action?.meta?.id || action?.meta?.localId || "").trim();
+  if (!entity || !id) return;
+  const overlay = await getEntitySnapshot(`${entity}:overlay`).catch(() => null);
+  if (!overlay || typeof overlay !== "object" || !overlay[id]) return;
+  await upsertEntitySnapshot(`${entity}:overlay`, {
+    ...overlay,
+    [id]: {
+      ...overlay[id],
+      __syncStatus: status,
+      ...(errorMessage ? { __syncError: errorMessage } : {}),
+    },
   });
 };
 
