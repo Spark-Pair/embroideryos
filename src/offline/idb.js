@@ -731,9 +731,10 @@ const markQueuedEntityStatus = async (action, status, errorMessage = "") => {
   const entity = String(action?.entity || "").trim();
   const id = String(action?.meta?.id || action?.meta?.localId || "").trim();
   if (!entity || !id) return;
-  const overlay = await getEntitySnapshot(`${entity}:overlay`).catch(() => null);
+  const overlayKey = entity === "businessUsers" ? "users:business:overlay" : `${entity}:overlay`;
+  const overlay = await getEntitySnapshot(overlayKey).catch(() => null);
   if (!overlay || typeof overlay !== "object" || !overlay[id]) return;
-  await upsertEntitySnapshot(`${entity}:overlay`, {
+  await upsertEntitySnapshot(overlayKey, {
     ...overlay,
     [id]: {
       ...overlay[id],
