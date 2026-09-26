@@ -1,4 +1,5 @@
 import { apiClient } from "../api/apiClient";
+import { fetchAllPages } from "./paginatedFetch";
 import { getEntitySnapshot, getOfflineMetaValue, setOfflineMetaValue, upsertEntitySnapshot } from "./idb";
 import { logDataSource } from "./logger";
 import {
@@ -108,7 +109,7 @@ export const seedCustomersCache = async ({ forceRefresh = false } = {}) => {
   customersSeedInFlight = true;
   try {
     const [listRes, statsRes] = await Promise.all([
-      apiClient.get("/customers?page=1&limit=5000"),
+      fetchAllPages("/customers"),
       apiClient.get("/customers/stats"),
     ]);
 
@@ -160,7 +161,7 @@ export const seedSuppliersCache = async ({ forceRefresh = false } = {}) => {
   suppliersSeedInFlight = true;
   try {
     const [listRes, statsRes] = await Promise.all([
-      apiClient.get("/suppliers?page=1&limit=5000"),
+      fetchAllPages("/suppliers"),
       apiClient.get("/suppliers/stats"),
     ]);
 
@@ -202,7 +203,7 @@ export const seedStaffsCache = async ({ forceRefresh = false } = {}) => {
   staffsSeedInFlight = true;
   try {
     const [listRes, statsRes] = await Promise.all([
-      apiClient.get("/staffs?page=1&limit=5000"),
+      fetchAllPages("/staffs"),
       apiClient.get("/staffs/stats"),
     ]);
 
@@ -251,7 +252,7 @@ export const seedStaffRecordsCache = async ({ forceRefresh = false } = {}) => {
   staffRecordsSeedInFlight = true;
   try {
     const [listRes, statsRes, monthsRes] = await Promise.all([
-      apiClient.get("/staff-records?page=1&limit=5000"),
+      fetchAllPages("/staff-records"),
       apiClient.get("/staff-records/stats"),
       apiClient.get("/staff-records/months"),
     ]);
@@ -295,7 +296,7 @@ export const seedStaffPaymentsCache = async ({ forceRefresh = false } = {}) => {
   staffPaymentsSeedInFlight = true;
   try {
     const [listRes, statsRes, monthsRes] = await Promise.all([
-      apiClient.get("/staff-payments?page=1&limit=5000"),
+      fetchAllPages("/staff-payments"),
       apiClient.get("/staff-payments/stats"),
       apiClient.get("/staff-payments/months"),
     ]);
@@ -401,7 +402,7 @@ export const seedCustomerPaymentsCache = async ({ forceRefresh = false } = {}) =
   customerPaymentsSeedInFlight = true;
   try {
     const [listRes, statsRes, monthsRes] = await Promise.all([
-      apiClient.get("/customer-payments?page=1&limit=5000"),
+      fetchAllPages("/customer-payments"),
       apiClient.get("/customer-payments/stats"),
       apiClient.get("/customer-payments/months"),
     ]);
@@ -445,7 +446,7 @@ export const seedSupplierPaymentsCache = async ({ forceRefresh = false } = {}) =
   supplierPaymentsSeedInFlight = true;
   try {
     const [listRes, statsRes, monthsRes] = await Promise.all([
-      apiClient.get("/supplier-payments?page=1&limit=5000"),
+      fetchAllPages("/supplier-payments"),
       apiClient.get("/supplier-payments/stats"),
       apiClient.get("/supplier-payments/months"),
     ]);
@@ -489,7 +490,7 @@ export const seedExpensesCache = async ({ forceRefresh = false } = {}) => {
   expensesSeedInFlight = true;
   try {
     const [listRes, statsRes] = await Promise.all([
-      apiClient.get("/expenses?page=1&limit=5000"),
+      fetchAllPages("/expenses"),
       apiClient.get("/expenses/stats"),
     ]);
 
@@ -531,7 +532,7 @@ export const seedOrdersCache = async ({ forceRefresh = false } = {}) => {
   ordersSeedInFlight = true;
   try {
     const [listRes, statsRes] = await Promise.all([
-      apiClient.get("/orders?page=1&limit=5000"),
+      fetchAllPages("/orders"),
       apiClient.get("/orders/stats"),
     ]);
 
@@ -572,7 +573,7 @@ export const seedInvoicesCache = async ({ forceRefresh = false } = {}) => {
 
   invoicesSeedInFlight = true;
   try {
-    const listRes = await apiClient.get("/invoices?page=1&limit=5000");
+    const listRes = await fetchAllPages("/invoices");
     const rows = Array.isArray(listRes?.data?.data) ? listRes.data.data : [];
     await upsertEntitySnapshot(INVOICES_ALL_KEY, rows);
 
@@ -680,7 +681,7 @@ export const seedBusinessesCache = async ({ forceRefresh = false } = {}) => {
   businessesSeedInFlight = true;
   try {
     const [listRes, statsRes] = await Promise.all([
-      apiClient.get("/businesses?page=1&limit=5000"),
+      fetchAllPages("/businesses"),
       apiClient.get("/businesses/stats"),
     ]);
     await Promise.all([
@@ -701,7 +702,7 @@ export const seedUsersCache = async ({ forceRefresh = false } = {}) => {
   usersSeedInFlight = true;
   try {
     const [listRes, statsRes] = await Promise.all([
-      apiClient.get("/users?page=1&limit=5000"),
+      fetchAllPages("/users"),
       apiClient.get("/users/stats"),
     ]);
     await Promise.all([
@@ -722,7 +723,7 @@ export const seedBusinessUsersCache = async ({ forceRefresh = false } = {}) => {
   businessUsersSeedInFlight = true;
   try {
     const [listRes, statsRes] = await Promise.all([
-      apiClient.get("/users/business?page=1&limit=5000"),
+      fetchAllPages("/users/business"),
       apiClient.get("/users/business/stats"),
     ]);
     await Promise.all([
@@ -762,7 +763,7 @@ export const seedSubscriptionsCache = async ({ forceRefresh = false } = {}) => {
   if (!forceRefresh && hasExistingData(existing)) return;
   subscriptionsSeedInFlight = true;
   try {
-    const res = await apiClient.get("/subscriptions?page=1&limit=5000");
+    const res = await fetchAllPages("/subscriptions");
     await upsertEntitySnapshot(SUBSCRIPTIONS_ALL_KEY, res?.data?.data || []);
   } finally {
     subscriptionsSeedInFlight = false;
@@ -778,7 +779,7 @@ export const seedSubscriptionPaymentsCache = async ({ forceRefresh = false } = {
   subscriptionPaymentsSeedInFlight = true;
   try {
     const [listRes, statsRes] = await Promise.all([
-      apiClient.get("/subscription-payments?page=1&limit=5000"),
+      fetchAllPages("/subscription-payments"),
       apiClient.get("/subscription-payments/stats"),
     ]);
     await Promise.all([
@@ -837,7 +838,7 @@ export const seedCrpStaffRecordsCache = async ({ forceRefresh = false } = {}) =>
   crpStaffRecordsSeedInFlight = true;
   try {
     const [listRes, statsRes] = await Promise.all([
-      apiClient.get("/crp-staff-records?page=1&limit=5000"),
+      fetchAllPages("/crp-staff-records"),
       apiClient.get("/crp-staff-records/stats"),
     ]);
 

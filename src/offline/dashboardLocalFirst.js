@@ -1,4 +1,5 @@
 import { apiClient } from "../api/apiClient";
+import { fetchAllPages } from "./paginatedFetch";
 import { getEntitySnapshot, offlineAccess, upsertEntitySnapshot } from "./idb";
 import { logDataSource } from "./logger";
 import {
@@ -66,17 +67,17 @@ const hasAnyRows = (rows) => Array.isArray(rows) && rows.length > 0;
 const hydrateDashboardSnapshotsFromCloud = async () => {
   if (dashboardHydrationPromise) return dashboardHydrationPromise;
   dashboardHydrationPromise = Promise.all([
-    apiClient.get("/orders?page=1&limit=5000"),
-    apiClient.get("/invoices?page=1&limit=5000"),
-    apiClient.get("/expenses?page=1&limit=5000"),
-    apiClient.get("/customer-payments?page=1&limit=5000"),
-    apiClient.get("/supplier-payments?page=1&limit=5000"),
-    apiClient.get("/staff-payments?page=1&limit=5000"),
-    apiClient.get("/staff-records?page=1&limit=5000"),
-    apiClient.get("/crp-staff-records?page=1&limit=5000"),
-    apiClient.get("/customers?page=1&limit=5000"),
-    apiClient.get("/suppliers?page=1&limit=5000"),
-    apiClient.get("/staffs?page=1&limit=5000"),
+    fetchAllPages("/orders"),
+    fetchAllPages("/invoices"),
+    fetchAllPages("/expenses"),
+    fetchAllPages("/customer-payments"),
+    fetchAllPages("/supplier-payments"),
+    fetchAllPages("/staff-payments"),
+    fetchAllPages("/staff-records"),
+    fetchAllPages("/crp-staff-records"),
+    fetchAllPages("/customers"),
+    fetchAllPages("/suppliers"),
+    fetchAllPages("/staffs"),
     apiClient.get("/businesses/me/rule-data"),
   ])
     .then(async (responses) => {
