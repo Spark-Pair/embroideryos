@@ -16,4 +16,3 @@ export const logDataSource = (source, event, payload = {}) => {
   // eslint-disable-next-line no-console
   console.info(`[DATA][${tag}] ${time} ${event}${body}`);
 };
-

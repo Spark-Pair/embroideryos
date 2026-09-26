@@ -661,7 +661,7 @@ export const toggleStaffStatusLocalFirst = async (id) => {
       const nextActive =
         typeof res?.data?.isActive === "boolean"
           ? Boolean(res.data.isActive)
-          : !Boolean((await findStaffByIdLocal(targetId))?.isActive);
+          : !(await findStaffByIdLocal(targetId))?.isActive;
       await patchOverlay((overlay) => {
         const prev = overlay[targetId] || {};
         overlay[targetId] = {

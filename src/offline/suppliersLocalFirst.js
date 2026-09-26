@@ -179,7 +179,7 @@ const applyFilters = (rows = [], params = {}) => {
   }
 
   if (status === "active") data = data.filter((row) => Boolean(row?.isActive));
-  if (status === "inactive") data = data.filter((row) => !Boolean(row?.isActive));
+  if (status === "inactive") data = data.filter((row) => !row?.isActive);
 
   return sortLatestFirst(data);
 };
@@ -229,7 +229,7 @@ const refreshAllSnapshotFromCloud = async () => {
     data: {
       total: rows.length,
       active: rows.filter((r) => Boolean(r?.isActive)).length,
-      inactive: rows.filter((r) => !Boolean(r?.isActive)).length,
+      inactive: rows.filter((r) => !r?.isActive).length,
     },
   });
   logDataSource("IDB", "suppliers.snapshot.refreshed", { count: rows.length });
@@ -392,7 +392,7 @@ export const fetchSupplierStatsLocalFirst = async () => {
     data: {
       total: merged.length,
       active: merged.filter((row) => Boolean(row?.isActive)).length,
-      inactive: merged.filter((row) => !Boolean(row?.isActive)).length,
+      inactive: merged.filter((row) => !row?.isActive).length,
     },
   };
 
@@ -494,7 +494,7 @@ export const toggleSupplierStatusLocalFirst = async (id) => {
   }
 
   const existing = await findSupplierByIdLocal(targetId);
-  const nextActive = !Boolean(existing?.isActive);
+  const nextActive = !existing?.isActive;
 
   await patchOverlay((overlay) => {
     const prev = overlay[targetId] || existing || {};

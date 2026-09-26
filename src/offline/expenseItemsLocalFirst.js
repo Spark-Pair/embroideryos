@@ -218,7 +218,7 @@ export const fetchExpenseItemsLocalFirst = async (params = {}) => {
     status === "active"
       ? merged.filter((row) => Boolean(row?.isActive))
       : status === "inactive"
-        ? merged.filter((row) => !Boolean(row?.isActive))
+        ? merged.filter((row) => !row?.isActive)
         : merged;
   let sorted = sortLatestFirst(filtered);
   if (sorted.length > 0) {
@@ -237,7 +237,7 @@ export const fetchExpenseItemsLocalFirst = async (params = {}) => {
         status === "active"
           ? nextMerged.filter((row) => Boolean(row?.isActive))
           : status === "inactive"
-            ? nextMerged.filter((row) => !Boolean(row?.isActive))
+            ? nextMerged.filter((row) => !row?.isActive)
             : nextMerged;
       sorted = sortLatestFirst(nextFiltered);
     } catch {
@@ -328,7 +328,7 @@ export const toggleExpenseItemStatusLocalFirst = async (id) => {
 
   await patchOverlay((overlay) => {
     const prev = overlay[targetId] || {};
-    const nextActive = !Boolean(prev?.isActive);
+    const nextActive = !prev?.isActive;
     overlay[targetId] = {
       ...prev,
       _id: targetId,
