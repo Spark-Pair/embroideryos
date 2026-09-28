@@ -8,13 +8,15 @@ export const getMonthLabel = (monthValue) => {
   return `${MONTH_NAMES[parseInt(mo, 10) - 1]} ${yr}`;
 };
 
+const formatLocalYmd = (date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+
 export const toMonthWindow = (monthValue) => {
   const [yr, mo] = monthValue.split("-");
   const y = parseInt(yr, 10);
   const m = parseInt(mo, 10);
-  const from = `${yr}-${mo}-01`;
-  const lastDay = new Date(y, m, 0).getDate();
-  const to = `${yr}-${mo}-${String(lastDay).padStart(2, "0")}`;
+  const from = formatLocalYmd(new Date(y, m - 1, 1));
+  const to = formatLocalYmd(new Date(y, m, 0));
   return { from, to, year: y, month: m };
 };
 
@@ -26,10 +28,19 @@ export const getPreviousMonthKey = (monthValue) => {
 
 export const getMonthKeyFromDate = (dateInput) => {
   if (!dateInput) return "";
-  const d = new Date(dateInput);
+  if (typeof dateInput === "string") {
+    const dateOnly = dateInput.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T)/);
+    if (dateOnly) return `${dateOnly[1]}-${dateOnly[2]}`;
+  }
+  const d = typeof dateInput === "string"
+    ? (() => {
+        const match = dateInput.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        return match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : new Date(dateInput);
+      })()
+    : new Date(dateInput);
   if (Number.isNaN(d.getTime())) return "";
-  const year = d.getUTCFullYear();
-  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
   return `${year}-${month}`;
 };
 
