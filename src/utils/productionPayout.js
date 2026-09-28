@@ -131,7 +131,7 @@ export const getModeSummary = (rawConfig = {}) => {
     case PAYOUT_MODES.SINGLE_PCT:
       return `Single production rate: ${config.production_pct}%`;
     case PAYOUT_MODES.SALARY_BONUS_ONLY:
-      return "Production tracked only. Payout comes from salary/off-day and bonus.";
+      return "Salary plus per-piece applique amount and stitch bonus.";
     case PAYOUT_MODES.STITCH_BLOCK_RATE:
       return `${config.amount_per_block} per ${config.stitch_block_size} stitches`;
     default:
@@ -151,9 +151,9 @@ export const getProductionAmountLabels = (rawConfig = {}) => {
       };
     case PAYOUT_MODES.SALARY_BONUS_ONLY:
       return {
-        primary: "Tracked Amount",
+        primary: "Applique Amount",
         secondary: null,
-        summaryPrimary: "Tracked Amount",
+        summaryPrimary: "Applique Amount",
         summarySecondary: null,
       };
     case PAYOUT_MODES.STITCH_BLOCK_RATE:
@@ -179,18 +179,28 @@ export const calculateProductionRow = (row = {}, rawConfig = {}) => {
   const pcs = toNumber(row?.pcs, 0);
   const rounds = toNumber(row?.rounds, 0);
   const applique = toNumber(row?.applique, 0);
-  const effectiveStitch = stitchRaw > 0 && stitchRaw <= config.stitch_cap ? config.stitch_cap : stitchRaw;
-  const total_stitch = stitchRaw * rounds;
+  const effectiveStitch = stitchRaw > 0 && stitchRaw <= config.stitch_cap
+    ? config.stitch_cap
+    : stitchRaw;
+  // In Salary + Bonus Only mode, the per-design minimum also drives the
+  // total-stitch bonus. Other modes retain their existing raw stitch totals.
+  const bonusCountedStitch = config.payout_mode === PAYOUT_MODES.SALARY_BONUS_ONLY
+    && config.stitch_cap > 0
+    ? Math.max(stitchRaw, config.stitch_cap)
+    : stitchRaw;
+  const total_stitch = bonusCountedStitch * rounds;
   const stitch_base = (effectiveStitch * config.stitch_rate * pcs) / 100;
   const applique_base = (config.applique_rate * applique * pcs) / 100;
   const combined = stitch_base + applique_base;
 
   if (config.payout_mode === PAYOUT_MODES.SALARY_BONUS_ONLY) {
-    return { total_stitch, on_target_amt: 0, after_target_amt: 0 };
+    const applique_amount = config.applique_rate * applique * pcs;
+    return { total_stitch, on_target_amt: applique_amount, after_target_amt: 0, applique_amount };
   }
   if (config.payout_mode === PAYOUT_MODES.SINGLE_PCT) {
+    const applique_amount = applique_base * config.production_pct;
     const amount = combined * config.production_pct;
-    return { total_stitch, on_target_amt: amount, after_target_amt: amount };
+    return { total_stitch, on_target_amt: amount, after_target_amt: amount, applique_amount };
   }
   if (config.payout_mode === PAYOUT_MODES.STITCH_BLOCK_RATE) {
     const amount = config.stitch_block_size > 0
@@ -202,6 +212,8 @@ export const calculateProductionRow = (row = {}, rawConfig = {}) => {
     total_stitch,
     on_target_amt: combined * config.on_target_pct,
     after_target_amt: combined * config.after_target_pct,
+    applique_amount: applique_base * config.on_target_pct,
+    after_target_applique_amount: applique_base * config.after_target_pct,
   };
 };
 

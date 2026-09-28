@@ -15,12 +15,12 @@ import {
 
 const COMMON_FIELDS = [
   { key: "stitch_rate", label: "Stitch Rate", hint: "Per stitch multiplier", step: "0.0001", type: "number" },
-  { key: "applique_rate", label: "Applique Rate", hint: "Per applique unit rate", step: "0.001", type: "number" },
+  { key: "applique_rate", label: "Applique Rate", hint: "Salary + Bonus Only: amount per applique per piece; other modes keep their existing rate calculation", step: "0.001", type: "number" },
   { key: "pcs_per_round", label: "PCs Per Round", hint: "How many pieces make one round", step: "1", type: "number" },
   { key: "off_amount", label: "Off Day Amount", hint: "Amount for non-salary staff on Off days", step: "1", type: "number" },
   { key: "bonus_rate", label: "Bonus Rate", hint: "Default amount per bonus unit", step: "1", type: "number" },
   { key: "allowance", label: "Monthly Allowance", hint: "Allowance when monthly attendance criteria pass", step: "1", type: "number" },
-  { key: "stitch_cap", label: "Minimum Stitch Cap", hint: "If design stitch is below this, use this value", step: "1", type: "number" },
+  { key: "stitch_cap", label: "Minimum Stitch Cap", hint: "Salary + Bonus Only: minimum counted stitches per design for stitch bonuses. Percentage modes keep their existing payout cap behavior.", step: "1", type: "number" },
   { key: "effective_date", label: "Effective Date", hint: "Config applies from this date onwards", type: "date" },
 ];
 

@@ -37,9 +37,16 @@ const NO_AMOUNT = new Set(["Absent", "Close"]);
 const NO_BONUS = new Set(["Absent", "Off", "Close", "Sunday"]);
 
 const normalizeId = (row) => String(row?._id || row?.id || "");
+const parseCalendarDate = (value) => {
+  if (typeof value === "string") {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T)/);
+    if (match) return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  }
+  return value instanceof Date ? value : new Date(value);
+};
 const toMillis = (value) => {
   if (!value) return 0;
-  const d = new Date(value).getTime();
+  const d = parseCalendarDate(value).getTime();
   return Number.isFinite(d) ? d : 0;
 };
 const objectIdToMillis = (id) => {
@@ -158,7 +165,7 @@ const buildLocalRecordPayload = async (payload) => {
   const cleanRows = hasProduction ? payload?.production || [] : [];
 
   const recalculatedRows = cleanRows.map((row) => {
-    const { total_stitch, on_target_amt, after_target_amt } = calcRow(row, config);
+    const { total_stitch, on_target_amt, after_target_amt, applique_amount, after_target_applique_amount } = calcRow(row, config);
     return {
       d_stitch: Number(row?.d_stitch || 0),
       applique: Number(row?.applique || 0),
@@ -167,6 +174,8 @@ const buildLocalRecordPayload = async (payload) => {
       total_stitch,
       on_target_amt,
       after_target_amt,
+      applique_amount,
+      after_target_applique_amount,
     };
   });
 
@@ -203,12 +212,22 @@ const buildLocalRecordPayload = async (payload) => {
   const bonus_amount = effectiveBonusQty * effectiveBonusRate;
 
   const fixAmount = payload?.fix_amount != null ? Number(payload.fix_amount) : null;
-  const final_amount = fixAmount != null ? fixAmount : base_amount + bonus_amount;
+  const targetProgress = getTargetProgress(totals, config, {
+    force_after_target_for_non_target: useAfterTargetForNonTarget,
+    force_full_target_for_non_target: useFullTargetForNonTarget,
+  });
+  const appliqueAmount = recalculatedRows.reduce((sum, row) => {
+    if (config.payout_mode === PAYOUT_MODES.SALARY_BONUS_ONLY) return sum + Number(row.applique_amount || 0);
+    if (config.payout_mode === PAYOUT_MODES.SINGLE_PCT) return sum + Number(row.applique_amount || 0);
+    return sum + Number(targetProgress.targetMet ? row.after_target_applique_amount : row.applique_amount || 0);
+  }, 0);
+  const final_amount = fixAmount != null ? fixAmount : base_amount + bonus_amount + appliqueAmount;
 
   return {
     attendance: resolvedAttendance,
     production: recalculatedRows,
     totals,
+    applique_amount: appliqueAmount,
     base_amount,
     bonus_qty: effectiveBonusQty,
     bonus_rate: effectiveBonusRate,
@@ -387,6 +406,35 @@ const refreshAllSnapshotFromCloud = async () => {
   await upsertEntitySnapshot(STATS_KEY, statsRes?.data || null);
   await upsertEntitySnapshot(MONTHS_KEY, monthsRes?.data || null);
   logDataSource("IDB", "staffRecords.snapshot.refreshed", { count: rows.length });
+};
+
+export const refreshStaffRecordsSnapshotLocalFirst = async () => {
+  if (offlineAccess.isUnlocked() && typeof navigator !== "undefined" && navigator.onLine) {
+    await refreshAllSnapshotFromCloud();
+  }
+};
+
+export const applyRecalculatedStaffRecordsToLocalOverlay = async (records = []) => {
+  if (!offlineAccess.isUnlocked() || !Array.isArray(records) || records.length === 0) return;
+  await patchOverlay((overlay) => {
+    records.forEach((record) => {
+      const id = normalizeId(record);
+      if (!id) return;
+      overlay[id] = {
+        ...(overlay[id] || {}),
+        ...record,
+        _id: id,
+        __syncStatus: "synced",
+        updatedAt: record.updatedAt || new Date().toISOString(),
+      };
+    });
+    return overlay;
+  });
+};
+
+export const getPendingStaffRecordSyncCount = async () => {
+  if (!offlineAccess.isUnlocked()) return 0;
+  return (await getPendingSyncActions("staffRecords")).length;
 };
 
 const syncCreateSuccess = async (action, serverRecord) => {
@@ -601,7 +649,7 @@ export const fetchStaffRecordMonthsLocalFirst = async () => {
   const months = Array.from(
     withStaff.reduce((acc, row) => {
       if (String(row?.staff_id?.category || "Embroidery") === "Cropping") return acc;
-      const dt = row?.date ? new Date(row.date) : null;
+      const dt = row?.date ? parseCalendarDate(row.date) : null;
       if (!dt || Number.isNaN(dt.getTime())) return acc;
       const month = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
       acc.add(month);

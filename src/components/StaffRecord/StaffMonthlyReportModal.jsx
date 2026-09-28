@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Printer, Search } from "lucide-react";
+import { Loader2, Printer, Search, RotateCcw } from "lucide-react";
 import Modal from "../Modal";
 import Button from "../Button";
 import Select from "../Select";
+import ConfirmModal from "../ConfirmModal";
 import { fetchStaff, fetchStaffNames } from "../../api/staff";
-import { fetchStaffRecordMonths, fetchStaffRecords } from "../../api/staffRecord";
+import { applyStaffRecordRecalculation, fetchStaffRecordMonths, fetchStaffRecords, previewStaffRecordRecalculation } from "../../api/staffRecord";
 import { fetchStaffPayments } from "../../api/staffPayment";
-import { fetchProductionConfig } from "../../api/productionConfig";
+import { fetchAllProductionConfigs, fetchProductionConfig } from "../../api/productionConfig";
 import { formatDate, formatNumbers } from "../../utils";
 import {
   getMonthKeyFromDate,
@@ -16,6 +17,25 @@ import {
   toMonthWindow,
 } from "../../utils/salarySlip";
 import { normalizeAllowanceOverrides, resolveAllowanceAmount } from "../../utils/allowanceOverride";
+import { useToast } from "../../context/ToastContext";
+const unwrapStaffRecordPreview = (response) => response?.data?.data || response?.data || response || {};
+
+const getComparableProductionAmount = (record, config) => {
+  const mode = config?.payout_mode;
+  if (mode === "salary_bonus_only") return Number(record?.applique_amount || 0);
+  if (mode === "target_dual_pct") {
+    const target = Number(config?.target_amount || 0);
+    const onTarget = Number(record?.totals?.on_target_amt || 0);
+    const targetMet = target > 0 && onTarget >= target;
+    const forcedAfter = Boolean(record?.force_after_target_for_non_target || record?.force_full_target_for_non_target);
+    const useAfter = targetMet || forcedAfter;
+    return Number(useAfter ? record?.totals?.after_target_amt : onTarget) || 0;
+  }
+  if (mode === "single_pct" || mode === "stitch_block_rate") {
+    return Number(record?.totals?.on_target_amt || 0);
+  }
+  return Number(record?.totals?.on_target_amt || 0);
+};
 
 const DEFAULT_ALLOWANCE = 1500;
 
@@ -27,6 +47,14 @@ function formatBonusQtyDisplay(value) {
   return String(rounded)
     .replace(/(\.\d*?[1-9])0+$/, "$1")
     .replace(/\.0+$/, "");
+}
+
+function getLocalCalendarDate(dateInput) {
+  if (typeof dateInput === "string") {
+    const match = dateInput.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  }
+  return new Date(dateInput);
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -241,7 +269,7 @@ function openPrintWindow({ staffName, monthLabel, summary, reportRows, totalDedu
 ───────────────────────────────────────── */
 function getPaymentInHistory(payment, prevMonthKey, prevMonthEnd) {
   if (typeof payment.month === "string" && payment.month) return payment.month <= prevMonthKey;
-  if (payment.date) return new Date(payment.date) <= new Date(prevMonthEnd);
+  if (payment.date) return getLocalCalendarDate(payment.date) <= getLocalCalendarDate(prevMonthEnd);
   return false;
 }
 
@@ -267,6 +295,7 @@ async function buildAllowanceByMonth(monthKeys) {
    MAIN COMPONENT
 ───────────────────────────────────────── */
 export default function StaffMonthlyReportModal({ isOpen, onClose }) {
+  const { showToast } = useToast();
   const [staffOptions,   setStaffOptions]   = useState([]);
   const [monthOptions,   setMonthOptions]   = useState([]);
   const [selectedStaff,  setSelectedStaff]  = useState("");
@@ -279,28 +308,41 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
   const [summary,   setSummary]   = useState(null);
   const [staffData, setStaffData] = useState(null);
   const [generated, setGenerated] = useState(false);
+  const [productionConfigs, setProductionConfigs] = useState([]);
+  const [reportConfigId, setReportConfigId] = useState("");
+  const [reportConfigLoading, setReportConfigLoading] = useState(false);
+  const [reportConfigError, setReportConfigError] = useState("");
+  const [applyPreview, setApplyPreview] = useState(null);
+  const [applyPreviewLoading, setApplyPreviewLoading] = useState(false);
+  const [applyLoading, setApplyLoading] = useState(false);
+  const [applyConfirmOpen, setApplyConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
     (async () => {
       try {
         setLoadingOptions(true);
-        const [staffRes, monthsRes] = await Promise.all([
+        const [staffRes, monthsRes, configsRes] = await Promise.all([
           fetchStaffNames({ status: "active", category: "Embroidery" }),
           fetchStaffRecordMonths(),
+          fetchAllProductionConfigs().catch(() => ({ data: [] })),
         ]);
         const staffs = (staffRes.data  || [])
           .filter((s) => String(s?.category || "Embroidery") === "Embroidery")
           .map((s) => ({ label: s.name, value: s._id, salary: Number(s.salary) || 0 }));
-        const months = (monthsRes.data || []).map((m) => ({ label: getMonthLabel(m), value: m    }));
+        const months = (monthsRes.data || []).sort().reverse().map((m) => ({ label: getMonthLabel(m), value: m }));
+        const configs = (configsRes.data || []).filter((config) => /^[a-f\d]{24}$/i.test(String(config?._id || "")));
         setStaffOptions(staffs);
         setMonthOptions(months);
+        setProductionConfigs(configs);
         setSelectedStaff(staffs[0]?.value || "");
         setSelectedMonth(months[0]?.value || "");
+      setReportConfigId("saved");
+        setReportConfigError("");
         setReportBasis((staffs[0]?.salary || 0) > 0 ? "salary" : "production");
         setRecords([]); setPayments([]); setSummary(null); setStaffData(null); setGenerated(false);
       } catch {
-        setStaffOptions([]); setMonthOptions([]);
+        setStaffOptions([]); setMonthOptions([]); setProductionConfigs([]);
       } finally {
         setLoadingOptions(false);
       }
@@ -315,20 +357,93 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
 
   const handleStaffChange = (staffId) => {
     setSelectedStaff(staffId);
+    clearReportPreview();
     const staff = staffOptions.find((s) => s.value === staffId);
     setReportBasis((staff?.salary || 0) > 0 ? "salary" : "production");
     setGenerated(false);
   };
   const handleReportBasisChange = (basis) => {
+    clearReportPreview();
     setReportBasis(basis);
     setGenerated(false);
   };
 
-  const handleGenerate = async () => {
+  const clearReportPreview = () => {
+    setReportConfigError("");
+    setApplyPreview(null);
+    setApplyPreviewLoading(false);
+  };
+
+  const handlePrepareApply = async () => {
+    if (!selectedStaff || !selectedMonth || !reportConfigId || reportConfigId === "saved") return;
+    try {
+      setApplyPreviewLoading(true);
+      setReportConfigError("");
+      const response = await previewStaffRecordRecalculation({
+        staff_id: selectedStaff,
+        month: selectedMonth,
+        config_id: reportConfigId,
+      });
+      const preview = unwrapStaffRecordPreview(response);
+      setApplyPreview({
+        count: Number(preview.summary?.record_count || 0),
+        summary: preview.summary || {},
+        records: preview.record_results || [],
+        config: preview.config || {},
+        applied: false,
+      });
+    } catch (error) {
+      const message = error?.response?.data?.message || error?.message || "Could not prepare recalculation.";
+      setReportConfigError(message);
+      showToast({ type: "error", message });
+    } finally {
+      setApplyPreviewLoading(false);
+    }
+  };
+
+  const handleApplyRecalculation = async () => {
+    if (!selectedStaff || !selectedMonth || !reportConfigId || reportConfigId === "saved") return;
+    try {
+      setApplyLoading(true);
+      setReportConfigError("");
+      const response = await applyStaffRecordRecalculation({
+        staff_id: selectedStaff,
+        month: selectedMonth,
+        config_id: reportConfigId,
+      });
+      const result = unwrapStaffRecordPreview(response);
+      setApplyPreview({ applied: true, count: Number(result.applied_records || 0) });
+      setApplyConfirmOpen(false);
+      showToast({ type: "success", message: `Recalculated ${Number(result.applied_records || 0)} saved records.` });
+      await handleGenerate();
+    } catch (error) {
+      const message = error?.response?.data?.message || error?.message || "Could not apply recalculation.";
+      setReportConfigError(message);
+      showToast({ type: "error", message });
+    } finally {
+      setApplyLoading(false);
+    }
+  };
+
+  const handleConfiguredReport = async () => {
+    if (!selectedStaff || !selectedMonth || reportConfigId === "saved") return;
+    try {
+      setReportConfigLoading(true);
+      setReportConfigError("");
+      await handleGenerate(reportConfigId);
+    } catch (error) {
+      setReportConfigError(error?.response?.data?.message || error?.message || "Could not calculate the report with this config.");
+    } finally {
+      setReportConfigLoading(false);
+    }
+  };
+  const handleGenerate = async (configId = "") => {
     if (!selectedStaff || !selectedMonth) return;
+    clearReportPreview();
     try {
       setLoadingReport(true);
-      const { from, to }  = toMonthWindow(selectedMonth);
+      const { from, year, month } = toMonthWindow(selectedMonth);
+      const to = `${selectedMonth}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
       const prevMonthKey  = getPreviousMonthKey(selectedMonth);
       const prevMonthMeta = toMonthWindow(prevMonthKey);
 
@@ -341,7 +456,25 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
           fetchStaffPayments({ staff_id: selectedStaff, limit: 20000 }),
         ]);
 
-      const currentRecords  = currentRecordsRes.data  || [];
+      let currentRecords  = currentRecordsRes.data  || [];
+      if (configId && configId !== "saved") {
+        const recalculationResponse = await previewStaffRecordRecalculation({
+          staff_id: selectedStaff,
+          month: selectedMonth,
+          config_id: configId,
+        });
+        const recalculationData = unwrapStaffRecordPreview(recalculationResponse);
+        const recalculatedById = new Map(
+          (recalculationData.record_results || []).map((row) => [String(row._id), row])
+        );
+        currentRecords = currentRecords.map((record) => {
+          const recalculated = recalculatedById.get(String(record._id));
+          return recalculated
+            ? { ...record, ...recalculated, totals: recalculated.totals ? { ...recalculated.totals, applique_amount: recalculated.applique_amount } : recalculated.totals }
+            : record;
+        });
+      }
+      setApplyPreview(configId ? null : { count: currentRecords.length, applied: false });
       const currentPayments = currentPaymentsRes.data || [];
       const historyRecords  = historyRecordsRes.data  || [];
       const historyPayments = historyPaymentsRes.data || [];
@@ -487,11 +620,12 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
           ? afterTarget - (targetAmt / (cfg.on_target_pct || 1)) * (cfg.after_target_pct || 0)
           : 0;
       const productionAmount = (() => {
-        if (cfg.payout_mode === "salary_bonus_only") return 0;
         const targetAmount = Number(cfg.target_amount) || 0;
         const targetMet = targetAmount > 0 && onTarget >= targetAmount;
         const forceAfter = Boolean(rec.force_after_target_for_non_target) || Boolean(rec.force_full_target_for_non_target);
-        return targetMet || forceAfter ? afterTarget : onTarget;
+        return cfg.payout_mode === "salary_bonus_only"
+          ? Number(rec.applique_amount ?? onTarget)
+          : targetMet || forceAfter ? afterTarget : onTarget;
       })();
       const isOff = rec.attendance === "Close" || rec.attendance === "Off" || rec.attendance === "Sunday";
       const rowBonusQty = Number(rec.bonus_qty) || 0;
@@ -510,6 +644,9 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
         ratePct:   prod.rate_pct != null ? `${prod.rate_pct}` : "-",
         differ:    "-",
         totalPcs:  formatNumbers(prod.pcs || 0),
+        appliqueAmount: "-",
+        bonusQty: "-",
+        bonusAmount: "-",
         amount:    "-",
         payment:   "-",
       }));
@@ -524,6 +661,12 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
         ratePct:   isOff ? "-" : ratePct,
         differ:    isOff ? "-" : formatNumbers(differ, 2),
         totalPcs:  isOff ? "-" : formatNumbers(pcs),
+        appliqueAmount: formatNumbers(
+          rec.applique_amount ?? 0,
+          2
+        ),
+        bonusQty: formatNumbers(rowBonusQty, 0),
+        bonusAmount: formatNumbers(rec.bonus_amount || 0, 2),
         amount:    formatNumbers(reportBasis === "production" ? productionAmount : amount, 2),
         payment:   "-",
       };
@@ -538,11 +681,14 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
       typeLabel: p.type ? p.type[0].toUpperCase() + p.type.slice(1) : "Payment",
       stitches:  "-", roundApp: "-", ratePct: "-", differ: "-", totalPcs: "-",
       amount:    "-",
+      appliqueAmount: "-",
+      bonusQty: "-",
+      bonusAmount: "-",
       payment:   formatNumbers(p.amount, 2),
     }));
 
     return [...recordRows, ...paymentRows].sort((a, b) => {
-      const d = new Date(a.date) - new Date(b.date);
+      const d = getLocalCalendarDate(a.date) - getLocalCalendarDate(b.date);
       return d !== 0 ? d : (a.sortOrder || 0) - (b.sortOrder || 0);
     });
   }, [records, payments, reportBasis]);
@@ -581,12 +727,12 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
           <div className="flex items-center gap-2">
             <Button outline variant="secondary" onClick={onClose}>Close</Button>
             <Button
-              icon={loadingReport ? Loader2 : Search}
-              onClick={handleGenerate}
-              loading={loadingReport}
+              icon={loadingReport || reportConfigLoading ? Loader2 : Search}
+              onClick={() => (reportConfigId !== "saved" ? handleConfiguredReport() : handleGenerate())}
+              loading={loadingReport || reportConfigLoading}
               disabled={!selectedStaff || !selectedMonth || loadingOptions}
             >
-              Generate Report
+              {reportConfigId !== "saved" ? "Generate with selected config" : "Generate Report"}
             </Button>
           </div>
         </div>
@@ -595,7 +741,7 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
       <div className="space-y-4">
 
         {/* Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Select
             label="Staff" value={selectedStaff} onChange={handleStaffChange}
             options={staffOptions}
@@ -603,12 +749,113 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
             disabled={loadingOptions}
           />
           <Select
-            label="Month" value={selectedMonth} onChange={setSelectedMonth}
+            label="Month" value={selectedMonth} onChange={(value) => { setSelectedMonth(value); clearReportPreview(); setGenerated(false); }}
             options={monthOptions}
             placeholder={loadingOptions ? "Loading months..." : "Select month..."}
             disabled={loadingOptions}
           />
+          <Select
+            label="Report config (optional)"
+            value={reportConfigId}
+            onChange={(value) => { setReportConfigId(value); clearReportPreview(); setGenerated(false); }}
+            options={[
+              { label: "Use each record's saved config", value: "saved" },
+              ...productionConfigs.map((config) => ({
+                label: `${config.effective_date ? new Date(config.effective_date).toLocaleDateString() : "No effective date"} · ${String(config.payout_mode || "Target Based").replaceAll("_", " ")} · Applique ${formatNumbers(config.applique_rate || 0, 3)} · Bonus ${formatNumbers(config.bonus_rate || 0, 2)}`,
+                value: config._id,
+              })),
+            ]}
+            placeholder="Use saved config"
+            disabled={loadingOptions || !productionConfigs.length}
+          />
         </div>
+
+        {reportConfigId !== "saved" && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-100 bg-amber-50/60 px-4 py-3">
+            <p className="text-sm text-gray-600">
+              {applyPreview?.applied
+                ? `Applied to ${formatNumbers(applyPreview.count, 0)} saved records.`
+                : applyPreview
+                  ? `${formatNumbers(applyPreview.count, 0)} records ready. Review the before/after breakdown below.`
+                  : "Preview the affected record count before permanently applying this config to the selected month."}
+            </p>
+            <div className="flex gap-2">
+              <Button
+                icon={applyPreview?.applied ? Search : RotateCcw}
+                variant={applyPreview?.applied ? "secondary" : "warning"}
+                disabled={applyLoading || applyPreviewLoading || reportConfigLoading || applyPreview?.applied || !selectedStaff || !selectedMonth}
+                loading={applyLoading || applyPreviewLoading}
+                onClick={() => {
+                  if (!applyPreview) {
+                    handlePrepareApply();
+                  } else if (applyPreview.count > 0) {
+                    setApplyConfirmOpen(true);
+                  }
+                }}
+              >
+                {applyPreview?.applied
+                  ? "Applied"
+                  : applyPreview
+                    ? applyPreview.count > 0 ? "Apply recalculation" : "No records to apply"
+                    : "Check records & review"}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {applyPreview?.records && !applyPreview.applied && (
+          <section className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+            <div className="border-b border-gray-200 bg-gray-50 px-4 py-3">
+              <h3 className="font-semibold text-gray-900">Recalculation details</h3>
+              <p className="mt-1 text-xs text-gray-500">Current saved values compared with the selected config. Payments and monthly allowance stay unchanged.</p>
+            </div>
+            <div className="max-h-[55vh] overflow-auto">
+              <table className="w-full min-w-[920px] text-left text-sm">
+                <thead className="sticky top-0 bg-white text-xs uppercase tracking-wide text-gray-500 shadow-sm">
+                  <tr>
+                    <th className="px-3 py-3">Date</th>
+                    <th className="px-3 py-3 text-right">Base</th>
+                    <th className="px-3 py-3 text-right">Applique</th>
+                    <th className="px-3 py-3 text-right">Bonus qty</th>
+                    <th className="px-3 py-3 text-right">Bonus amount</th>
+                    <th className="px-3 py-3 text-right">Final</th>
+                    <th className="px-3 py-3 text-right">Change</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {applyPreview.records.map((row) => {
+                    const before = row.current || {};
+                    const change = (Number(row.final_amount) || 0) - (Number(before.final_amount) || 0);
+                    return (
+                      <tr key={String(row._id)} className="border-t border-gray-100">
+                        <td className="px-3 py-2.5 whitespace-nowrap">{formatDate(row.date)}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">{formatNumbers(before.base_amount, 2)} → {formatNumbers(row.base_amount, 2)}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">{formatNumbers(before.applique_amount, 2)} → {formatNumbers(row.applique_amount, 2)}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">{formatNumbers(before.bonus_qty, 2)} → {formatNumbers(row.bonus_qty, 2)}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">{formatNumbers(before.bonus_amount, 2)} → {formatNumbers(row.bonus_amount, 2)}</td>
+                        <td className="px-3 py-2.5 text-right font-medium tabular-nums">{formatNumbers(before.final_amount, 2)} → {formatNumbers(row.final_amount, 2)}</td>
+                        <td className={`px-3 py-2.5 text-right font-medium tabular-nums ${change < 0 ? "text-rose-700" : change > 0 ? "text-emerald-700" : "text-gray-500"}`}>{change > 0 ? "+" : ""}{formatNumbers(change, 2)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot className="sticky bottom-0 border-t border-gray-200 bg-gray-50 font-semibold">
+                  <tr>
+                    <td className="px-3 py-3">Month total</td>
+                    <td className="px-3 py-3 text-right tabular-nums">{formatNumbers(applyPreview.summary.current_base_amount, 2)} → {formatNumbers(applyPreview.summary.recalculated_base_amount, 2)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums">{formatNumbers(applyPreview.summary.current_applique_amount, 2)} → {formatNumbers(applyPreview.summary.applique_amount, 2)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums">{formatNumbers(applyPreview.summary.current_bonus_qty, 2)} → {formatNumbers(applyPreview.summary.recalculated_bonus_qty, 2)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums">{formatNumbers(applyPreview.summary.current_bonus, 2)} → {formatNumbers(applyPreview.summary.recalculated_bonus, 2)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums">{formatNumbers(applyPreview.summary.current_amount, 2)} → {formatNumbers(applyPreview.summary.recalculated_amount, 2)}</td>
+                    <td className={`px-3 py-3 text-right tabular-nums ${Number(applyPreview.summary.difference) < 0 ? "text-rose-700" : "text-emerald-700"}`}>{Number(applyPreview.summary.difference) > 0 ? "+" : ""}{formatNumbers(applyPreview.summary.difference, 2)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {reportConfigError && <p className="text-sm text-rose-700">{reportConfigError}</p>}
 
         {selectedStaffHasSalary && (
           <div className="flex flex-wrap items-center gap-2">
@@ -672,6 +919,9 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
                         <th className="px-3 py-2.5 text-right">Rate %</th>
                         <th className="px-3 py-2.5 text-right">Differ.</th>
                         <th className="px-3 py-2.5 text-right">Total Pcs</th>
+                        <th className="px-3 py-2.5 text-right">Applique Amt.</th>
+                        <th className="px-3 py-2.5 text-right">Bonus Qty</th>
+                        <th className="px-3 py-2.5 text-right">Bonus Amt.</th>
                         <th className="px-3 py-2.5 text-right">Amount</th>
                         <th className="px-3 py-2.5 text-right">Payment</th>
                       </tr>
@@ -696,6 +946,9 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
                           <td className="px-3 py-2.5 text-right tabular-nums">{row.ratePct}</td>
                           <td className="px-3 py-2.5 text-right tabular-nums">{row.differ}</td>
                           <td className="px-3 py-2.5 text-right tabular-nums">{row.totalPcs}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums">{row.appliqueAmount}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums">{row.bonusQty}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums">{row.bonusAmount}</td>
                           <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{row.amount}</td>
                           <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{row.payment}</td>
                         </tr>
@@ -709,6 +962,17 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
           </>
         )}
       </div>
+      <ConfirmModal
+        isOpen={applyConfirmOpen}
+        onClose={() => setApplyConfirmOpen(false)}
+        onConfirm={handleApplyRecalculation}
+        title="Apply recalculation?"
+        message={`Permanently recalculate ${formatNumbers(applyPreview?.count || 0, 0)} saved records for ${selectedStaffLabel} in ${getMonthLabel(selectedMonth)} using the selected config? Final amount: ${formatNumbers(applyPreview?.summary?.current_amount, 2)} → ${formatNumbers(applyPreview?.summary?.recalculated_amount, 2)} (${Number(applyPreview?.summary?.difference) > 0 ? "+" : ""}${formatNumbers(applyPreview?.summary?.difference, 2)}). Calculated amounts and manual fixed-amount or bonus overrides will be replaced. Payments and monthly allowances remain unchanged.`}
+        confirmText="Apply recalculation"
+        cancelText="Cancel"
+        variant="warning"
+        isLoading={applyLoading}
+      />
     </Modal>
   );
 }

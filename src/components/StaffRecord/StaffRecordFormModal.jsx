@@ -17,6 +17,7 @@ import { useToast } from "../../context/ToastContext";
 import { fetchMyRuleData } from "../../api/business";
 import {
   EMPTY_PRODUCTION_CONFIG,
+  PAYOUT_MODES,
   calculateProductionRow,
   calculateProductionTotals,
   calculateAutoBonusQty,
@@ -412,6 +413,17 @@ export default function StaffRecordFormModal({
   // ── Final amount preview ──
   const effectiveBonusRate = parseFloat(bonusRate) || cfg.bonus_rate || 0;
   const bonusAmount        = (parseFloat(bonusQty) || 0) * effectiveBonusRate;
+  const appliqueAmount = cfg.payout_mode === PAYOUT_MODES.SALARY_BONUS_ONLY
+    ? Number(totals.on_target_amt || 0)
+    : rows.reduce((sum, row) => {
+        const calc = calculateProductionRow(row, cfg);
+        if (cfg.payout_mode === PAYOUT_MODES.SINGLE_PCT) return sum + Number(calc.applique_amount || 0);
+        if (cfg.payout_mode === PAYOUT_MODES.TARGET_DUAL_PCT) {
+          const amount = targetState.targetMet ? calc.after_target_applique_amount : calc.applique_amount;
+          return sum + Number(amount || 0);
+        }
+        return sum;
+      }, 0);
 
   const hasSalary     = selectedStaff?.salary > 0;
   const salary        = selectedStaff?.salary || 0;
@@ -450,7 +462,7 @@ export default function StaffRecordFormModal({
       break;
   }
 
-  const previewFinal  = fixAmount !== "" ? parseFloat(fixAmount) || 0 : previewBase + bonusAmount;
+  const previewFinal  = fixAmount !== "" ? parseFloat(fixAmount) || 0 : previewBase + bonusAmount + appliqueAmount;
   const isFixed       = fixAmount !== "";
   const showFinalCard = attendance !== "";
 
@@ -462,6 +474,7 @@ export default function StaffRecordFormModal({
       ]
     : [
         ...(previewBase  > 0 ? [{ label: hasSalary ? "Salary-based" : "Production", value: previewBase }] : []),
+        ...(appliqueAmount > 0 ? [{ label: "Applique Amount", value: appliqueAmount }] : []),
         ...(bonusAmount  > 0 ? [{ label: "Bonus", value: bonusAmount }] : []),
       ];
 
@@ -529,9 +542,12 @@ export default function StaffRecordFormModal({
           <div className="text-xs text-gray-400">
             {!selectedStaff && "← Select a staff member to begin"}
             {selectedStaff && !attendance && "← Select attendance type"}
-            {selectedStaff && attendance && !isFixed && bonusAmount > 0 && (
+            {selectedStaff && attendance && !isFixed && (bonusAmount > 0 || appliqueAmount > 0) && (
               <span className="text-emerald-600 font-medium">
-                Base {formatNumbers(previewBase, 2)} + Bonus {formatNumbers(bonusAmount, 2)} = {formatNumbers(previewFinal, 2)}
+                Base {formatNumbers(previewBase, 2)}
+                {appliqueAmount > 0 && <> + Applique {formatNumbers(appliqueAmount, 2)}</>}
+                {bonusAmount > 0 && <> + Bonus {formatNumbers(bonusAmount, 2)}</>}
+                {" "}= {formatNumbers(previewFinal, 2)}
               </span>
             )}
             {selectedStaff && attendance && isFixed && (

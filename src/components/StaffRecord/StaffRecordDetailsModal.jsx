@@ -241,7 +241,10 @@ export default function StaffRecordDetailsModal({ isOpen, onClose, initialData, 
           amount={initialData.final_amount}
           isFixed={isFixed}
           breakdown={[
-            ...(totals ? [{ label: "Effective Production", value: effectiveAmt }] : []),
+            ...(totals ? [{
+              label: payoutMode === PAYOUT_MODES.SALARY_BONUS_ONLY ? "Applique Amount" : "Effective Production",
+              value: effectiveAmt,
+            }] : []),
             ...(hasBonus ? [{ label: "Bonus Amount", value: initialData.bonus_amount }] : []),
           ]}
         />
