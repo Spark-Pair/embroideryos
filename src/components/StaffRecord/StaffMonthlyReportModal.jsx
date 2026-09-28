@@ -45,7 +45,7 @@ function openPrintWindow({ staffName, monthLabel, summary, reportRows, totalDedu
     { l: "Month",                   v: monthLabel },
     { l: "Arrears",                 v: formatNumbers(summary.arrears, 2) },
     { l: "Allowance",               v: formatNumbers(summary.allowance, 2) },
-    { l: "Net Salary",              v: formatNumbers(summary.net, 2) },
+    { l: summary.reportBasis === "production" ? "Production Amount" : "Net Salary", v: formatNumbers(summary.net, 2) },
     { l: `Bonus (${summary.bonusQty})`, v: formatNumbers(summary.bonusAmt, 2) },
     { l: "Total Deduction",         v: `-${formatNumbers(totalDeduction, 2)}`, red: true },
     { l: "Balance",                 v: formatNumbers(summary.balance, 2) },
@@ -271,6 +271,7 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
   const [monthOptions,   setMonthOptions]   = useState([]);
   const [selectedStaff,  setSelectedStaff]  = useState("");
   const [selectedMonth,  setSelectedMonth]  = useState("");
+  const [reportBasis, setReportBasis] = useState("salary");
   const [loadingOptions, setLoadingOptions] = useState(false);
   const [loadingReport,  setLoadingReport]  = useState(false);
   const [records,   setRecords]   = useState([]);
@@ -290,12 +291,13 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
         ]);
         const staffs = (staffRes.data  || [])
           .filter((s) => String(s?.category || "Embroidery") === "Embroidery")
-          .map((s) => ({ label: s.name, value: s._id }));
+          .map((s) => ({ label: s.name, value: s._id, salary: Number(s.salary) || 0 }));
         const months = (monthsRes.data || []).map((m) => ({ label: getMonthLabel(m), value: m    }));
         setStaffOptions(staffs);
         setMonthOptions(months);
         setSelectedStaff(staffs[0]?.value || "");
         setSelectedMonth(months[0]?.value || "");
+        setReportBasis((staffs[0]?.salary || 0) > 0 ? "salary" : "production");
         setRecords([]); setPayments([]); setSummary(null); setStaffData(null); setGenerated(false);
       } catch {
         setStaffOptions([]); setMonthOptions([]);
@@ -309,6 +311,18 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
     () => staffOptions.find((s) => s.value === selectedStaff)?.label || "—",
     [staffOptions, selectedStaff]
   );
+  const selectedStaffHasSalary = (staffOptions.find((s) => s.value === selectedStaff)?.salary || 0) > 0;
+
+  const handleStaffChange = (staffId) => {
+    setSelectedStaff(staffId);
+    const staff = staffOptions.find((s) => s.value === staffId);
+    setReportBasis((staff?.salary || 0) > 0 ? "salary" : "production");
+    setGenerated(false);
+  };
+  const handleReportBasisChange = (basis) => {
+    setReportBasis(basis);
+    setGenerated(false);
+  };
 
   const handleGenerate = async () => {
     if (!selectedStaff || !selectedMonth) return;
@@ -394,6 +408,17 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
         },
         { days: 0, pcs: 0, rounds: 0, totalStitch: 0, bonusQty: 0, bonus: 0, final: 0, recordCount: 0, absentCount: 0, halfCount: 0, attendance: {} }
       );
+      const productionBaseTotal = currentRecords.reduce((sum, rec) => {
+        const onTarget = Number(rec.totals?.on_target_amt) || 0;
+        const afterTarget = Number(rec.totals?.after_target_amt) || 0;
+        const snapshot = rec.config_snapshot || {};
+        if (snapshot.payout_mode === "salary_bonus_only") return sum;
+        const targetAmount = Number(snapshot.target_amount) || 0;
+        const forceAfter = Boolean(rec.force_after_target_for_non_target) || Boolean(rec.force_full_target_for_non_target);
+        const targetMet = targetAmount > 0 && onTarget >= targetAmount;
+        const amount = targetMet || forceAfter ? afterTarget : onTarget;
+        return sum + amount;
+      }, 0);
 
       const paymentStats = currentPayments.reduce(
         (acc, p) => {
@@ -425,7 +450,9 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
         ...paymentStats,
         allowance,
         arrears:  historyClosing,
-        net,
+        net: reportBasis === "production" ? productionBaseTotal : net,
+        productionBaseTotal,
+        reportBasis,
         bonusQty: currentStats.bonusQty,
         bonusAmt: currentStats.bonus,
         balance,
@@ -459,6 +486,13 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
         afterTarget > 0
           ? afterTarget - (targetAmt / (cfg.on_target_pct || 1)) * (cfg.after_target_pct || 0)
           : 0;
+      const productionAmount = (() => {
+        if (cfg.payout_mode === "salary_bonus_only") return 0;
+        const targetAmount = Number(cfg.target_amount) || 0;
+        const targetMet = targetAmount > 0 && onTarget >= targetAmount;
+        const forceAfter = Boolean(rec.force_after_target_for_non_target) || Boolean(rec.force_full_target_for_non_target);
+        return targetMet || forceAfter ? afterTarget : onTarget;
+      })();
       const isOff = rec.attendance === "Close" || rec.attendance === "Off" || rec.attendance === "Sunday";
       const rowBonusQty = Number(rec.bonus_qty) || 0;
       const typeLabel =
@@ -490,7 +524,7 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
         ratePct:   isOff ? "-" : ratePct,
         differ:    isOff ? "-" : formatNumbers(differ, 2),
         totalPcs:  isOff ? "-" : formatNumbers(pcs),
-        amount:    formatNumbers(amount, 2),
+        amount:    formatNumbers(reportBasis === "production" ? productionAmount : amount, 2),
         payment:   "-",
       };
 
@@ -511,7 +545,7 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
       const d = new Date(a.date) - new Date(b.date);
       return d !== 0 ? d : (a.sortOrder || 0) - (b.sortOrder || 0);
     });
-  }, [records, payments]);
+  }, [records, payments, reportBasis]);
 
   const totalDeduction = summary
     ? summary.advance + summary.payment + summary.adjustment
@@ -563,7 +597,7 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
         {/* Filters */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Select
-            label="Staff" value={selectedStaff} onChange={setSelectedStaff}
+            label="Staff" value={selectedStaff} onChange={handleStaffChange}
             options={staffOptions}
             placeholder={loadingOptions ? "Loading staff..." : "Select staff..."}
             disabled={loadingOptions}
@@ -575,6 +609,26 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
             disabled={loadingOptions}
           />
         </div>
+
+        {selectedStaffHasSalary && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-gray-700">Report basis</span>
+            <div className="inline-flex rounded-xl border border-gray-300 bg-gray-50 p-1" role="group" aria-label="Report basis">
+              <button
+                type="button"
+                onClick={() => handleReportBasisChange("salary")}
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${reportBasis === "salary" ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-900"}`}
+                aria-pressed={reportBasis === "salary"}
+              >Salary</button>
+              <button
+                type="button"
+                onClick={() => handleReportBasisChange("production")}
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${reportBasis === "production" ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-900"}`}
+                aria-pressed={reportBasis === "production"}
+              >Production</button>
+            </div>
+          </div>
+        )}
 
         {/* ── Screen Preview ── */}
         {generated && (
@@ -593,7 +647,7 @@ export default function StaffMonthlyReportModal({ isOpen, onClose }) {
                     { l: "Month",                   v: getMonthLabel(selectedMonth) },
                     { l: "Arrears",                 v: formatNumbers(summary.arrears, 2) },
                     { l: "Allowance",               v: formatNumbers(summary.allowance, 2) },
-                    { l: "Net Salary",              v: formatNumbers(summary.net, 2) },
+                    { l: reportBasis === "production" ? "Production Amount" : "Net Salary", v: formatNumbers(summary.net, 2) },
                     { l: `Bonus (${summary.bonusQty})`, v: formatNumbers(summary.bonusAmt, 2) },
                     { l: "Total Deduction",         v: `-${formatNumbers(totalDeduction, 2)}`, red: true },
                     { l: "Balance",                 v: formatNumbers(summary.balance, 2) },
