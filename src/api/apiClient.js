@@ -4,7 +4,10 @@ import { logDataSource } from "../offline/logger";
 import { clearOfflineData, offlineAccess } from "../offline/idb";
 import { getBootstrapSyncSignal } from "../offline/bootstrapSyncState";
 
-const API = import.meta.env.VITE_API_URL;
+// VITE_API_URL is set by Vercel for production. The fallback keeps local
+// development working when .env is absent, while avoiding an undefined Axios
+// base URL in a fresh deployment.
+const API = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 const READ_ONLY_BYPASS_PATHS = new Set(["/auth/logout", "/auth/logout-all", "/auth/refresh"]);
 const AUTH_REDIRECT_BYPASS_PATHS = new Set([
   "/auth/logout",
